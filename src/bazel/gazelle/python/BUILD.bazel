@@ -1,0 +1,45 @@
+"""Define build targets and test binaries for the Python dependency resolution Gazelle extension."""
+
+load("@gazelle//:def.bzl", "gazelle_binary")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
+
+go_library(
+    name = "python",
+    srcs = ["lang.go"],
+    importpath = "openplex/bazel/gazelle/python",
+    visibility = ["//visibility:public"],
+    deps = [
+        # keep-sorted start
+        "@gazelle//config",
+        "@gazelle//language",
+        "@gazelle//repo",
+        "@gazelle//resolve",
+        "@gazelle//v2/label",
+        "@gazelle//v2/rule",
+        "@rules_python_gazelle_plugin//python",
+        # keep-sorted end
+    ],
+)
+
+go_test(
+    name = "python_test",
+    srcs = ["lang_test.go"],
+    data = [":gazelle_test_bin"],
+    deps = [
+        # keep-sorted start
+        "@gazelle//v2/rule",
+        "@rules_go//go/tools/bazel",
+        # keep-sorted end
+    ],
+)
+
+gazelle_binary(
+    name = "gazelle_test_bin",
+    languages = [
+        ":python",
+        "//src/bazel/gazelle/gitops",
+    ],
+)

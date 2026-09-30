@@ -1,0 +1,48 @@
+"""Define build rules and test targets for the GitOps Gazelle extension generating Helm and Kustomize rules."""
+
+load("@gazelle//:def.bzl", "gazelle_binary")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# TODO(simonepri): Extract and publish as a standalone open-source Gazelle extension (BCR/GitHub).
+
+package_sources()
+
+go_library(
+    name = "gitops",
+    srcs = [
+        "doc.go",
+        "generate.go",
+        "lang.go",
+        "parser.go",
+    ],
+    importpath = "openplex/bazel/gazelle/gitops",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/bazel/gazelle/python",
+        "@com_github_bazelbuild_buildtools//build",
+        "@gazelle//language",
+        "@gazelle//rule",
+        "@gazelle//v2/rule",
+    ],
+)
+
+go_test(
+    name = "gitops_test",
+    srcs = [
+        "generate_test.go",
+        "parser_test.go",
+    ],
+    data = [":gazelle_test_bin"],
+    embed = [":gitops"],
+    deps = [
+        "@com_github_bazelbuild_buildtools//build",
+        "@gazelle//v2/rule",
+        "@rules_go//go/tools/bazel",
+    ],
+)
+
+gazelle_binary(
+    name = "gazelle_test_bin",
+    languages = [":gitops"],
+)
