@@ -1,0 +1,15 @@
+"""Builds the automated pull request review tool CLI binary and packages source code coverage targets."""
+
+load("@rules_python//python:defs.bzl", "py_binary")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
+
+py_binary(
+    name = "cli",
+    srcs = ["cli.py"],
+    deps = [
+        "//src/infra/tools/review/engine:github_comment",
+        "//src/infra/tools/review/engine:runner",
+    ],
+)
