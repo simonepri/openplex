@@ -1,0 +1,10 @@
+# Local runtime-secret source namespace created with the early External Secrets foundation so later identity and Dragonfly sources cannot deadlock sync waves.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: application-identity
+  labels:
+    app.kubernetes.io/component: application-identity
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime

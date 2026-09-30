@@ -1,0 +1,106 @@
+# Base Helm values for External Secrets Operator, applied on every enabled ctrl and cell registration; provider overlays add cloud identity settings or local Kubernetes secret-store bindings.
+
+installCRDs: true
+image:
+  repository: ghcr.io/external-secrets/external-secrets
+  tag: v2.11.0@sha256:66fb710878cbf3eba4a927e35c5d75e29a202c9bab238aad64bfb23b786b962b
+priorityClassName: cluster-operators
+podSecurityContext: {enabled: true}
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+readinessProbe:
+  enabled: true
+  spec:
+    timeoutSeconds: 5
+strategy:
+  type: RollingUpdate
+  rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+serviceAccount:
+  create: true
+  name: external-secrets
+rbac:
+  create: true
+  serviceAccountTokenCreate: false
+leaderElect: true
+replicaCount: 2
+podDisruptionBudget: {enabled: true, minAvailable: 1}
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: external-secrets
+              app.kubernetes.io/name: external-secrets
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+topologySpreadConstraints: []
+webhook:
+  replicaCount: 2
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: external-secrets
+                app.kubernetes.io/name: external-secrets-webhook
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints: []
+  image:
+    repository: ghcr.io/external-secrets/external-secrets
+    tag: v2.11.0@sha256:66fb710878cbf3eba4a927e35c5d75e29a202c9bab238aad64bfb23b786b962b
+  priorityClassName: cluster-operators
+  livenessProbe:
+    enabled: true
+    spec:
+      timeoutSeconds: 5
+  startupProbe:
+    enabled: true
+    spec:
+      timeoutSeconds: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  podSecurityContext:
+    enabled: true
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  resources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits: {cpu: 250m, memory: 256Mi}
+certController:
+  replicaCount: 2
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: external-secrets
+                app.kubernetes.io/name: external-secrets-cert-controller
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints: []
+  image:
+    repository: ghcr.io/external-secrets/external-secrets
+    tag: v2.11.0@sha256:66fb710878cbf3eba4a927e35c5d75e29a202c9bab238aad64bfb23b786b962b
+  priorityClassName: cluster-operators
+  livenessProbe:
+    enabled: true
+    spec:
+      timeoutSeconds: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  podSecurityContext:
+    enabled: true
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  resources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits: {cpu: 250m, memory: 256Mi}

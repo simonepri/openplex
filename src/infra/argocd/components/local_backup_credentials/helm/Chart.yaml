@@ -1,0 +1,8 @@
+# Generates namespace-local signing credentials for the local S3 emulator.
+
+apiVersion: v2
+name: local-backup-credentials
+description: Runtime-generated Floci backup credentials
+type: application
+version: 0.1.0
+appVersion: "1"

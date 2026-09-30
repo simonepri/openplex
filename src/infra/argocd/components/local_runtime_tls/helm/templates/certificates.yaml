@@ -1,0 +1,54 @@
+{{- /* Keep local service private keys in leaf Secrets; the host never exports the CA key. */ -}}
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: local-headscale-tls
+  namespace: cert-manager-system
+spec:
+  secretName: local-headscale-tls
+  duration: 8760h
+  renewBefore: 720h
+  privateKey: {algorithm: RSA, size: 2048, rotationPolicy: Always}
+  usages: [digital signature, key encipherment, server auth]
+  issuerRef: {name: cluster-local-ca, kind: ClusterIssuer}
+  dnsNames:
+    - {{ printf "headscale.%s.%s" .Values.local.control.record .Values.accessAliasDomain | quote }}
+    - {{ printf "headscale.%s" .Values.accessAliasDomain | quote }}
+    - {{ printf "headscale.%s" .Values.publicDomain | quote }}
+    - localhost
+  ipAddresses:
+    - {{ .Values.local.network.services.headscale | quote }}
+    - 127.0.0.1
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: local-floci-tls
+  namespace: cert-manager-system
+spec:
+  secretName: local-floci-tls
+  duration: 8760h
+  renewBefore: 720h
+  privateKey: {algorithm: RSA, size: 2048, rotationPolicy: Always}
+  usages: [digital signature, key encipherment, server auth]
+  issuerRef: {name: cluster-local-ca, kind: ClusterIssuer}
+  dnsNames:
+    - localhost
+    - localhost.floci.io
+    - floci
+    - origin-registry
+    - "*.localhost.floci.io"
+    {{- range .Values.endpointRegions.ecr }}
+    - {{ printf "*.dkr.ecr.%s.localhost.floci.io" . | quote }}
+    {{- end }}
+    - {{ printf "*.%s" .Values.publicDomain | quote }}
+    - s3.amazonaws.com
+    - "*.s3.amazonaws.com"
+    {{- range .Values.endpointRegions.s3 }}
+    - {{ printf "*.s3.%s.amazonaws.com" . | quote }}
+    {{- end }}
+  ipAddresses:
+    - 127.0.0.1
+    - {{ .Values.local.network.services.floci | quote }}
+    - {{ .Values.local.network.services.origin_registry | quote }}
