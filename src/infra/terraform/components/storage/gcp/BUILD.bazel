@@ -1,0 +1,17 @@
+"""Defines OpenTofu module check targets for Google Cloud Storage buckets and KMS keys."""
+
+load("@rules_tf//tf:def.bzl", "tf_module")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+tf_module(
+    name = "gcp",
+    providers = [
+        "google",
+    ],
+    skip_validation = True,
+    deps = [
+        "//src/infra/terraform/components/storage/_interface",
+    ],
+)
+
+package_sources()
