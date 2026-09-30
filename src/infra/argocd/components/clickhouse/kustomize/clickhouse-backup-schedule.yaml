@@ -1,0 +1,112 @@
+# CronJob executing daily native ClickHouse telemetry backups and chain retention.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: signoz-clickhouse-backup
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    ignore-check.kube-linter.io/no-liveness-probe: >-
+      ClickHouse backup CronJob runs to completion and exits.
+    ignore-check.kube-linter.io/no-readiness-probe: >-
+      ClickHouse backup CronJob runs to completion and exits.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      ClickHouse backup requires ClickHouse and S3 credentials via environment.
+  labels:
+    app.kubernetes.io/name: clickhouse-backup
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: database-backup
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  schedule: "43 1 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 21600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: clickhouse-backup
+            app.kubernetes.io/instance: signoz
+            app.kubernetes.io/component: database-backup
+            app.kubernetes.io/part-of: signoz
+        spec:
+          serviceAccountName: signoz-clickhouse
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsGroup: 101
+            runAsNonRoot: true
+            runAsUser: 101
+            seccompProfile: {type: RuntimeDefault}
+          initContainers:
+            - name: backup
+              image: docker.io/clickhouse/clickhouse-server:26.9.5@sha256:b1081d3f26191692d7717699def7c624763f220f461ad60fccf55bbc186f06a0
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - configMapRef: {name: signoz-clickhouse-backup-common}
+                - configMapRef: {name: signoz-clickhouse-backup-provider}
+              env:
+                - name: CLICKHOUSE_PASSWORD
+                  valueFrom:
+                    secretKeyRef: {name: signoz-clickhouse, key: password}
+              command: [/bin/bash, /scripts/clickhouse-backup.sh]
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+                runAsGroup: 101
+                runAsNonRoot: true
+                runAsUser: 101
+                seccompProfile: {type: RuntimeDefault}
+              volumeMounts:
+                - {name: programs, mountPath: /scripts, readOnly: true}
+                - {name: temporary, mountPath: /tmp}
+          containers:
+            - name: retention
+              image: docker.io/amazon/aws-cli:2.37.5@sha256:fb7ccfc7b4e3a05017e6c9ded4ba959b99af622130e211fb976c68c2f4d3f224
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - configMapRef: {name: signoz-clickhouse-backup-common}
+                - configMapRef: {name: signoz-clickhouse-backup-provider}
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: signoz-postgres-backup-s3
+                      key: access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: signoz-postgres-backup-s3
+                      key: secret-access-key
+              command: [/bin/sh, /scripts/clickhouse-backup-retention.sh]
+              resources:
+                requests: {cpu: 25m, memory: 64Mi}
+                limits: {cpu: 500m, memory: 512Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+                runAsGroup: 101
+                runAsNonRoot: true
+                runAsUser: 101
+                seccompProfile: {type: RuntimeDefault}
+              volumeMounts:
+                - {name: programs, mountPath: /scripts, readOnly: true}
+                - {name: temporary, mountPath: /tmp}
+          volumes:
+            - name: programs
+              configMap:
+                name: signoz-clickhouse-backup-programs
+                defaultMode: 365
+            - {name: temporary, emptyDir: {sizeLimit: 128Mi}}

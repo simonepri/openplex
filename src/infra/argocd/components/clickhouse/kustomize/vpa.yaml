@@ -1,0 +1,141 @@
+# VerticalPodAutoscaler managing in-place resource sizing for ClickHouse shards and Keeper pods.
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: signoz-clickhouse-shard-0-replica-0
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chi-signoz-clickhouse-cluster-0-0
+  updatePolicy: {updateMode: "InPlace"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: clickhouse
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: signoz-clickhouse-shard-0-replica-1
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chi-signoz-clickhouse-cluster-0-1
+  updatePolicy: {updateMode: "InPlace"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: clickhouse
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: signoz-clickhouse-shard-1-replica-0
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chi-signoz-clickhouse-cluster-1-0
+  updatePolicy: {updateMode: "InPlace"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: clickhouse
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: signoz-clickhouse-shard-1-replica-1
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chi-signoz-clickhouse-cluster-1-1
+  updatePolicy: {updateMode: "InPlace"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: clickhouse
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: signoz-keeper-replica-0
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chk-signoz-keeper-keeper-0-0
+  updatePolicy: {updateMode: "InPlace"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: clickhouse-keeper
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: signoz-keeper-replica-1
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chk-signoz-keeper-keeper-0-1
+  updatePolicy: {updateMode: "InPlace"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: clickhouse-keeper
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: signoz-keeper-replica-2
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chk-signoz-keeper-keeper-0-2
+  updatePolicy: {updateMode: "InPlace"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: clickhouse-keeper
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly

@@ -1,0 +1,26 @@
+# NetworkPolicy allowing webhook ingress from API server and metrics scraping for ClickHouse operator.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clickhouse-operator-metrics
+  namespace: clickhouse-system
+  labels:
+    app.kubernetes.io/name: clickhouse-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: clickhouse-operator
+      app.kubernetes.io/name: altinity-clickhouse-operator
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: signoz
+      ports:
+        - {protocol: TCP, port: 8888}
+        - {protocol: TCP, port: 9999}

@@ -1,0 +1,38 @@
+# Helm values configuring upstream BuildBuddy Enterprise Cache Proxy chart.
+
+image:
+  imagePullPolicy: IfNotPresent
+  repository: buildbuddy.bbcr.io/public/buildbuddy-proxy-enterprise
+  tag: enterprise-v2.307.0
+replicas: 3
+cacheTarget: "grpcs://remote.buildbuddy.io:443"
+resources:
+  requests:
+    cpu: "4"
+    memory: "16Gi"
+  limits:
+    cpu: "4"
+    memory: "16Gi"
+service:
+  type: ClusterIP
+  internalGRPCPort: 1985
+  internalDistPort: 5151
+  internalMetricsPort: 9090
+  externalGRPCPort: 1985
+podDisruptionBudget:
+  enabled: true
+  spec:
+    minAvailable: 1
+persistence:
+  enabled: true
+  size: 500Gi
+  storageClass: general-expandable
+config:
+  cache:
+    max_size_bytes: 400000000000
+extraEnvVars:
+  - name: CACHE_PROXY_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: buildbuddy-proxy-secret
+        key: api_key

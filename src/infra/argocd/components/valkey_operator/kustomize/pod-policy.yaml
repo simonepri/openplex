@@ -1,0 +1,56 @@
+# Supplies Pod fields omitted by the released Valkey operator API and label propagation.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: valkey-operator-pod-defaults
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    # Valkey v0.6.0 drops custom ValkeyNode labels when building child workloads.
+    # LINT.IfChange(cache-scheduling)
+    - name: label-compile-cache-scheduling
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/managed-by: valkey-operator
+                  app.kubernetes.io/name: valkey
+                  valkey.io/cluster: torch-compile-cache
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              availability-class: be
+              kueue.x-k8s.io/queue-name: be
+              latency-class: ls
+    # LINT.ThenChange(//src/infra/argocd/components/torch_compile_cache/kustomize/workload.yaml:cache-scheduling)
+    - name: disable-data-plane-api-token
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/managed-by: valkey-operator
+                  app.kubernetes.io/name: valkey
+      mutate:
+        patchStrategicMerge:
+          spec:
+            automountServiceAccountToken: false

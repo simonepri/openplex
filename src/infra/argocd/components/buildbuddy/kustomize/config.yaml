@@ -1,0 +1,17 @@
+# ConfigMap providing BuildBuddy server configuration for UI, cache, and Build Event Service.
+
+app:
+  build_buddy_url: "$BUILDBUDDY_PUBLIC_URL"
+  events_api_url: grpc://buildbuddy.buildbuddy.svc.cluster.local:1985
+cache:
+  max_size_bytes: 67108864
+  disk:
+    root_directory: /tmp/buildbuddy-cache
+database:
+  data_source: "${BUILDBUDDY_DATABASE_URL}"
+disable_telemetry: true
+storage:
+  disable_persist_cache_artifacts: true
+  disk:
+    root_directory: /var/lib/buildbuddy
+  ttl_seconds: 604800
