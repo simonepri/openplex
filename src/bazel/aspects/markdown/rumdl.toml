@@ -1,0 +1,23 @@
+# Configure rumdl lint rules and HTML element allowlists for authored repository documentation.
+
+[global]
+disable = ["MD013"]
+extend-enable = ["MD040", "MD042", "MD045", "MD051", "MD056", "MD057", "MD084"]
+
+[MD033]
+allowed_elements = ["a", "img", "p", "h1", "details", "summary", "br", "small"]
+
+[MD057]
+search-paths = ["."]
+
+[per-file-ignores]
+"AGENTS.md" = ["MD005", "MD007", "MD012", "MD024", "MD025", "MD032", "MD041"]
+"CLAUDE.md" = ["MD025", "MD012", "MD041"]
+"**/*.rulesync.md" = ["MD025", "MD012", "MD057"]
+# The logo sits above the title on the two landing pages, so the heading is not their first line.
+"readme.md" = ["MD041"]
+"src/infra/docs/readme.md" = ["MD041", "MD057"]
+"src/infra/docs/architecture.md" = ["MD041"]
+"src/infra/docs/developer.md" = ["MD032"]
+".agents/**" = ["MD025", "MD012", "MD057", "MD071"]
+".claude/**" = ["MD025", "MD012", "MD057", "MD071"]

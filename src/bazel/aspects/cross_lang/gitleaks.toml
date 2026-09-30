@@ -1,0 +1,10 @@
+# Extend default Gitleaks rules with repository-specific allowlists for local runtime state and state directories.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignored local runtime state"
+paths = [
+  '''^(?:\.tmp/|src/infra/terraform/components/[^/]+/terraform\.tfstate\.d/)''',
+]

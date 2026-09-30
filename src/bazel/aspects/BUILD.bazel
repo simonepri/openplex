@@ -1,0 +1,24 @@
+"""Define build targets and toolchain configurations for language-specific lint aspects executed across the monorepo."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/json_schema:defs.bzl", "json_schema")
+
+exports_files(glob(
+    [
+        "*/*.hcl",
+        "*/*.toml",
+        "*/*.yaml",
+    ],
+    allow_empty = True,
+) + [
+    "shell/.shellcheckrc",
+    "web/.oxlintrc.json",
+])
+
+package_sources()
+
+json_schema(
+    name = "oxlintrc_schema",
+    srcs = ["web/.oxlintrc.json"],
+    schema = "@oxlint_schema//file:oxlintrc.schema.json",
+)

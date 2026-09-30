@@ -1,0 +1,3 @@
+# Configure ShellCheck rules and analysis options for shell scripts across the repository.
+
+enable=all
