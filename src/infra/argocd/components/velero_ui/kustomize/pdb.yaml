@@ -1,0 +1,18 @@
+# Defines PodDisruptionBudget for redundant Velero UI deployments across availability profiles.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: velero-ui
+  namespace: velero-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  # LINT.IfChange(velero-ui-pdb-selector)
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: velero-ui
+      app.kubernetes.io/name: velero-ui
+  # LINT.ThenChange(//src/infra/argocd/components/velero_ui/helm/values.yaml:velero-ui-affinity-selector)

@@ -1,0 +1,12 @@
+# Composes velero-ui passphrase secrets, RBAC, and network policy resources.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - control-ca-bundle.yaml
+  - pdb.yaml
+  - private-egress.yaml
+  - route.yaml
+  - workload.yaml
+  # keep-sorted end

@@ -1,0 +1,329 @@
+# Injects S3 gateway endpoints and CA bundles into authorized client workload pods.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: s3-gateway-client-injection
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    # The native validating policy below rejects pods when this best-effort
+    # mutation is unavailable or the endpoint is redirected.
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: inject-gateway-profile-volume
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector: &team-namespace-selector
+                matchLabels:
+                  app.kubernetes.io/component: storage-projection
+                  kueue.x-k8s.io/managed: "true"
+      mutate:
+        patchStrategicMerge:
+          spec:
+            volumes:
+              - name: team-s3-credentials
+                secret:
+                  items:
+                    - {key: credentials, path: credentials}
+                  secretName: team-s3
+    - name: inject-gateway-endpoint-into-containers
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector: &team-namespace-selector
+                matchLabels:
+                  app.kubernetes.io/component: storage-projection
+                  kueue.x-k8s.io/managed: "true"
+      mutate:
+        foreach:
+          - list: request.object.spec.containers
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: '{{ element.name }}'
+                    env: &s3-gateway-client-env
+                      # AWS_ENDPOINT_URL_S3 scopes the redirect to the S3
+                      # service; the generic AWS_ENDPOINT_URL would also
+                      # redirect STS and break OIDC federation.
+                      - name: AWS_ENDPOINT_URL_S3
+                        value: http://s3-gateway.s3-system.svc
+                    volumeMounts:
+                      - mountPath: /var/run/cluster/s3
+                        name: team-s3-credentials
+                        readOnly: true
+    - name: inject-gateway-endpoint-into-init-containers
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector: *team-namespace-selector
+      preconditions:
+        all:
+          - key: '{{ length(request.object.spec.initContainers || `[]`) }}'
+            operator: GreaterThan
+            value: 0
+      mutate:
+        foreach:
+          - list: request.object.spec.initContainers
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: '{{ element.name }}'
+                    env: *s3-gateway-client-env
+                    volumeMounts:
+                      - mountPath: /var/run/cluster/s3
+                        name: team-s3-credentials
+                        readOnly: true
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-s3-gateway-endpoint
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+      # kubectl debug reaches pods only through this subresource; matching it
+      # keeps the ephemeral-container ban enforceable after pod creation.
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [UPDATE]
+        resources: [pods/ephemeralcontainers]
+  validations:
+    - expression: >-
+        object.spec.containers.all(container,
+          has(container.env) &&
+          container.env.exists(item, item.name == 'AWS_ENDPOINT_URL_S3') &&
+          container.env.all(item,
+            (item.name != 'AWS_ENDPOINT_URL_S3' ||
+              (has(item.value) && item.value == 'http://s3-gateway.s3-system.svc'))) &&
+          has(object.spec.volumes) &&
+          object.spec.volumes.exists(volume,
+            volume.name == 'team-s3-credentials' &&
+            has(volume.secret) &&
+            volume.secret.secretName == 'team-s3') &&
+          has(container.volumeMounts) &&
+          container.volumeMounts.exists(mount,
+            mount.name == 'team-s3-credentials' &&
+            mount.mountPath == '/var/run/cluster/s3' &&
+            mount.readOnly)) &&
+        (!has(object.spec.initContainers) || object.spec.initContainers.all(container,
+          has(container.env) &&
+          container.env.exists(item, item.name == 'AWS_ENDPOINT_URL_S3') &&
+          container.env.all(item,
+            (item.name != 'AWS_ENDPOINT_URL_S3' ||
+              (has(item.value) && item.value == 'http://s3-gateway.s3-system.svc'))) &&
+          has(object.spec.volumes) &&
+          object.spec.volumes.exists(volume,
+            volume.name == 'team-s3-credentials' &&
+            has(volume.secret) &&
+            volume.secret.secretName == 'team-s3') &&
+          has(container.volumeMounts) &&
+          container.volumeMounts.exists(mount,
+            mount.name == 'team-s3-credentials' &&
+            mount.mountPath == '/var/run/cluster/s3' &&
+            mount.readOnly)))
+      message: Team containers must use the fixed gateway endpoint and credential mount.
+    - expression: >-
+        (object.spec.containers.all(container,
+          !has(container.env) || container.env.all(item, item.name != 'AWS_ENDPOINT_URL'))) &&
+        (!has(object.spec.initContainers) || object.spec.initContainers.all(container,
+          !has(container.env) || container.env.all(item, item.name != 'AWS_ENDPOINT_URL'))) &&
+        (!has(object.spec.ephemeralContainers) || object.spec.ephemeralContainers.all(container,
+          !has(container.env) || container.env.all(item, item.name != 'AWS_ENDPOINT_URL')))
+      message: >-
+        Team containers must not set the generic AWS_ENDPOINT_URL, which also redirects STS and breaks OIDC federation.
+    - expression: >-
+        !has(object.spec.ephemeralContainers) || size(object.spec.ephemeralContainers) == 0
+      message: >-
+        Team pods must not embed ephemeral containers, which admission mutation cannot wire to the explicit S3 profile.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-s3-gateway-endpoint
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-s3-gateway-endpoint
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        app.kubernetes.io/component: storage-projection
+        kueue.x-k8s.io/managed: "true"
+---
+# ConfigMaps and Secrets have different schemas; keep stringData in the Secret
+# policy so the API server can type-check both expressions without warnings.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-generic-aws-endpoint
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [configmaps]
+  validations:
+    - expression: >-
+        !has(object.data) || !('AWS_ENDPOINT_URL' in object.data)
+      message: Team ConfigMaps must not set generic AWS_ENDPOINT_URL; use the gateway's S3-specific endpoint contract.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-generic-aws-endpoint
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-generic-aws-endpoint
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        app.kubernetes.io/component: storage-projection
+        kueue.x-k8s.io/managed: "true"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-generic-aws-endpoint-secret
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [secrets]
+  validations:
+    - expression: >-
+        (!has(object.data) || !('AWS_ENDPOINT_URL' in object.data)) && (!has(object.stringData) || !('AWS_ENDPOINT_URL' in object.stringData))
+      message: Team Secrets must not set generic AWS_ENDPOINT_URL; use the gateway's S3-specific endpoint contract.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-generic-aws-endpoint-secret
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-generic-aws-endpoint-secret
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        app.kubernetes.io/component: storage-projection
+        kueue.x-k8s.io/managed: "true"
+---
+# Inline CSI volumes are Pod-controlled fields. Team Pods may use only the
+# three Coder data aliases backed by their namespace-local team-s3 Secret.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-rclone-csi-volume-contract
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  validations:
+    - expression: >-
+        !has(object.spec.volumes) || !object.spec.volumes.exists(volume, has(volume.csi)) || (has(object.metadata.labels) &&
+         object.metadata.labels['app.kubernetes.io/name'] == 'coder-workspace' &&
+         object.spec.serviceAccountName == 'coder-workspace' &&
+         object.spec.volumes.all(volume,
+           !has(volume.csi) || (
+             volume.name in ['home', 'scratch', 'meta', 'global', 'global-scratch', 'global-meta'] &&
+             volume.csi.driver == 'rclone.csi.veloxpack.io' &&
+             has(volume.csi.nodePublishSecretRef) &&
+             volume.csi.nodePublishSecretRef.name == 'team-s3' &&
+             (size(volume.csi.volumeAttributes) == 6 ||
+              (size(volume.csi.volumeAttributes) == 8 &&
+               volume.csi.volumeAttributes['tpslimit'] == '25' &&
+               volume.csi.volumeAttributes['tpslimit-burst'] == '10')) &&
+             volume.csi.volumeAttributes['remotePath'] == '' &&
+             volume.csi.volumeAttributes['uid'] == '1000' &&
+             volume.csi.volumeAttributes['gid'] == '1000' &&
+             volume.csi.volumeAttributes['umask'] == '0022' &&
+             volume.csi.volumeAttributes['vfs-cache-mode'] == 'off' &&
+             ((volume.name == 'home' && volume.csi.volumeAttributes['remote'] == 'home') ||
+              (volume.name == 'scratch' && volume.csi.volumeAttributes['remote'] == 'scratch') ||
+              (volume.name == 'meta' && volume.csi.volumeAttributes['remote'] == 'meta') ||
+              (volume.name == 'global' && volume.csi.volumeAttributes['remote'] in ['global', 'global-home']) ||
+              (volume.name == 'global-scratch' && volume.csi.volumeAttributes['remote'] == 'global-scratch') ||
+              (volume.name == 'global-meta' && volume.csi.volumeAttributes['remote'] == 'global-meta'))
+           )))
+      message: Team inline CSI volumes must use the pinned Rclone driver, team-s3, and one declared data alias.
+    - expression: >-
+        object.spec.containers.all(container,
+          !has(container.volumeMounts) || container.volumeMounts.all(mount,
+            !(mount.name in ['home', 'scratch', 'meta', 'global', 'global-scratch', 'global-meta']) ||
+            ((mount.name in ['meta', 'global-meta'] || (!has(mount.readOnly) || !mount.readOnly)) &&
+             ((mount.name == 'home' && mount.mountPath != '/s3/global/home' && mount.mountPath != '/fs/s3/global/home' && mount.mountPath.matches('^/(?:fs/)?s3/[a-z0-9]([-a-z0-9]*[a-z0-9])?/home$')) ||
+              (mount.name == 'scratch' && mount.mountPath != '/s3/global/scratch' && mount.mountPath != '/fs/s3/global/scratch' && mount.mountPath.matches('^/(?:fs/)?s3/[a-z0-9]([-a-z0-9]*[a-z0-9])?/scratch$')) ||
+              (mount.name == 'meta' && mount.mountPath != '/s3/global/meta' && mount.mountPath != '/fs/s3/global/meta' && mount.mountPath.matches('^/(?:fs/)?s3/[a-z0-9]([-a-z0-9]*[a-z0-9])?/meta$')) ||
+              (mount.name == 'global' && mount.mountPath in ['/s3/global/home', '/fs/s3/global/home']) ||
+              (mount.name == 'global-scratch' && mount.mountPath in ['/s3/global/scratch', '/fs/s3/global/scratch']) ||
+              (mount.name == 'global-meta' && mount.mountPath in ['/s3/global/meta', '/fs/s3/global/meta'])))
+          )) &&
+        (!has(object.spec.initContainers) || object.spec.initContainers.all(container,
+          !has(container.volumeMounts) || container.volumeMounts.all(mount,
+            !(mount.name in ['home', 'scratch', 'meta', 'global', 'global-scratch', 'global-meta']) ||
+            ((mount.name in ['meta', 'global-meta'] || (!has(mount.readOnly) || !mount.readOnly)) &&
+             ((mount.name == 'home' && mount.mountPath != '/s3/global/home' && mount.mountPath != '/fs/s3/global/home' && mount.mountPath.matches('^/(?:fs/)?s3/[a-z0-9]([-a-z0-9]*[a-z0-9])?/home$')) ||
+              (mount.name == 'scratch' && mount.mountPath != '/s3/global/scratch' && mount.mountPath != '/fs/s3/global/scratch' && mount.mountPath.matches('^/(?:fs/)?s3/[a-z0-9]([-a-z0-9]*[a-z0-9])?/scratch$')) ||
+              (mount.name == 'meta' && mount.mountPath != '/s3/global/meta' && mount.mountPath != '/fs/s3/global/meta' && mount.mountPath.matches('^/(?:fs/)?s3/[a-z0-9]([-a-z0-9]*[a-z0-9])?/meta$')) ||
+              (mount.name == 'global' && mount.mountPath in ['/s3/global/home', '/fs/s3/global/home']) ||
+              (mount.name == 'global-scratch' && mount.mountPath in ['/s3/global/scratch', '/fs/s3/global/scratch']) ||
+              (mount.name == 'global-meta' && mount.mountPath in ['/s3/global/meta', '/fs/s3/global/meta'])))
+          )))
+      message: Team Rclone CSI volumes must mount only at the Coder data paths.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-rclone-csi-volume-contract
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-rclone-csi-volume-contract
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        app.kubernetes.io/component: storage-projection
+        kueue.x-k8s.io/managed: "true"

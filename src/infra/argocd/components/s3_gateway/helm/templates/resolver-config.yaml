@@ -1,0 +1,26 @@
+{{- /* Shares gateway topology and provider endpoints with the URI resolver. */ -}}
+
+{{- include "s3-gateway.validate" . -}}
+{{- $topology := include "s3-gateway.activeTopology" . | fromJson -}}
+{{- $cells := list -}}
+{{- range $cell := $topology.cells -}}
+  {{- $resolverCell := deepCopy $cell -}}
+  {{- /* floci-divergence: Floci S3 requires its registered emulator endpoint for direct requests. */ -}}
+  {{- if and (eq $cell.provider "floci") $.Values.flociS3Endpoint -}}
+    {{- $_ := set $resolverCell "endpoint" $.Values.flociS3Endpoint -}}
+  {{- end -}}
+  {{- $cells = append $cells $resolverCell -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: s3-resolver-topology
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: s3-resolver
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+data:
+  topology.json: |
+    {{- dict "targetCell" .Values.targetCell "cells" $cells "global" $topology.global | toPrettyJson | nindent 4 }}

@@ -1,0 +1,17 @@
+# PodDisruptionBudget ensuring high availability for Barman Cloud backup controllers.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: barman-cloud
+  namespace: cnpg-system
+  labels:
+    app.kubernetes.io/name: plugin-barman-cloud
+    app.kubernetes.io/part-of: postgresql
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: barman-cloud
+      app.kubernetes.io/name: plugin-barman-cloud

@@ -1,0 +1,175 @@
+# Configures passphrase generation, read-only Velero RBAC, and NetworkPolicy for each per-cell UI reached through the tailnet internal route.
+
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: Password
+metadata:
+  name: velero-ui-passphrase
+  namespace: velero-system
+  annotations:
+    # Password generators are passive External Secrets inputs and expose no
+    # status conditions for Argo CD to wait on between sync waves.
+    argocd.argoproj.io/ignore-healthcheck: "true"
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/component: runtime-secret
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+spec:
+  allowRepeat: true
+  digits: 8
+  length: 48
+  noUpper: false
+  symbols: 0
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: velero-ui-passphrase
+  namespace: velero-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/component: runtime-secret
+    app.kubernetes.io/managed-by: external-secrets
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+spec:
+  refreshPolicy: CreatedOnce
+  target:
+    name: velero-ui-passphrase
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      metadata:
+        labels:
+          app.kubernetes.io/component: runtime-secret
+          app.kubernetes.io/managed-by: external-secrets
+          app.kubernetes.io/name: velero-ui
+          app.kubernetes.io/part-of: velero
+      data:
+        pass_phrase: "{{ .password }}"
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: Password
+          name: velero-ui-passphrase
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: velero-ui-view
+  labels:
+    app.kubernetes.io/component: authorization
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: velero-ui-view
+  labels:
+    app.kubernetes.io/component: authorization
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: velero-ui-view
+subjects:
+  - kind: ServiceAccount
+    name: velero-ui
+    namespace: velero-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: velero-ui-view
+  namespace: velero-system
+  labels:
+    app.kubernetes.io/component: authorization
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+rules:
+  - apiGroups: [""]
+    resources: [configmaps, pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log, pods/status]
+    verbs: [get]
+  - apiGroups: [velero.io]
+    resources:
+      - backuprepositories
+      - backups
+      - backupstoragelocations
+      - datadownloads
+      - datauploads
+      - deletebackuprequests
+      - downloadrequests
+      - podvolumebackups
+      - podvolumerestores
+      - restores
+      - schedules
+      - serverstatusrequests
+      - volumesnapshotlocations
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: velero-ui-view
+  namespace: velero-system
+  labels:
+    app.kubernetes.io/component: authorization
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: velero-ui-view
+subjects:
+  - kind: ServiceAccount
+    name: velero-ui
+    namespace: velero-system
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: velero-ui
+  namespace: velero-system
+  labels:
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: velero-ui
+      app.kubernetes.io/name: velero-ui
+  policyTypes: [Ingress]
+  ingress:
+    # The ClusterIP is never routed publicly. MCS implementations may preserve
+    # the remote Pod IP or SNAT at a gateway, so the portable ingress contract
+    # constrains the destination port rather than a non-portable source CIDR.
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  # keep-sorted start
+                  - envoy-gateway-system
+                  # keep-sorted end
+      ports:
+        - {protocol: TCP, port: 3000}

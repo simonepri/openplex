@@ -1,0 +1,14 @@
+# Exercises cloud lint fixture proving one value-free team gateway materialization.
+
+team: fixture-team
+provider: aws
+authAdapter: aws
+identity:
+  roleArn: arn:aws:iam::999988887777:role/fixture-team-gateway
+  serviceAccount: s3-gateway-fixture-team
+targetCell: cell-aws-usw2
+topology:
+  version: 1
+  cells:
+    - {name: cell-aws-usw2, virtualName: aws-usw2}
+    - {name: cell-gcp-euw4, virtualName: gcp-euw4}
