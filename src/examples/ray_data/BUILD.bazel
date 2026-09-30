@@ -1,0 +1,64 @@
+"""Builds the Ray Data distributed processing pipeline and packages multi-architecture container images."""
+
+load("@rules_python//python:defs.bzl", "py_binary")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "workload_manifests")
+load("//src/bazel/rules/oci:defs.bzl", "oci_multiarch_image", "oci_workload_publish", "oci_workload_run")
+
+py_binary(
+    name = "pipeline",
+    srcs = ["pipeline.py"],
+    deps = [
+        "//src/infra/tools/otel_tracing/python",
+        "//src/infra/tools/s3_resolver/client/python",
+        "@python_deps//ray",
+        "@python_deps//typing_extensions",  # keep
+    ],
+)
+
+oci_multiarch_image(
+    name = "image",
+    base = "ray_torch_base",
+    binary = ":pipeline",
+)
+
+alias(
+    name = "head_image",
+    actual = ":image",
+)
+
+alias(
+    name = "worker_image",
+    actual = ":image",
+)
+
+workload_manifests(
+    name = "manifest",
+    srcs = [
+        "deployment/kustomization.yaml",
+        "deployment/project.yaml",
+        "deployment/ray-data.k8s.yaml",
+    ],
+)
+
+oci_workload_publish(
+    name = "publish",
+    images = {
+        "head": ":head_image",
+        "worker": ":worker_image",
+    },
+)
+
+oci_workload_run(
+    name = "run",
+    images = {
+        "head": ":head_image",
+        "worker": ":worker_image",
+    },
+    manifest = ":manifest",
+    namespace = "team-examples-workloads",
+)
+
+alias(
+    name = "submit",
+    actual = ":run",
+)

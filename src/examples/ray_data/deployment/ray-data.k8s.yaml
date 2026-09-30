@@ -1,0 +1,302 @@
+# Defines the RayJob custom resource for executing distributed Ray Data Parquet transformation pipelines.
+
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  labels:
+    app.kubernetes.io/component: ray-data
+    app.kubernetes.io/name: ray-data-pipeline
+    cost-center: examples
+    environment: production
+    availability-class: wa
+    latency-class: lt
+    ray.io/cluster: ray-data-pipeline
+    team: examples
+  name: ray-data-pipeline
+spec:
+  entrypoint: python -m examples.ray_data.pipeline
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 1800
+  rayClusterSpec:
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: 0.0.0.0
+        memory: "1073741824"
+        num-cpus: "0"
+        object-store-memory: "268435456"
+        temp-dir: /tmp/ray
+      template:
+        metadata:
+          annotations:
+            kueue.x-k8s.io/podset-group-name: ray-data-pipeline
+            kueue.x-k8s.io/podset-required-topology: topology.kubernetes.io/zone
+          labels:
+            app.kubernetes.io/component: ray-data-head
+            app.kubernetes.io/name: ray-data-pipeline
+            cost-center: examples
+            environment: production
+            ray.io/cluster: ray-data-pipeline
+            team: examples
+        spec:
+          automountServiceAccountToken: false
+          containers:
+            - env:
+                - name: HOST_IP
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: status.hostIP
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: "http://$(HOST_IP):4318"
+                - name: OTEL_EXPORTER_OTLP_PROTOCOL
+                  value: "http/protobuf"
+                - name: OTEL_METRICS_EXPORTER
+                  value: "none"
+                - name: OTEL_SERVICE_NAME
+                  value: "ray-data"
+                - name: RAY_DASHBOARD_SUBPROCESS_MODULE_WAIT_READY_TIMEOUT
+                  value: "120"
+              image: registry.invalid/workloads/ray-data/head@sha256:0000000000000000000000000000000000000000000000000000000000000000
+              imagePullPolicy: IfNotPresent
+              name: ray-head
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 3Gi
+                requests:
+                  cpu: 150m
+                  memory: 768Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                privileged: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile:
+                  type: RuntimeDefault
+              startupProbe:
+                failureThreshold: 36
+                httpGet:
+                  path: /api/healthz
+                  port: 52365
+                periodSeconds: 5
+                timeoutSeconds: 2
+              volumeMounts:
+                - mountPath: /dev/shm
+                  name: dshm
+                - mountPath: /tmp
+                  name: ray-tmp
+                - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+                  name: serviceaccount-token
+                  readOnly: true
+          serviceAccountName: ray-runner
+          volumes:
+            - emptyDir:
+                medium: Memory
+                sizeLimit: 2Gi
+              name: dshm
+            - emptyDir: {}
+              name: ray-tmp
+            - name: serviceaccount-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      expirationSeconds: 3600
+                      path: token
+    rayVersion: 2.57.0
+    workerGroupSpecs:
+      - groupName: io-workers
+        maxReplicas: 4
+        minReplicas: 1
+        rayStartParams:
+          memory: "1073741824"
+          object-store-memory: "268435456"
+          temp-dir: /tmp/ray
+        replicas: 1
+        template:
+          metadata:
+            annotations:
+              kueue.x-k8s.io/podset-group-name: ray-data-pipeline
+              kueue.x-k8s.io/podset-required-topology: topology.kubernetes.io/zone
+            labels:
+              app.kubernetes.io/component: ray-data-io-worker
+              app.kubernetes.io/name: ray-data-pipeline
+              cost-center: examples
+              environment: production
+              ray.io/cluster: ray-data-pipeline
+              team: examples
+          spec:
+            automountServiceAccountToken: false
+            containers:
+              - image: registry.invalid/workloads/ray-data/head@sha256:0000000000000000000000000000000000000000000000000000000000000000
+                imagePullPolicy: IfNotPresent
+                name: ray-worker
+                resources:
+                  limits:
+                    cpu: "1"
+                    memory: 2Gi
+                  requests:
+                    cpu: 400m
+                    memory: 1Gi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  privileged: false
+                  readOnlyRootFilesystem: true
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  seccompProfile:
+                    type: RuntimeDefault
+                startupProbe:
+                  failureThreshold: 36
+                  httpGet:
+                    path: /api/healthz
+                    port: 52365
+                  periodSeconds: 5
+                  timeoutSeconds: 2
+                volumeMounts:
+                  - mountPath: /dev/shm
+                    name: dshm
+                  - mountPath: /tmp
+                    name: ray-tmp
+                  - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+                    name: serviceaccount-token
+                    readOnly: true
+            serviceAccountName: ray-runner
+            volumes:
+              - emptyDir:
+                  medium: Memory
+                  sizeLimit: 2Gi
+                name: dshm
+              - emptyDir: {}
+                name: ray-tmp
+              - name: serviceaccount-token
+                projected:
+                  sources:
+                    - serviceAccountToken:
+                        expirationSeconds: 3600
+                        path: token
+      - groupName: compute-workers
+        maxReplicas: 4
+        minReplicas: 0
+        rayStartParams:
+          memory: "1073741824"
+          object-store-memory: "268435456"
+          temp-dir: /tmp/ray
+        replicas: 0
+        template:
+          metadata:
+            annotations:
+              kueue.x-k8s.io/podset-required-topology: topology.kubernetes.io/zone
+            labels:
+              app.kubernetes.io/component: ray-data-compute-worker
+              app.kubernetes.io/name: ray-data-pipeline
+              cost-center: examples
+              environment: production
+              ray.io/cluster: ray-data-pipeline
+              team: examples
+          spec:
+            automountServiceAccountToken: false
+            containers:
+              - image: registry.invalid/workloads/ray-data/worker@sha256:0000000000000000000000000000000000000000000000000000000000000000
+                imagePullPolicy: IfNotPresent
+                name: ray-worker
+                resources:
+                  limits:
+                    cpu: "2"
+                    memory: 4Gi
+                  requests:
+                    cpu: 1000m
+                    memory: 2Gi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  privileged: false
+                  readOnlyRootFilesystem: true
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  seccompProfile:
+                    type: RuntimeDefault
+                startupProbe:
+                  failureThreshold: 36
+                  httpGet:
+                    path: /api/healthz
+                    port: 52365
+                  periodSeconds: 5
+                  timeoutSeconds: 2
+                volumeMounts:
+                  - mountPath: /dev/shm
+                    name: dshm
+                  - mountPath: /tmp
+                    name: ray-tmp
+                  - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+                    name: serviceaccount-token
+                    readOnly: true
+            serviceAccountName: ray-runner
+            volumes:
+              - emptyDir:
+                  medium: Memory
+                  sizeLimit: 2Gi
+                name: dshm
+              - emptyDir: {}
+                name: ray-tmp
+              - name: serviceaccount-token
+                projected:
+                  sources:
+                    - serviceAccountToken:
+                        expirationSeconds: 3600
+                        path: token
+  runtimeEnvYAML: |
+    env_vars:
+      RAY_DATA_BUCKET_URI: s3://__WORKLOAD_CELL_VIRTUAL__/home/examples
+      AWS_REGION: us-east-1
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_PROFILE: team-s3
+      AWS_SHARED_CREDENTIALS_FILE: /var/run/cluster/s3/credentials
+      RAY_DATA_PARTITION_KEY: "2026-08-16"
+      RAY_DATA_RUN_ID: __WORKLOAD_RUN_ID__
+      RAY_DATA_MIN_WORKERS: "1"
+      RAY_DATA_MAX_WORKERS: "4"
+      RAY_DATA_MIN_COMPUTE_WORKERS: "0"
+      RAY_DATA_MAX_COMPUTE_WORKERS: "4"
+      RAY_DATA_CLUSTER_SCALING_UP_DELTA: "32"
+      RAY_DATA_DEFAULT_ACTOR_POOL_UTIL_UPSCALING_THRESHOLD: "1.0"
+      RAY_DATA_DEFAULT_ACTOR_POOL_MAX_UPSCALING_DELTA: "32"
+  submitterPodTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/component: ray-data-submitter
+        app.kubernetes.io/name: ray-data-pipeline
+        cost-center: examples
+        environment: production
+        team: examples
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - image: registry.invalid/workloads/ray-data/head@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          name: ray-job-submitter
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+      restartPolicy: Never
