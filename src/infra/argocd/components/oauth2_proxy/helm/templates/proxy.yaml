@@ -1,0 +1,330 @@
+{{- /* Defines common oauth2-proxy workload, service, and network boundary. */ -}}
+
+{{- define "oauth2-proxy-integration.proxy" -}}
+{{- $root := .root -}}
+{{- $application := .application -}}
+{{- $identity := .identity -}}
+{{- $instance := .instance -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $instance.name }}
+  namespace: {{ $root.Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      OAuth2 proxy instances receive client secret and cookie secret via environment.
+  labels:
+    {{- include "oauth2-proxy-integration.labels" (dict
+      "component" "authentication"
+      "name" $instance.name
+      "partOf" $application.partOf
+    ) | nindent 4 }}
+spec:
+  replicas: {{ default 1 $root.Values.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $instance.name }}
+  template:
+    metadata:
+      annotations:
+        ignore-check.kube-linter.io/read-secret-from-env-var: >-
+          OAuth2 proxy instances receive client secret and cookie secret via environment.
+      labels:
+        {{- include "oauth2-proxy-integration.labels" (dict
+          "component" "authentication"
+          "name" $instance.name
+          "partOf" $application.partOf
+        ) | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: {{ $application.serviceAccountName }}
+      securityContext:
+        fsGroup: 2000
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      affinity:
+        {{- with $root.Values.affinity }}
+        {{- toYaml . | nindent 8 }}
+        {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: {{ $instance.name }}
+                topologyKey: kubernetes.io/hostname
+              weight: 100
+        {{- end }}
+      {{- with $root.Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: oauth2-proxy
+          # yamllint disable-line rule:line-length
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+          args:
+            - --auth-logging=true
+            - --code-challenge-method=S256
+            - --cookie-csrf-expire=1h
+            - --cookie-csrf-per-request=true
+            - --cookie-expire=8h
+            - --cookie-httponly=true
+            - --cookie-name={{ $instance.cookieName }}
+            - --cookie-refresh=0s
+            - --cookie-samesite=lax
+            - --cookie-secure=true
+            - --email-domain=*
+            {{- if $instance.tls.enabled }}
+            - --https-address=0.0.0.0:4443
+            - --tls-cert-file=/etc/oauth2-proxy/tls/tls.crt
+            - --tls-key-file=/etc/oauth2-proxy/tls/tls.key
+            {{- else }}
+            - --http-address=0.0.0.0:4180
+            {{- end }}
+            - --insecure-oidc-skip-nonce=false
+            - --oidc-groups-claim=groups
+            - --pass-access-token=false
+            - --pass-authorization-header=false
+            - --pass-basic-auth=false
+            - --pass-host-header=true
+            # v7.15.3's generic OIDC provider fills SessionState.User from sub;
+            # pass-user-headers then replaces X-Forwarded-User with that value.
+            - --pass-user-headers={{ default false $instance.passUserHeaders }}
+            - --provider=oidc
+            - --provider-display-name=Dex
+            - --proxy-websockets=true
+            {{- if and (not $instance.redirectFromSecret) $instance.redirectURL }}
+            - --redirect-url={{ $instance.redirectURL }}
+            {{- end }}
+            - --request-logging=true
+            - --reverse-proxy=true
+            - --scope=openid profile email groups
+            - --set-authorization-header=false
+            - --set-xauthrequest=false
+            - --show-debug-on-error=false
+            - --silence-ping-logging=true
+            # Strip client-supplied authentication headers whenever a future
+            # proxy option would otherwise set the same header upstream.
+            - --skip-auth-strip-headers=true
+            - --skip-provider-button=true
+            - --standard-logging=true
+            - --upstream={{ $instance.upstream.url }}
+            - --use-system-trust-store=true
+            {{- if $root.Values.localCA.enabled }}
+            - --provider-ca-file=/etc/ssl/local-ca/ca.crt
+            {{- end }}
+          env:
+            - name: OAUTH2_PROXY_ALLOWED_GROUPS
+              valueFrom:
+                secretKeyRef: {name: {{ $identity.secretName }}, key: operator-group}
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef: {name: {{ $identity.secretName }}, key: client-id}
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ $identity.secretName }}, key: client-secret}
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ $identity.secretName }}, key: cookie-secret}
+            - name: OAUTH2_PROXY_OIDC_ISSUER_URL
+              valueFrom:
+                secretKeyRef: {name: {{ $identity.secretName }}, key: issuer-url}
+            {{- if $instance.redirectFromSecret }}
+            - name: OAUTH2_PROXY_REDIRECT_URL
+              valueFrom:
+                secretKeyRef: {name: {{ $identity.secretName }}, key: redirect-url}
+            {{- end }}
+          ports:
+            - {name: {{ ternary "https" "http" $instance.tls.enabled }}, containerPort: {{ ternary 4443 4180 $instance.tls.enabled }}, protocol: TCP}
+          readinessProbe:
+            httpGet: {path: /ready, port: {{ ternary "https" "http" $instance.tls.enabled }}, scheme: {{ ternary "HTTPS" "HTTP" $instance.tls.enabled }}}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet: {path: /ping, port: {{ ternary "https" "http" $instance.tls.enabled }}, scheme: {{ ternary "HTTPS" "HTTP" $instance.tls.enabled }}}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 2000
+          {{- if or $root.Values.localCA.enabled $instance.tls.enabled }}
+          volumeMounts:
+            {{- if $root.Values.localCA.enabled }}
+            - name: cluster-local-ca
+              mountPath: /etc/ssl/local-ca
+              readOnly: true
+            {{- end }}
+            {{- if $instance.tls.enabled }}
+            - name: tls
+              mountPath: /etc/oauth2-proxy/tls
+              readOnly: true
+            {{- end }}
+          {{- end }}
+      {{- if or $root.Values.localCA.enabled $instance.tls.enabled }}
+      volumes:
+        {{- if $root.Values.localCA.enabled }}
+        - name: cluster-local-ca
+          configMap:
+            name: cluster-local-ca
+            items:
+              - key: ca.crt
+                path: ca.crt
+        {{- end }}
+        {{- if $instance.tls.enabled }}
+        - name: tls
+          secret: {secretName: {{ $instance.tls.secretName }}}
+        {{- end }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $instance.name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "oauth2-proxy-integration.labels" (dict
+      "component" "authentication"
+      "name" $instance.name
+      "partOf" $application.partOf
+    ) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ $instance.name }}
+  ports:
+    - {name: {{ ternary "https" "http" $instance.tls.enabled }}, port: {{ ternary 443 4180 $instance.tls.enabled }}, protocol: TCP, targetPort: {{ ternary "https" "http" $instance.tls.enabled }}}
+{{- if $root.Values.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $instance.name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "oauth2-proxy-integration.labels" (dict
+      "component" "authentication"
+      "name" $instance.name
+      "partOf" $application.partOf
+    ) | nindent 4 }}
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $instance.name }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $instance.name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "oauth2-proxy-integration.labels" (dict
+      "component" "authentication"
+      "name" $instance.name
+      "partOf" $application.partOf
+    ) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $instance.name }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/managed-by: envoy-gateway
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: {{ ternary 4443 4180 $instance.tls.enabled }}}
+  egress:
+    - to:
+        {{- if hasKey $instance.upstream "ipBlock" }}
+        - ipBlock: {cidr: {{ $instance.upstream.ipBlock }}}
+        {{- else if $instance.upstream.namespaceSelector }}
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $instance.upstream.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $instance.upstream.podSelector | nindent 14 }}
+        {{- else }}
+        - podSelector:
+            matchLabels:
+              {{- toYaml $instance.upstream.podSelector | nindent 14 }}
+        {{- end }}
+      ports:
+        - {protocol: TCP, port: {{ $instance.upstream.port }}}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock: {cidr: 169.254.20.10/32}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+      ports:
+        - {protocol: TCP, port: 443}
+    {{- if $root.Values.oidcEgressCIDR }}
+    - to:
+        - ipBlock: {cidr: {{ $root.Values.oidcEgressCIDR | quote }}}
+      ports:
+        - {protocol: TCP, port: 443}
+    {{- end }}
+    {{- if $root.Values.localCA.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/managed-by: envoy-gateway
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 10443}
+    {{- end }}
+{{- end }}

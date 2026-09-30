@@ -1,0 +1,60 @@
+{{- /* Renders shared identity resources for one oauth2-proxy Application release. */ -}}
+
+{{- define "oauth2-proxy-integration.shared" -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .application.serviceAccountName }}
+  namespace: {{ .root.Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    {{- include "oauth2-proxy-integration.labels" (dict
+      "component" "authentication"
+      "name" .application.serviceAccountName
+      "partOf" .application.partOf
+    ) | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ .identity.secretName }}
+  namespace: {{ .root.Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    {{- include "oauth2-proxy-integration.identityLabels" (dict
+      "name" .application.serviceAccountName
+      "partOf" .application.partOf
+    ) | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: runtime-secrets
+  target:
+    name: {{ .identity.secretName }}
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      metadata:
+        labels:
+          {{- include "oauth2-proxy-integration.identityLabels" (dict
+            "name" .application.serviceAccountName
+            "partOf" .application.partOf
+          ) | nindent 10 }}
+      data:
+        client-id: {{ printf "{{ .%s }}" .identity.clientIDProperty | quote }}
+        client-secret: {{ printf "{{ .%s }}" .identity.clientSecretProperty | quote }}
+        cookie-secret: {{ printf "{{ .%s }}" .identity.cookieSecretProperty | quote }}
+        issuer-url: {{ "{{ .issuer }}" | quote }}
+        operator-group: "operators"
+        {{- with .identity.externalURLProperty }}
+        redirect-url: {{ printf "{{ printf \"%%s/oauth2/callback\" .%s }}" . | quote }}
+        {{- end }}
+  dataFrom:
+    - extract:
+        key: application-oidc
+{{- end }}

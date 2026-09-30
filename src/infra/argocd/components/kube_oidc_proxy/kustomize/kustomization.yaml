@@ -1,0 +1,17 @@
+# Assembles kube-oidc-proxy resources including serving TLS certificates, network policy, RBAC, and workload.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - certificate.yaml
+  - config.yaml
+  - control-ca-bundle.yaml
+  - network-policy.yaml
+  - pdb.yaml
+  - rbac.yaml
+  - service.yaml
+  - tls-route.yaml
+  - vpa.yaml
+  - workload.yaml
+  # keep-sorted end
