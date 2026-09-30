@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["access", "cell", "certificate", "coder", "image", "s3"],
+  "properties": {
+    "cell": { "type": "string", "pattern": "^(?:cell|ctrl)-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+    "access": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "privateEgress"],
+      "properties": {
+        "hostname": {
+          "type": "string",
+          "pattern": "^coder-snapshots\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$"
+        },
+        "gatewayIPv4": {
+          "type": "string",
+          "format": "ipv4"
+        },
+        "privateEgress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespace", "podLabels", "port"],
+          "properties": {
+            "namespace": { "const": "tailscale-system" },
+            "podLabels": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": { "type": "string", "minLength": 1 }
+            },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        }
+      }
+    },
+    "coder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template", "url"],
+      "properties": {
+        "template": { "type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://coder\\.[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?(?::[0-9]+)?$"
+        }
+      }
+    },
+    "s3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bucket", "endpoint", "region"],
+      "properties": {
+        "bucket": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "region": { "type": "string" }
+      }
+    },
+    "certificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issuerName"],
+      "properties": {
+        "issuerName": { "enum": ["cluster-local-ca", "public-acme"] }
+      }
+    },
+    "localCA": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "configMapName": { "type": "string" }
+      }
+    },
+    "image": { "$ref": "#/definitions/image" },
+    "resources": { "$ref": "#/definitions/resources" },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "externalSecretEnabled": { "type": "boolean" }
+      }
+    }
+  },
+  "definitions": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "pullPolicy", "repository"],
+      "properties": {
+        "repository": {
+          "enum": [
+            "docker.io/cluster/coder-snapshot-portal",
+            "localhost:15100/000000000000/us-east-1/src/infra/tools/coder_snapshot_portal"
+          ]
+        },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "pullPolicy": { "enum": ["IfNotPresent", "Never"] }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limits": { "type": "object" },
+        "requests": { "type": "object" }
+      }
+    }
+  }
+}

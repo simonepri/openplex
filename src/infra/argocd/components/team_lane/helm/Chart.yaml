@@ -1,0 +1,8 @@
+# Defines unified team chart consumed by one team-derived parent. Its waves order cluster foundations, workloads, and promotions.
+
+apiVersion: v2
+name: team-lane
+description: Argo CD control resources for one team.
+type: application
+version: 0.1.0
+appVersion: 1.0.0

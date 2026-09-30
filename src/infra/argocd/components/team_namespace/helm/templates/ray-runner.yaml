@@ -1,0 +1,20 @@
+{{- /* Defines canonical workload execution ServiceAccount for Ray and batch workloads in team lanes. */ -}}
+
+{{- if eq .Values.mode "cell" }}
+{{- $namespace := include "team-namespace.namespace" . -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ray-runner
+  namespace: {{ $namespace }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: ray-runner
+    app.kubernetes.io/part-of: team-lane
+    team: {{ .Values.team.slug }}
+{{- if .Values.workloadImagePull.enabled }}
+imagePullSecrets:
+  - name: ecr-pull
+{{- end }}
+automountServiceAccountToken: false
+{{- end }}

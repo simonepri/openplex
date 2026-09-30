@@ -1,0 +1,44 @@
+{{- /* Configures shared source-record RBAC roles and SecretStore bindings for team lanes. */ -}}
+
+{{- if eq .Values.mode "storage-rbac" }}
+{{- include "team-namespace.validate" . -}}
+{{- $handoff := .Values.storageProjection.handoff -}}
+{{- $kubernetesAuth := include "team-namespace.storageKubernetesAuth" $handoff | fromJson -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ printf "s3-team-%s-reader" .Values.team.slug }}
+  namespace: {{ $kubernetesAuth.remoteNamespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [{{ $handoff.recordName | quote }}]
+    verbs: [get]
+  - apiGroups: [authorization.k8s.io]
+    resources: [selfsubjectrulesreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ printf "s3-team-%s-reader" .Values.team.slug }}
+  namespace: {{ $kubernetesAuth.remoteNamespace }}
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      The team S3 storage adapter requires get-only read access to the team storage secret record to project S3 credentials.
+  labels:
+{{ include "team-namespace.labels" $ | nindent 4 }}
+subjects:
+{{ range $suffix := .Values.storageProjection.rbacNamespaceSuffixes }}
+{{ $namespace := printf "team-%s-%s" $.Values.team.slug ($suffix | replace "_" "-") }}
+  - kind: ServiceAccount
+    name: {{ $handoff.secretStore.serviceAccount }}
+    namespace: {{ $namespace }}
+{{ end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ printf "s3-team-%s-reader" $.Values.team.slug }}
+{{- end }}

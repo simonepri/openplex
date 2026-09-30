@@ -1,0 +1,98 @@
+{{- /* NetworkPolicy restricting snapshot portal ingress to gateway and egress to Coder and S3. */ -}}
+
+{{- $name := "coder-snapshot-portal" -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: coder-workspace-backup-system
+  labels:
+    {{- include "coder-snapshot-portal.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Envoy Gateway ingress on port 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/managed-by: envoy-gateway
+      ports:
+        - {protocol: TCP, port: 8080}
+  egress:
+    # Cluster DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # S3 Gateway service in s3-system
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: s3-system
+      ports:
+        - {protocol: TCP, port: 8080}
+    # Coder control plane
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: coder
+      ports:
+        - {protocol: TCP, port: 8080}
+    # Envoy Gateway private access (for OAuth2 token exchange and Coder API)
+    {{- if .Values.access.gatewayIPv4 }}
+    - to:
+        - ipBlock:
+            cidr: {{ printf "%s/32" .Values.access.gatewayIPv4 }}
+      ports:
+        - {protocol: TCP, port: 443}
+    {{- end }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/managed-by: envoy-gateway
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 10443}
+    # Tailscale private egress
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.access.privateEgress.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.access.privateEgress.podLabels | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.access.privateEgress.port }}}
+    # Floci S3 endpoint
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - {protocol: TCP, port: 4566}
+    # Public HTTPS (for direct S3 / external Coder)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.169.254/32
+      ports:
+        - {protocol: TCP, port: 443}

@@ -1,0 +1,133 @@
+{{- /* Projects one cell-scoped cache/BES credential pair into each Coder workspace namespace. */ -}}
+
+{{- if and (eq .Values.mode "cell") .Values.devWorkspaces.enabled }}
+{{- include "team-namespace.validate" . -}}
+{{- $namespace := include "team-namespace.namespace" . -}}
+{{- $name := "workspace-buildbuddy-auth" -}}
+{{- $auth := include "team-namespace.buildbuddyAuth" . | fromJson -}}
+{{- if eq $auth.adapter "kubernetes" }}
+{{- $readerName := printf "%s-%s" $name (sha256sum $namespace | trunc 12) -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $readerName }}
+  namespace: secret-records
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [{{ $auth.recordName | quote }}]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $readerName }}
+  namespace: secret-records
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      The buildbuddy auth reader requires get-only read access to the buildbuddy auth secret record to project bazelrc credentials.
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $readerName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $readerName }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-secrets-self-subject-rules-reviewer
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $namespace }}
+---
+{{- end }}
+# LINT.IfChange(workspace-buildbuddy-auth-secret-projection)
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  provider:
+{{- if eq $auth.adapter "aws" }}
+    aws:
+      service: SecretsManager
+      region: {{ $auth.auth.aws.region | quote }}
+{{- else if eq $auth.adapter "gcp" }}
+    gcpsm:
+      projectID: {{ $auth.auth.gcp.projectId | quote }}
+{{- else if eq $auth.adapter "kubernetes" }}
+    kubernetes:
+      remoteNamespace: secret-records
+      server:
+        url: https://kubernetes.default.svc
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+      auth:
+        serviceAccount:
+          name: {{ $name }}
+{{- end }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: {{ $name }}
+  target:
+    name: {{ $name }}
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      data:
+        credentials.bazelrc: |-
+          build --remote_header=x-buildbuddy-api-key={{`{{ .cache_api_key }}`}}
+          build --remote_cache_header=x-buildbuddy-api-key={{`{{ .cache_api_key }}`}}
+          build --bes_header=x-buildbuddy-api-key={{`{{ .bes_api_key }}`}}
+  data:
+    - secretKey: cache_api_key
+      remoteRef:
+        key: {{ $auth.recordName | quote }}
+        property: cache_api_key
+    - secretKey: bes_api_key
+      remoteRef:
+        key: {{ $auth.recordName | quote }}
+        property: bes_api_key
+# LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/dev-secrets-policy.yaml:workspace-buildbuddy-auth-secret-projection)
+{{- end }}

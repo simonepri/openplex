@@ -1,0 +1,10 @@
+# Helm chart packaging the Coder workspace snapshot portal and S3 lineage catalog.
+#
+# TODO(simonepri): Extract and publish workspace snapshotting, S3 catalog, and portal as a standalone open-source project.
+
+apiVersion: v2
+name: coder-snapshot-portal
+description: User-facing workspace snapshot portal and direct S3 lineage DAG catalog
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

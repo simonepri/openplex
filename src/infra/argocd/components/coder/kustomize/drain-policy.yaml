@@ -1,0 +1,134 @@
+# PriorityClass and scheduling policies ensuring graceful drain and high availability for Coder.
+
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: coder-control-plane
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 900000
+globalDefault: false
+preemptionPolicy: Never
+description: Schedules the Coder control plane ahead of team workloads without preemption.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coder
+  namespace: coder
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: coder
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: coder
+      app.kubernetes.io/name: coder
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: headscale
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: headscale
+      ports:
+        - {protocol: TCP, port: 8080}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {protocol: TCP, port: 2112}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: coder-postgres
+      ports:
+        - {protocol: TCP, port: 5432}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: headscale
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: headscale
+      ports:
+        - {protocol: TCP, port: 8443}
+    # Some NetworkPolicy implementations evaluate Service traffic after DNAT.
+    # Permit the exact Envoy HTTPS target so OIDC discovery through the shared
+    # application edge is portable without opening cross-namespace pod egress.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/name: envoy
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 10443}
+    # Kubernetes API server and cell cluster endpoints for workspace provisioning
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: UDP, port: 3478}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: coder
+  namespace: coder
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: coder
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: coder
+  updatePolicy:
+    updateMode: "Initial"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: coder
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly

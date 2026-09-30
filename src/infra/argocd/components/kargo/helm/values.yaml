@@ -1,0 +1,196 @@
+# Configures base Helm values for Kargo controllers and API server on control clusters for GitOps promotions.
+
+image:
+  repository: ghcr.io/akuity/kargo
+  tag: v1.11.5@sha256:6368cd6bae66332abf9b026f61f4a7f34b268d7961721f3ea9624c5cfa54f157
+
+global:
+  # Avoid the deprecated kargo-cluster-secrets compatibility namespace. The
+  # current system/shared resource namespaces remain chart-owned.
+  createClusterSecretsNamespace: false
+  createClusterSecretsRBAC: false
+  podAnnotations:
+    automount-service-account-token: "true"
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Kargo API loads admin and secret credentials via environment variables.
+  systemResources:
+    extraNamespaceLabels:
+      app.kubernetes.io/part-of: kargo
+  sharedResources:
+    extraNamespaceLabels:
+      app.kubernetes.io/part-of: kargo
+  priorityClassName: cluster-operators
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+
+crds:
+  install: true
+  keep: true
+
+api:
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: api
+                app.kubernetes.io/instance: kargo
+                app.kubernetes.io/name: kargo
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  topologySpreadConstraints: []
+  host: kargo.invalid
+  permissiveCorsPolicyEnabled: true
+  secretManagementEnabled: false
+  env:
+    - name: SSL_CERT_FILE
+      value: /state/ca-bundle.crt
+  initContainers:
+    - name: ca-bundle
+      image: ghcr.io/akuity/kargo:v1.11.5@sha256:6368cd6bae66332abf9b026f61f4a7f34b268d7961721f3ea9624c5cfa54f157
+      command: [/bin/sh, -ec]
+      args:
+        - cat /etc/ssl/certs/ca-certificates.crt /etc/local-ca/ca.crt > /state/ca-bundle.crt
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      volumeMounts:
+        - name: cluster-local-ca
+          mountPath: /etc/local-ca
+          readOnly: true
+        - name: ca-bundle
+          mountPath: /state
+  volumes:
+    - name: cluster-local-ca
+      configMap:
+        name: cluster-local-ca
+    - name: ca-bundle
+      emptyDir: {}
+  volumeMounts:
+    - name: ca-bundle
+      mountPath: /state
+  adminAccount:
+    enabled: false
+  oidc:
+    enabled: true
+    issuerURL: https://dex.invalid
+    clientID: kargo
+    cliClientID: kargo-cli
+    additionalScopes: [groups]
+    usernameClaim: preferred_username
+    admins:
+      claims:
+        groups: [operators]
+    dex:
+      enabled: false
+      byo:
+        enabled: false
+  rollouts:
+    integrationEnabled: false
+  tls:
+    enabled: false
+    terminatedUpstream: true
+  ingress:
+    enabled: false
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: "1", memory: 1Gi}
+
+controller:
+  allowCredentialsOverHTTP: true
+  argocd:
+    integrationEnabled: true
+    namespace: argocd
+    watchArgocdNamespaceOnly: true
+  images:
+    cache:
+      cacheByTagPolicy: Require
+  rollouts:
+    integrationEnabled: false
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "2", memory: 1Gi}
+  serviceAccount:
+    clusterWideSecretReadingEnabled: false
+  env:
+    - name: SSL_CERT_FILE
+      value: /state/ca-bundle.crt
+  initContainers:
+    - name: ca-bundle
+      image: ghcr.io/akuity/kargo:v1.11.5@sha256:6368cd6bae66332abf9b026f61f4a7f34b268d7961721f3ea9624c5cfa54f157
+      command: [/bin/sh, -ec]
+      args:
+        - cat /etc/ssl/certs/ca-certificates.crt /etc/local-ca/ca.crt > /state/ca-bundle.crt
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      volumeMounts:
+        - name: cluster-local-ca
+          mountPath: /etc/local-ca
+          readOnly: true
+        - name: ca-bundle
+          mountPath: /state
+  volumes:
+    - name: cluster-local-ca
+      configMap:
+        name: cluster-local-ca
+    - name: ca-bundle
+      emptyDir: {}
+  volumeMounts:
+    - name: ca-bundle
+      mountPath: /state
+
+garbageCollector:
+  resources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits: {cpu: 250m, memory: 512Mi}
+
+# Warehouses poll registries; webhook receivers are not part of the automatic
+# pull-based promotion contract.
+externalWebhooksServer:
+  enabled: false
+
+managementController:
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+
+webhooksServer:
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: kubernetes-webhooks-server
+                app.kubernetes.io/instance: kargo
+                app.kubernetes.io/name: kargo
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  topologySpreadConstraints: []
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: "2", memory: 512Mi}
