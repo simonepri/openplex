@@ -1,0 +1,39 @@
+"""Define build rules and tests for the OpenTofu Gazelle extension generating Terraform component targets."""
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# TODO(simonepri): Extract and publish as a standalone open-source Gazelle extension (BCR/GitHub).
+
+package_sources()
+
+go_library(
+    name = "opentofu",
+    srcs = [
+        "doc.go",
+        "generate.go",
+        "lang.go",
+        "parser.go",
+        "topology.go",
+    ],
+    importpath = "openplex/bazel/gazelle/opentofu",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@gazelle//language",
+        "@gazelle//rule",
+        "@gazelle//v2/rule",
+    ],
+)
+
+go_test(
+    name = "opentofu_test",
+    srcs = [
+        "parser_test.go",
+        "topology_test.go",
+    ],
+    embed = [":opentofu"],
+    deps = [
+        "@gazelle//config",
+        "@gazelle//language",
+    ],
+)

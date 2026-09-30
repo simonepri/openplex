@@ -1,0 +1,85 @@
+"""Define targets for diff extraction and dependency analysis tooling."""
+
+# gazelle:exclude .
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package(default_visibility = ["//visibility:public"])
+
+package_sources()
+
+py_library(
+    name = "git_diff",
+    srcs = ["git_diff.py"],
+)
+
+py_test(
+    name = "git_diff_test",
+    size = "small",
+    srcs = ["git_diff_test.py"],
+    deps = [
+        ":git_diff",
+    ],
+)
+
+py_library(
+    name = "bazel_diff",
+    srcs = ["bazel_diff.py"],
+)
+
+py_test(
+    name = "bazel_diff_test",
+    size = "small",
+    srcs = ["bazel_diff_test.py"],
+    deps = [
+        ":bazel_diff",
+    ],
+)
+
+py_library(
+    name = "gate_diff",
+    srcs = ["gate_diff.py"],
+)
+
+py_test(
+    name = "gate_diff_test",
+    size = "small",
+    srcs = ["gate_diff_test.py"],
+    deps = [
+        ":gate_diff",
+    ],
+)
+
+py_library(
+    name = "cli_lib",
+    srcs = ["cli.py"],
+    deps = [
+        ":bazel_diff",
+        ":gate_diff",
+        ":git_diff",
+    ],
+)
+
+py_binary(
+    name = "cli",
+    srcs = ["cli.py"],
+    main = "cli.py",
+    deps = [
+        ":cli_lib",
+    ],
+)
+
+alias(
+    name = "diff",
+    actual = ":cli",
+)
+
+py_test(
+    name = "cli_test",
+    size = "small",
+    srcs = ["cli_test.py"],
+    deps = [
+        ":cli_lib",
+    ],
+)

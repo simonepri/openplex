@@ -1,0 +1,270 @@
+"""Define stable alias targets and wrapper binaries for multitool-managed development and linting tools."""
+
+load("@npm//:@sysid/mmdlint/package_json.bzl", mmdlint = "bin")
+load("@rules_python//python/entry_points:py_console_script_binary.bzl", "py_console_script_binary")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/gunzip:defs.bzl", "gunzip")
+
+alias(
+    name = "argocd",
+    actual = "@multitool//tools/argocd",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "committed",
+    actual = "@multitool//tools/committed",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "dotenv-linter",
+    actual = "@multitool//tools/dotenv-linter",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "pnpm",
+    actual = "@pnpm//:pnpm",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "shellcheck",
+    actual = "@multitool//tools/shellcheck",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "shfmt",
+    actual = "@multitool//tools/shfmt",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "buildifier",
+    actual = "@multitool//tools/buildifier",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "yamlfmt",
+    actual = "@multitool//tools/yamlfmt",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "actionlint",
+    actual = "@multitool//tools/actionlint",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "ruff",
+    actual = "@multitool//tools/ruff",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "gitleaks",
+    actual = "@multitool//tools/gitleaks",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "ty",
+    actual = "@multitool//tools/ty",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "uv",
+    actual = "@multitool//tools/uv",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "zizmor",
+    actual = "@multitool//tools/zizmor",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "opengrep",
+    actual = "@multitool//tools/opengrep",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "kubescape",
+    actual = "@multitool//tools/kubescape",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "kube-linter",
+    actual = "@multitool//tools/kube-linter",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "kubeconform",
+    actual = "@multitool//tools/kubeconform",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "rumdl",
+    actual = "@multitool//tools/rumdl",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "ifttt-lint",
+    actual = "@multitool//tools/ifttt-lint",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "rulesync",
+    actual = "@multitool//tools/rulesync",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "trivy",
+    actual = "@multitool//tools/trivy",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "jscpd",
+    actual = "@multitool//tools/jscpd",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "gocyclo",
+    actual = "@com_github_fzipp_gocyclo//cmd/gocyclo",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "oxfmt",
+    actual = "@multitool//tools/oxfmt",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "oxlint",
+    actual = "@multitool//tools/oxlint",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "chainsaw",
+    actual = "@multitool//tools/chainsaw",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "jq",
+    actual = "@multitool//tools/jq",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "osv-scanner",
+    actual = "@multitool//tools/osv-scanner",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "keep-sorted",
+    actual = "@multitool//tools/keep-sorted",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "tflint",
+    actual = "@tf_toolchains//:tflint",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "terraform",
+    actual = "@multitool//tools/terraform",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "tofu",
+    actual = "@multitool//tools/tofu",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "yq",
+    actual = "@multitool//tools/yq",
+    visibility = ["//visibility:public"],
+)
+
+py_console_script_binary(
+    name = "yamllint",
+    pkg = "@dev_python_deps//yamllint",
+    visibility = ["//visibility:public"],
+)
+
+py_console_script_binary(
+    name = "check-jsonschema",
+    pkg = "@dev_python_deps//check_jsonschema",
+    visibility = ["//visibility:public"],
+)
+
+# The one npm-backed tool: mmdlint parses Mermaid blocks with Mermaid's own
+# grammar, which has no standalone binary, so it resolves through the root npm
+# workspace rather than multitool.
+mmdlint.mmdlint_binary(
+    name = "mmdlint",
+    visibility = ["//visibility:public"],
+)
+
+# select() cannot nest, so each os/cpu pair gets its own config_setting.
+[
+    config_setting(
+        name = "taplo_%s" % suffix,
+        constraint_values = values,
+    )
+    for suffix, values in {
+        "macos_arm64": [
+            "@platforms//os:macos",
+            "@platforms//cpu:arm64",
+        ],
+        "macos_x86_64": [
+            "@platforms//os:macos",
+            "@platforms//cpu:x86_64",
+        ],
+        "linux_arm64": [
+            "@platforms//os:linux",
+            "@platforms//cpu:arm64",
+        ],
+        "linux_x86_64": [
+            "@platforms//os:linux",
+            "@platforms//cpu:x86_64",
+        ],
+    }.items()
+]
+
+gunzip(
+    name = "taplo",
+    src = select({
+        ":taplo_macos_arm64": "@taplo_macos_arm64//file",
+        ":taplo_macos_x86_64": "@taplo_macos_x86_64//file",
+        ":taplo_linux_arm64": "@taplo_linux_arm64//file",
+        ":taplo_linux_x86_64": "@taplo_linux_x86_64//file",
+    }),
+    out = "taplo_bin",
+    visibility = ["//visibility:public"],
+)
+
+package_sources()
