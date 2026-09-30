@@ -1,0 +1,62 @@
+# Defines the Kubernetes node PID-pressure alert reconciled into SigNoz.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: kubernetes-node-pid-pressure
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Kubernetes node PID pressure
+      alertType: METRIC_BASED_ALERT
+      labels: {severity: critical}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - metricName: k8s.node.condition
+                    spaceAggregation: max
+                    timeAggregation: max
+                filter:
+                  expression: "condition = 'PIDPressure'"
+                groupBy:
+                  - name: k8s.cluster.name
+                    fieldContext: resource
+                    fieldDataType: string
+                  - name: k8s.node.name
+                    fieldContext: resource
+                    fieldDataType: string
+                signal: metrics
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: all_the_times
+              op: above
+              target: 0
+      description: Kubelet reported PIDPressure continuously for five minutes; inspect process counts and runaway workloads on the named node.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 4h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

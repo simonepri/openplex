@@ -1,0 +1,41 @@
+# Defines the fleet errors and warnings saved view in SigNoz.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: SavedView
+metadata:
+  name: fleet-errors
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: saved-view
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    jsonSpec: |-
+      {
+        "name": "fleet-errors",
+        "source": "logs",
+        "schemaVersion": "v2",
+        "spec": {
+          "displayName": "Fleet Errors & Warnings",
+          "panelType": "list",
+          "requestType": "raw",
+          "queries": [
+            {
+              "type": "builder_query",
+              "spec": {
+                "name": "A",
+                "signal": "logs",
+                "filter": {
+                  "expression": "severity_text IN ('ERROR', 'WARN', 'FATAL')"
+                }
+              }
+            }
+          ]
+        }
+      }

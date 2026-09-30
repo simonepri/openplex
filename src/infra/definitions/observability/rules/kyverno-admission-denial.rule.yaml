@@ -1,0 +1,53 @@
+# Defines the Kyverno admission denial spike alert reconciled into SigNoz. Alerts when an elevated rate of workload submissions are rejected by admission policies.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: kyverno-admission-denial
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Kyverno admission denial spike detected
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: warning}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "(k8s_container_name = 'kyverno' OR k8s_namespace_name = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%' OR body LIKE '%fail (blocked)%')"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: at_least_once
+              op: above
+              target: 5
+      description: Kyverno admission controller rejected multiple workload submissions within five minutes; verify whether untrusted images or privileged manifests are being submitted.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 2h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

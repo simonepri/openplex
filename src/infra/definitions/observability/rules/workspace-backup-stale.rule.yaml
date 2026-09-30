@@ -1,0 +1,51 @@
+# Alerts when the newest Kopia artifact under an existing workspace prefix is more than 48 hours old, using the daily object-inventory rollup as evidence.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: workspace-backup-stale
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Workspace backup is stale
+      alertType: METRIC_BASED_ALERT
+      labels: {severity: critical}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: clickhouse_sql
+              spec:
+                name: A
+                query: >-
+                  SELECT toUnixTimestamp(now()) AS timestamp, toFloat64(dateDiff('second', max(max_last_modified), now())) AS value, cell, team, prefix FROM storage_stats.storage_prefix_daily FINAL WHERE storage_class = 'users' AND startsWith(prefix, concat('s3/', cell, '/users/', team, '/workspaces/')) GROUP BY cell, team, prefix
+                disabled: false
+                legend: "{{cell}} / {{team}} / {{prefix}}"
+          queryType: clickhouse_sql
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: all_the_times
+              op: above
+              target: 172800
+      description: An existing workspace prefix has no Kopia artifact modified within 48 hours.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 15m, frequency: 5m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 4h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1
