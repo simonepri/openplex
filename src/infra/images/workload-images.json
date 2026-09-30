@@ -1,0 +1,40 @@
+{
+  "images": [
+    {
+      "manifestRepository": "registry.invalid/workloads/batch-cron",
+      "package": "src/examples/batch_cron",
+      "repository": "src/examples/batch_cron",
+      "sourceName": "batch-cron",
+      "target": "//src/examples/batch_cron:publish"
+    },
+    {
+      "manifestRepository": "registry.invalid/workloads/ray-data",
+      "package": "src/examples/ray_data",
+      "repository": "src/examples/ray_data",
+      "sourceName": "ray-data",
+      "target": "//src/examples/ray_data:publish"
+    },
+    {
+      "manifestRepository": "registry.invalid/workloads/ray-serve",
+      "package": "src/examples/ray_serve",
+      "repository": "src/examples/ray_serve",
+      "sourceName": "ray-serve",
+      "target": "//src/examples/ray_serve:publish"
+    },
+    {
+      "manifestRepository": "registry.invalid/workloads/ray-train",
+      "package": "src/examples/ray_train",
+      "repository": "src/examples/ray_train",
+      "sourceName": "ray-train",
+      "target": "//src/examples/ray_train:publish"
+    },
+    {
+      "manifestRepository": "registry.invalid/workloads/svelte-web",
+      "package": "src/examples/svelte_web",
+      "repository": "src/examples/svelte_web",
+      "sourceName": "svelte-web",
+      "target": "//src/examples/svelte_web:publish"
+    }
+  ],
+  "version": 1
+}
