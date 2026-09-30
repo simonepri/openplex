@@ -1,0 +1,46 @@
+# Configures VerticalPodAutoscaler sizing for the SigNoz core StatefulSet and otel-collector Deployment. The collector updates requests in place without restart; core sizes upon pod creation.
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: signoz-otel-collector
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: signoz-otel-collector
+  updatePolicy:
+    updateMode: "InPlace"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: collector
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: signoz-core
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: signoz
+  updatePolicy:
+    updateMode: "Initial"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: signoz
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+        minAllowed:
+          cpu: 250m
+          memory: 512Mi

@@ -1,0 +1,278 @@
+# Configures base Helm values for SigNoz, applied once per ctrl cluster.
+
+fullnameOverride: signoz
+global:
+  cloud: other
+clickhouse:
+  enabled: false
+externalClickhouse:
+  host: signoz-clickhouse.signoz.svc.cluster.local
+  cluster: cluster
+  # LINT.IfChange(signoz-telemetry-database-contract)
+  database: signoz_metrics
+  traceDatabase: signoz_traces
+  logDatabase: signoz_logs
+  meterDatabase: signoz_meter
+  # LINT.ThenChange(//src/infra/argocd/components/clickhouse/kustomize/scripts/signoz-databases-schema.sql:signoz-telemetry-database-contract)
+  user: admin
+  password: ""
+  existingSecret: signoz-clickhouse
+  existingSecretPasswordKey: password
+  secure: false
+  verify: false
+  httpPort: 8123
+  tcpPort: 9000
+signoz:
+  serviceAccount:
+    create: false
+    name: signoz
+  # A first start on an empty PostgreSQL database runs the full metadata
+  # migration before the HTTP health endpoint exists. Keep readiness strict,
+  # but do not let the liveness probe kill that bounded initialization and
+  # leave the SQL migration lock behind.
+  livenessProbe:
+    failureThreshold: 30
+    initialDelaySeconds: 30
+    timeoutSeconds: 5
+  readinessProbe:
+    timeoutSeconds: 5
+  service:
+    type: ClusterIP
+  env:
+    # Community impersonation mode is intentionally paired with the external
+    # Dex gate at the public Envoy Gateway. SigNoz then has exactly one shared
+    # root identity. These three
+    # resolvers are mutually exclusive in SigNoz and must stay explicit.
+    # NOTE(simonepri): Once upstream PR https://github.com/SigNoz/signoz/pull/12379
+    # (trusted-header IdentN provider, issue #6197) merges, switch from impersonation
+    # mode to identn.trusted_header (forwarded from Envoy Gateway) to restore
+    # per-user identity and auditing.
+    SIGNOZ_IDENTN_APIKEY_ENABLED: "false"
+    SIGNOZ_IDENTN_IMPERSONATION_ENABLED: "true"
+    SIGNOZ_IDENTN_TOKENIZER_ENABLED: "false"
+    SIGNOZ_TOKENIZER_JWT_SECRET:
+      valueFrom:
+        secretKeyRef:
+          name: signoz-bootstrap
+          key: jwt-secret
+    SIGNOZ_USER_ROOT_EMAIL:
+      valueFrom:
+        secretKeyRef:
+          name: signoz-bootstrap
+          key: root-email
+    SIGNOZ_USER_ROOT_ENABLED: "true"
+    SIGNOZ_USER_ROOT_PASSWORD:
+      valueFrom:
+        secretKeyRef:
+          name: signoz-bootstrap
+          key: root-password
+    signoz_sqlstore_provider: postgres
+    signoz_sqlstore_postgres_dsn:
+      valueFrom:
+        secretKeyRef:
+          name: signoz-postgres-app
+          key: uri
+    signoz_telemetrystore_clickhouse_dsn: tcp://signoz-clickhouse.signoz.svc.cluster.local:9000/?username=signoz_query&password=$(CLICKHOUSE_PASSWORD)
+  image:
+    registry: docker.io
+    repository: signoz/signoz
+    tag: v0.144.0@sha256:8890bd16bae9c6819fe5f15a6c4737da65f2aea514af40b1b27ca02232caa7fc
+  priorityClassName: cluster-operators
+  annotations:
+    vpa.autoscaling.k8s.io/enabled: "custom"
+  podAnnotations:
+    automount-service-account-token: "true"
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      SigNoz loads root user and database credentials via environment variables.
+  podSecurityContext:
+    fsGroup: 10001
+    fsGroupChangePolicy: OnRootMismatch
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: {type: RuntimeDefault}
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "1", memory: 2Gi}
+otelCollector:
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: otel-collector
+                app.kubernetes.io/instance: signoz
+                app.kubernetes.io/name: signoz
+            topologyKey: kubernetes.io/hostname
+  autoscaling: {enabled: false}
+  replicaCount: 2
+  topologySpreadConstraints: []
+  additionalEnvs:
+    # 75% of the 4 GiB cgroup limit leaves 1 GiB for non-Go memory and
+    # short-lived exporter/batch allocations.
+    GOMEMLIMIT: 3072MiB
+    K8S_CLUSTER_NAME: local-cluster
+  podAnnotations:
+    automount-service-account-token: "true"
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      SigNoz Otel Collector requires ClickHouse password via environment variable.
+  podSecurityContext:
+    fsGroup: 10001
+    fsGroupChangePolicy: OnRootMismatch
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    readOnlyRootFilesystem: true
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: {type: RuntimeDefault}
+  extraVolumes:
+    # keep-sorted start
+    - name: tmp
+      emptyDir: {sizeLimit: 256Mi}
+    - name: var-tmp
+      emptyDir: {sizeLimit: 256Mi}
+      # keep-sorted end
+  extraVolumeMounts:
+    # keep-sorted start
+    - {name: tmp, mountPath: /tmp}
+    - {name: var-tmp, mountPath: /var/tmp,}
+    # keep-sorted end
+  image:
+    registry: docker.io
+    repository: signoz/signoz-otel-collector
+    tag: v0.144.12@sha256:deb566a7a3c0ba544ee58ccc92ee1f0e6da827bc40383e52f3c824705e100a3d
+  service:
+    type: ClusterIP
+  priorityClassName: cluster-operators
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {cpu: "1", memory: 4Gi}
+  config:
+    exporters:
+      clickhouselogsexporter:
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1024
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 10s
+          max_elapsed_time: 300s
+      clickhousetraces:
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1024
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 10s
+          max_elapsed_time: 300s
+      metadataexporter:
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1024
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 10s
+          max_elapsed_time: 300s
+      signozclickhousemeter:
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1024
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 10s
+          max_elapsed_time: 300s
+      signozclickhousemetrics:
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1024
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 10s
+          max_elapsed_time: 300s
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 15
+      batch:
+        send_batch_size: 8192
+        send_batch_max_size: 16384
+        timeout: 5s
+      transform/metric_cluster_name:
+        error_mode: ignore
+        metric_statements:
+          - context: datapoint
+            statements:
+              - >-
+                set(resource.attributes["k8s.cluster.name"], datapoint.attributes["cluster"]) where datapoint.attributes["cluster"] != nil
+      resource/cluster_name_fallback:
+        attributes:
+          - action: insert
+            key: k8s.cluster.name
+            value: ${env:K8S_CLUSTER_NAME}
+    service:
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888
+      pipelines:
+        traces:
+          processors:
+            - memory_limiter
+            - resource/cluster_name_fallback
+            - signozspanmetrics/delta
+            - batch
+        metrics:
+          processors:
+            - memory_limiter
+            - transform/metric_cluster_name
+            - resource/cluster_name_fallback
+            - batch
+        logs:
+          processors: [memory_limiter, resource/cluster_name_fallback, batch]
+        metrics/meter:
+          processors: [memory_limiter, batch/meter]
+postgresql:
+  # The shared CNPG Application owns PostgreSQL; this disables the chart's
+  # embedded dependency. SigNoz's DSN is supplied from the CNPG app Secret.
+  enabled: false
+telemetryStoreMigrator:
+  annotations:
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Telemetry store migrator Job requires ClickHouse password via environment variable.
+  enableReplication: true
+  # ClickHouse, Keeper, and their schema hooks converge independently before
+  # the real migrator may create and check telemetry schema state.
+  timeout: 45m
+  serviceAccount:
+    create: false
+    name: signoz-telemetrystore-migrator
