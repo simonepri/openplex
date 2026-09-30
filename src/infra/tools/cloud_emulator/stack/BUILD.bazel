@@ -1,0 +1,13 @@
+"""Packages local cloud emulator compose stack and service configurations."""
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["compose.yaml"])
+
+filegroup(
+    name = "stack",
+    srcs = [
+        "compose.yaml",
+        "//src/infra/tools/cloud_emulator/stack/headscale:headscale_config",
+    ],
+)
