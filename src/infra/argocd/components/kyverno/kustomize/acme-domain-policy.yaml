@@ -1,0 +1,95 @@
+# Denies public ACME certificate requests for internal hostnames to protect Certificate Transparency privacy.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: acme-domain-protection
+  annotations:
+    # keep-sorted start
+    policies.kyverno.io/category: Certificate Management
+    policies.kyverno.io/description: Internal hostnames must not be requested from public ACME to protect Certificate Transparency privacy. Use cluster-local-ca instead.
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Certificate, CertificateRequest
+    policies.kyverno.io/title: Acme Domain Protection
+    # keep-sorted end
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: acme-domain-protection
+spec:
+  admission: true
+  background: false
+  validationFailureAction: Enforce
+  webhookConfiguration:
+    failurePolicy: Fail
+    timeoutSeconds: 5
+  rules:
+    - name: deny-public-acme-internal-domains-dns-names
+      match:
+        any:
+          - resources:
+              kinds:
+                # keep-sorted start
+                - cert-manager.io/v1/Certificate
+                - cert-manager.io/v1/CertificateRequest
+                # keep-sorted end
+              operations:
+                # keep-sorted start
+                - CREATE
+                - UPDATE
+                # keep-sorted end
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                # keep-sorted start
+                - envoy-gateway-system
+                # keep-sorted end
+      validate:
+        message: >-
+          Internal hostnames must not be requested from public ACME to protect Certificate Transparency privacy. Use cluster-local-ca instead.
+        deny:
+          conditions:
+            all:
+              - key: '{{ request.object.spec.issuerRef.name || `""` }}'
+                operator: Equals
+                value: public-acme
+              - key: '{{ request.object.spec.dnsNames || `[]` }}'
+                operator: AnyIn
+                value: &internalDomainPatterns
+                  # keep-sorted start
+                  - '*ctrl.*'
+                  - '*local.internal'
+                  # keep-sorted end
+    - name: deny-public-acme-internal-domains-common-name
+      match:
+        any:
+          - resources:
+              kinds:
+                # keep-sorted start
+                - cert-manager.io/v1/Certificate
+                - cert-manager.io/v1/CertificateRequest
+                # keep-sorted end
+              operations:
+                # keep-sorted start
+                - CREATE
+                - UPDATE
+                # keep-sorted end
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                # keep-sorted start
+                - envoy-gateway-system
+                # keep-sorted end
+      validate:
+        message: >-
+          Internal hostnames must not be requested from public ACME to protect Certificate Transparency privacy. Use cluster-local-ca instead.
+        deny:
+          conditions:
+            all:
+              - key: '{{ request.object.spec.issuerRef.name || `""` }}'
+                operator: Equals
+                value: public-acme
+              - key: '{{ request.object.spec.commonName || `""` }}'
+                operator: In
+                value: *internalDomainPatterns

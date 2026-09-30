@@ -1,0 +1,773 @@
+# Enforces fleet-wide admission policies for cost attribution labels, trusted image registries, and pod security.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: cost-attribution-labels
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  background: false
+  webhookConfiguration:
+    failurePolicy: Fail
+    timeoutSeconds: 5
+  rules:
+    - name: assign-cluster-managed-namespace-cost-labels
+      match:
+        any:
+          - resources:
+              kinds: [Namespace]
+              operations: [CREATE, UPDATE]
+      exclude:
+        any:
+          - resources:
+              names: &non-cluster-managed-cost-namespaces
+                - examples
+                - kube-node-lease
+                - kube-public
+                - kube-system
+                - local-path-storage
+          - resources:
+              # LINT.IfChange(team-lane-identity-label)
+              selector: &team-namespace-selector
+                matchExpressions:
+                  - key: app.kubernetes.io/part-of
+                    operator: In
+                    values: [team-lane]
+                    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/team-pod-security-policy.yaml:team-lane-identity-label,//src/infra/argocd/components/team_namespace/helm/templates/_helpers.tpl:team-lane-identity-label)
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              cost-center: shared-infrastructure
+              environment: production
+    - name: require-cluster-managed-namespace-cost-labels
+      match:
+        any:
+          - resources:
+              kinds: [Namespace]
+              operations: [CREATE, UPDATE]
+      exclude:
+        any:
+          - resources:
+              names: *non-cluster-managed-cost-namespaces
+          - resources:
+              selector: *team-namespace-selector
+      validate:
+        allowExistingViolations: false
+        failureAction: Enforce
+        message: Cluster-managed Namespaces must retain their shared billing dimensions.
+        pattern:
+          metadata:
+            labels:
+              cost-center: shared-infrastructure
+              environment: production
+    - name: require-team-namespace-cost-labels
+      match:
+        any:
+          - resources:
+              kinds: [Namespace]
+              selector: *team-namespace-selector
+              operations: [CREATE, UPDATE]
+      validate:
+        allowExistingViolations: false
+        failureAction: Enforce
+        message: Team Namespaces must retain their team-derived billing dimensions.
+        deny:
+          conditions:
+            any:
+              - key: >-
+                  {{ request.object.metadata.labels."cost-center" || '' }}
+                operator: NotEquals
+                value: '{{ request.object.metadata.labels.team }}'
+              - key: >-
+                  {{ request.object.metadata.labels.environment || '' }}
+                operator: NotEquals
+                value: production
+              - key: >-
+                  {{ request.object.metadata.labels.team || '' }}
+                operator: Equals
+                value: ''
+    - name: propagate-namespace-cost-labels-to-pods
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE, UPDATE]
+      exclude: &cost-pod-exclusions
+        any:
+          - resources:
+              namespaces: [argocd, kube-system, kyverno-system, local-path-storage]
+          - resources:
+              namespaces: [dragonfly-system]
+              selector:
+                matchLabels:
+                  app: dragonfly
+                  component: client
+                  release: dragonfly
+      context: &namespace-cost-context
+        - name: namespaceCostCenter
+          apiCall:
+            method: GET
+            urlPath: /api/v1/namespaces/{{ request.namespace }}
+            jmesPath: metadata.labels."cost-center" || 'shared-infrastructure'
+        - name: namespaceEnvironment
+          apiCall:
+            method: GET
+            urlPath: /api/v1/namespaces/{{ request.namespace }}
+            jmesPath: metadata.labels.environment || 'production'
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              cost-center: '{{ namespaceCostCenter }}'
+              environment: '{{ namespaceEnvironment }}'
+    - name: propagate-team-label-to-pods
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector: *team-namespace-selector
+              operations: [CREATE, UPDATE]
+      context: &namespace-team-context
+        - name: namespaceTeam
+          apiCall:
+            method: GET
+            urlPath: /api/v1/namespaces/{{ request.namespace }}
+            jmesPath: metadata.labels.team
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              team: '{{ namespaceTeam }}'
+    - name: require-namespace-cost-labels-on-pods
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE, UPDATE]
+      exclude: *cost-pod-exclusions
+      context: *namespace-cost-context
+      validate:
+        allowExistingViolations: false
+        failureAction: Enforce
+        message: Pod billing dimensions must match the canonical Namespace values.
+        deny:
+          conditions:
+            any:
+              - key: >-
+                  {{ request.object.metadata.labels."cost-center" || '' }}
+                operator: NotEquals
+                value: '{{ namespaceCostCenter }}'
+              - key: >-
+                  {{ request.object.metadata.labels.environment || '' }}
+                operator: NotEquals
+                value: '{{ namespaceEnvironment }}'
+    - name: require-team-label-on-pods
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector: *team-namespace-selector
+              operations: [CREATE, UPDATE]
+      context: *namespace-team-context
+      validate:
+        allowExistingViolations: false
+        failureAction: Enforce
+        message: Team Pod team must match its team-managed Namespace.
+        deny:
+          conditions:
+            any:
+              - key: >-
+                  {{ request.object.metadata.labels.team || '' }}
+                operator: NotEquals
+                value: '{{ namespaceTeam }}'
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: production-image-digest-pinning
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: require-digests-for-workload-images
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude: &system-image-policy-exclusions
+        any:
+          - resources:
+              namespaces: [argocd, kube-system, kyverno-system, local-path-storage]
+      validate:
+        message: Workload images must be pinned by sha256 digest.
+        foreach:
+          - list: request.object.spec.containers
+            deny:
+              conditions:
+                any:
+                  - key: '{{ regex_match(''^.+@sha256:[0-9a-f]{64}$'', element.image) }}'
+                    operator: Equals
+                    value: false
+          - list: request.object.spec.initContainers || `[]`
+            deny:
+              conditions:
+                any:
+                  - key: '{{ regex_match(''^.+@sha256:[0-9a-f]{64}$'', element.image) }}'
+                    operator: Equals
+                    value: false
+          - list: request.object.spec.ephemeralContainers || `[]`
+            deny:
+              conditions:
+                any:
+                  - key: '{{ regex_match(''^.+@sha256:[0-9a-f]{64}$'', element.image) }}'
+                    operator: Equals
+                    value: false
+    - name: require-trusted-registries-for-workload-images
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude: *system-image-policy-exclusions
+      validate:
+        message: Workload images must come from an approved registry.
+        deny:
+          conditions:
+            any:
+              - key: '{{ images.[containers, initContainers, ephemeralContainers][].*.registry[] }}'
+                operator: AnyNotIn
+                value:
+                  # keep-sorted start
+                  - 602401143452.dkr.ecr.us-west-2.amazonaws.com
+                  - docker.io
+                  - gcr.io
+                  - ghcr.io
+                  - nvcr.io
+                  - public.ecr.aws
+                  - quay.io
+                  - reg.kyverno.io
+                  - registry.k8s.io
+                  # keep-sorted end
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: production-pod-security
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: block-privileged-pods
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces: [argocd, kube-system, kyverno-system, local-path-storage]
+          # LINT.IfChange(parca-agent-privilege-exception)
+          - resources:
+              namespaces: [parca]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: profiler
+                  app.kubernetes.io/instance: parca-agent
+                  app.kubernetes.io/name: parca-agent
+                  # LINT.ThenChange(//src/infra/argocd/components/parca_agent/kustomize/agent/daemonset.yaml:parca-agent-privilege-exception)
+          - resources:
+              namespaces: [dragonfly-system]
+              selector: &dragonfly-node-client-privilege-selector
+                matchLabels:
+                  app: dragonfly
+                  component: client
+                  release: dragonfly
+          - resources:
+              namespaces: [csi-rclone-system]
+              selector:
+                matchLabels:
+                  app: rclone-csi-node
+                  app.kubernetes.io/instance: rclone-csi
+                  app.kubernetes.io/name: csi-driver-rclone
+          - resources:
+              namespaces: [openebs]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: rawfile-csi-node
+                  app.kubernetes.io/instance: rawfile-localpv
+                  app.kubernetes.io/name: rawfile-localpv
+          - resources:
+              namespaces: [tailscale-system]
+              selector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - tailscale-subnet-router
+                      - tailscale-egress-proxy
+                      - tailscale-kubernetes-api-egress
+          - resources:
+              namespaces: [node-problem-detector]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: health-monitor
+                  app.kubernetes.io/instance: node-problem-detector
+                  app.kubernetes.io/name: node-problem-detector
+      validate:
+        message: Privileged workloads require a dedicated, reviewed exception policy.
+        foreach:
+          - list: request.object.spec.containers
+            deny:
+              conditions:
+                any:
+                  - key: '{{ element.securityContext.privileged || `false` }}'
+                    operator: Equals
+                    value: true
+          - list: request.object.spec.initContainers || `[]`
+            deny:
+              conditions:
+                any:
+                  - key: '{{ element.securityContext.privileged || `false` }}'
+                    operator: Equals
+                    value: true
+          - list: request.object.spec.ephemeralContainers || `[]`
+            deny:
+              conditions:
+                any:
+                  - key: '{{ element.securityContext.privileged || `false` }}'
+                    operator: Equals
+                    value: true
+          - list: '[request.object.spec]'
+            deny:
+              conditions:
+                any:
+                  - key: '{{ element.hostNetwork || `false` }}'
+                    operator: Equals
+                    value: true
+                  - key: '{{ element.hostPID || `false` }}'
+                    operator: Equals
+                    value: true
+                  - key: '{{ element.hostIPC || `false` }}'
+                    operator: Equals
+                    value: true
+    - name: require-reviewed-dragonfly-node-client-security-profile
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [dragonfly-system]
+              operations: [CREATE, UPDATE]
+              selector: *dragonfly-node-client-privilege-selector
+      validate:
+        message: Dragonfly's node-local dfdaemon must retain its reviewed runtime profile.
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.serviceAccountName || 'default' }}"
+                operator: NotEquals
+                value: default
+              - key: '{{ request.object.spec.hostNetwork || `false` }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ request.object.spec.hostPID || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ request.object.spec.hostIPC || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ length(request.object.spec.containers) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ request.object.spec.containers[0].name }}'
+                operator: NotEquals
+                value: client
+              - key: '{{ request.object.spec.containers[0].image }}'
+                operator: AnyNotIn
+                value:
+                  - >-
+                    localhost:15100/000000000000/us-east-1/dragonfly-client@sha256:4735fb59bea73e194974ca2fbc302aeffddbbbbe98003b1ecf08e8312a5f2a46
+                  - >-
+                    docker.io/dragonflyoss/client@sha256:4735fb59bea73e194974ca2fbc302aeffddbbbbe98003b1ecf08e8312a5f2a46
+              - key: '{{ request.object.spec.containers[0].imagePullPolicy }}'
+                operator: NotEquals
+                value: IfNotPresent
+              - key: '{{ length(request.object.spec.containers[0].args) }}'
+                operator: NotEquals
+                value: 2
+              - key: '{{ request.object.spec.containers[0].args[0] }}'
+                operator: NotEquals
+                value: --log-level=info
+              - key: '{{ request.object.spec.containers[0].args[1] }}'
+                operator: NotEquals
+                value: --console
+              - key: '{{ length(request.object.spec.containers[0].command || `[]`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ length(request.object.spec.containers[0].lifecycle || `{}`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ length(request.object.spec.ephemeralContainers || `[]`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ request.object.spec.containers[0].securityContext.privileged || `false` }}'
+                operator: NotEquals
+                value: false
+              - key: '{{ length(request.object.spec.containers[0].securityContext.capabilities.add || `[]`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ length(request.object.spec.initContainers) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ request.object.spec.initContainers[0].name }}'
+                operator: NotEquals
+                value: wait-for-scheduler
+              - key: '{{ request.object.spec.initContainers[0].image }}'
+                operator: NotEquals
+                value: >-
+                  docker.io/busybox@sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0
+              - key: '{{ request.object.spec.initContainers[0].imagePullPolicy }}'
+                operator: NotEquals
+                value: IfNotPresent
+              - key: '{{ length(request.object.spec.initContainers[0].command || `[]`) }}'
+                operator: NotEquals
+                value: 3
+              - key: '{{ request.object.spec.initContainers[0].command[0] }}'
+                operator: NotEquals
+                value: sh
+              - key: '{{ request.object.spec.initContainers[0].command[1] }}'
+                operator: NotEquals
+                value: -c
+              - key: '{{ request.object.spec.initContainers[0].command[2] }}'
+                operator: NotEquals
+                value: >-
+                  until nslookup dragonfly-scheduler.dragonfly-system.svc.cluster.local && nc -vz dragonfly-scheduler.dragonfly-system.svc.cluster.local 8002; do echo waiting for scheduler; sleep 2; done;
+              - key: '{{ length(request.object.spec.initContainers[0].args || `[]`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ request.object.spec.initContainers[0].securityContext.privileged || `false` }}'
+                operator: NotEquals
+                value: false
+              - key: '{{ length(request.object.spec.initContainers[0].securityContext.capabilities.add || `[]`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ length(request.object.spec.initContainers[0].volumeMounts || `[]`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ length(request.object.spec.initContainers[?securityContext.privileged == `true`]) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ length(request.object.spec.containers[?securityContext.privileged == `true`]) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ length(request.object.spec.containers[0].livenessProbe.exec.command || `[]`) }}'
+                operator: NotEquals
+                value: 4
+              - key: '{{ request.object.spec.containers[0].livenessProbe.exec.command[0] }}'
+                operator: NotEquals
+                value: /bin/grpc_health_probe
+              - key: '{{ request.object.spec.containers[0].livenessProbe.exec.command[1] }}'
+                operator: NotEquals
+                value: -addr=unix:///var/run/dragonfly/dfdaemon.sock
+              - key: '{{ request.object.spec.containers[0].livenessProbe.exec.command[2] }}'
+                operator: NotEquals
+                value: -connect-timeout=3s
+              - key: '{{ request.object.spec.containers[0].livenessProbe.exec.command[3] }}'
+                operator: NotEquals
+                value: -rpc-timeout=3s
+              - key: '{{ length(request.object.spec.containers[0].readinessProbe.exec.command || `[]`) }}'
+                operator: NotEquals
+                value: 4
+              - key: '{{ request.object.spec.containers[0].readinessProbe.exec.command[0] }}'
+                operator: NotEquals
+                value: /bin/grpc_health_probe
+              - key: '{{ request.object.spec.containers[0].readinessProbe.exec.command[1] }}'
+                operator: NotEquals
+                value: -addr=unix:///var/run/dragonfly/dfdaemon.sock
+              - key: '{{ request.object.spec.containers[0].readinessProbe.exec.command[2] }}'
+                operator: NotEquals
+                value: -connect-timeout=3s
+              - key: '{{ request.object.spec.containers[0].readinessProbe.exec.command[3] }}'
+                operator: NotEquals
+                value: -rpc-timeout=3s
+              - key: '{{ length(request.object.spec.containers[0].startupProbe || `{}`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ length(request.object.spec.volumes[?hostPath]) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ length(request.object.spec.volumes) }}'
+                operator: NotEquals
+                value: 5
+              - key: '{{ length(request.object.spec.volumes[?secret]) }}'
+                operator: NotEquals
+                value: 1
+              - key: "{{ request.object.spec.volumes[?name == 'socket-dir'].hostPath.path | [0] }}"
+                operator: NotEquals
+                value: /var/run/dragonfly
+              - key: "{{ request.object.spec.volumes[?name == 'socket-dir'].hostPath.type | [0] }}"
+                operator: NotEquals
+                value: DirectoryOrCreate
+              - key: "{{ request.object.spec.volumes[?name == 'config'].configMap.name | [0] }}"
+                operator: NotEquals
+                value: dragonfly-client
+              - key: "{{ request.object.spec.volumes[?name == 'storage'].emptyDir | [0] }}"
+                operator: NotEquals
+                value: {}
+              - key: "{{ request.object.spec.volumes[?name == 'logs'].emptyDir | [0] }}"
+                operator: NotEquals
+                value: {}
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/var/run/dragonfly') }}
+                operator: Equals
+                value: false
+              - key: '{{ length(request.object.spec.containers[0].volumeMounts) }}'
+                operator: NotEquals
+                value: 5
+              - key: '{{ request.object.spec.containers[0].volumeMounts[0].name }}'
+                operator: NotEquals
+                value: config
+              - key: '{{ request.object.spec.containers[0].volumeMounts[0].mountPath }}'
+                operator: NotEquals
+                value: /etc/dragonfly
+              - key: '{{ request.object.spec.containers[0].volumeMounts[1].name }}'
+                operator: NotEquals
+                value: socket-dir
+              - key: '{{ request.object.spec.containers[0].volumeMounts[1].mountPath }}'
+                operator: NotEquals
+                value: /var/run/dragonfly
+              - key: '{{ request.object.spec.containers[0].volumeMounts[2].name }}'
+                operator: NotEquals
+                value: storage
+              - key: '{{ request.object.spec.containers[0].volumeMounts[2].mountPath }}'
+                operator: NotEquals
+                value: /var/lib/dragonfly/
+              - key: '{{ request.object.spec.containers[0].volumeMounts[3].name }}'
+                operator: NotEquals
+                value: logs
+              - key: '{{ request.object.spec.containers[0].volumeMounts[3].mountPath }}'
+                operator: NotEquals
+                value: /var/log/dragonfly/dfdaemon/
+              - key: '{{ request.object.spec.containers[0].volumeMounts[4].name }}'
+                operator: NotEquals
+                value: mtls
+              - key: '{{ request.object.spec.containers[0].volumeMounts[4].mountPath }}'
+                operator: NotEquals
+                value: /etc/dragonfly-mtls
+              - key: '{{ request.object.spec.containers[0].volumeMounts[4].readOnly || `false` }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ length(request.object.spec.containers[0].volumeMounts[?readOnly == `true`]) }}'
+                operator: NotEquals
+                value: 1
+              - key: "{{ request.object.spec.volumes[?name == 'mtls'].secret.secretName | [0] }}"
+                operator: NotEquals
+                value: dragonfly-grpc-mtls
+    - name: require-reviewed-parca-agent-security-profile
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [parca]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: profiler
+                  app.kubernetes.io/instance: parca-agent
+                  app.kubernetes.io/name: parca-agent
+      validate:
+        message: Parca Agent's eBPF exception must match its reviewed runtime identity and security profile.
+        deny:
+          conditions:
+            any:
+              - key: '{{ request.object.spec.serviceAccountName }}'
+                operator: NotEquals
+                value: parca-agent
+              - key: '{{ length(request.object.spec.containers) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ request.object.spec.hostPID }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ request.object.spec.hostNetwork || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ request.object.spec.hostIPC || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ request.object.spec.containers[0].name }}'
+                operator: NotEquals
+                value: parca-agent
+              - key: "{{ regex_match('^ghcr[.]io/parca-dev/parca-agent:[^@]+@sha256:[0-9a-f]{64}$', request.object.spec.containers[0].image) }}"
+                operator: Equals
+                value: false
+              - key: '{{ request.object.spec.containers[0].securityContext.privileged }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ request.object.spec.containers[0].securityContext.runAsUser }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ request.object.spec.containers[0].securityContext.allowPrivilegeEscalation }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ request.object.spec.containers[0].securityContext.readOnlyRootFilesystem }}'
+                operator: NotEquals
+                value: true
+              - key: >-
+                  {{ contains(request.object.spec.containers[0].securityContext.capabilities.add || `[]`, 'SYS_ADMIN') }}
+                operator: Equals
+                value: false
+              - key: '{{ length(request.object.spec.volumes[?hostPath]) }}'
+                operator: NotEquals
+                value: 6
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/run') }}
+                operator: Equals
+                value: false
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/boot') }}
+                operator: Equals
+                value: false
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/lib/modules') }}
+                operator: Equals
+                value: false
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/sys/kernel/debug') }}
+                operator: Equals
+                value: false
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/sys/fs/cgroup') }}
+                operator: Equals
+                value: false
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/sys/fs/bpf') }}
+                operator: Equals
+                value: false
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: runtime-ownership
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [services]
+      - apiGroups: [apps]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [daemonsets, deployments, statefulsets]
+      - apiGroups: [batch]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [cronjobs]
+      - apiGroups: [ray.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [rayclusters, rayjobs]
+  validations:
+    - expression: >-
+        size(object.metadata.name) <= 63 && object.metadata.name.matches('^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$')
+      message: Runtime resource names must satisfy the Kubernetes naming requirements.
+    - expression: >-
+        (has(object.metadata.labels) && 'app.kubernetes.io/managed-by' in object.metadata.labels && object.metadata.labels['app.kubernetes.io/managed-by'] != '') || (has(object.metadata.annotations) && 'argocd.argoproj.io/tracking-id' in object.metadata.annotations && object.metadata.annotations['argocd.argoproj.io/tracking-id'] != '')
+      message: Runtime resources require an ownership marker.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: runtime-ownership
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: runtime-ownership
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        app.kubernetes.io/part-of: cluster-runtime
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - tailscale-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backup-ownership-policy
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backup-ownership-policy
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: backup-ownership-policy
+subjects:
+  - kind: ServiceAccount
+    name: kyverno-background-controller
+    namespace: kyverno-system
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pvc-backup-ownership
+  labels:
+    app.kubernetes.io/name: pvc-backup-ownership
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  failurePolicy: Ignore
+  validationFailureAction: Audit
+  rules:
+    - name: exclude-barman-cnpg-pvcs
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [PersistentVolumeClaim]
+              selector:
+                matchExpressions:
+                  - key: cnpg.io/cluster
+                    operator: Exists
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels: &barmanExclusion
+              velero.io/exclude-from-backup: "true"
+    - name: exclude-clickhouse-pvcs
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [PersistentVolumeClaim]
+              selector:
+                matchExpressions:
+                  - key: clickhouse.altinity.com/chi
+                    operator: Exists
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels: &clickhouseExclusion
+              velero.io/exclude-from-backup: "true"

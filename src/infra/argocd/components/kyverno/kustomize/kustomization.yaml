@@ -1,0 +1,29 @@
+# Kustomize entrypoint for kyverno namespace and cluster policies.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - acme-domain-policy.yaml
+  - dev-secrets-policy.yaml
+  - ecr-pull-policy.yaml
+  - env-secrets-policy.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - pod-cleanup-policy.yaml
+  - policies.yaml
+  - service-account-token-policy.yaml
+  - team-ephemeral-container-policy.yaml
+  - team-pod-security-policy.yaml
+  - vpa-rbac.yaml
+  - workload-run-identity-policy.yaml
+  - workload-vpa-policy.yaml
+  # keep-sorted end
+
+patches:
+  - path: local-registry-policy.yaml
+    target:
+      group: kyverno.io
+      kind: ClusterPolicy
+      name: production-image-digest-pinning
+      version: v1

@@ -1,0 +1,214 @@
+# Proves Kyverno service account token policy requires explicit automount configuration on pods or service accounts to defend workload credential isolation.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: service-account-token-hardening
+  labels:
+    cadence: commit
+    capability: security
+    mutates: scratch
+spec:
+  namespace: conformance-workloads
+  concurrent: false
+  timeouts:
+    apply: 30s
+    assert: 30s
+    cleanup: 30s
+    exec: 30s
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                kubectl apply --filename=- <<'EOF'
+                apiVersion: v1
+                kind: ServiceAccount
+                metadata:
+                  name: token-conformance-sa-false
+                  namespace: conformance-workloads
+                  labels:
+                    app.kubernetes.io/managed-by: chainsaw
+                automountServiceAccountToken: false
+                ---
+                apiVersion: v1
+                kind: ServiceAccount
+                metadata:
+                  name: token-conformance-sa-unset
+                  namespace: conformance-workloads
+                  labels:
+                    app.kubernetes.io/managed-by: chainsaw
+                ---
+                apiVersion: v1
+                kind: ServiceAccount
+                metadata:
+                  name: token-conformance-sa-true
+                  namespace: conformance-workloads
+                  labels:
+                    app.kubernetes.io/managed-by: chainsaw
+                automountServiceAccountToken: true
+                EOF
+            check:
+              ($error == null): true
+        # 1. ServiceAccount automountServiceAccountToken: false, Pod unset: admitted
+        - command:
+            entrypoint: sh
+            env:
+              - name: PAUSE_IMAGE
+                value: ($values.pauseImage || 'registry.k8s.io/pause:3.10.2@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4')
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --namespace=conformance-workloads --filename=- <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: token-probe-sa-false-pod-unset
+                  namespace: conformance-workloads
+                  labels:
+                    app.kubernetes.io/managed-by: chainsaw
+                spec:
+                  serviceAccountName: token-conformance-sa-false
+                  restartPolicy: Never
+                  containers:
+                    - name: probe
+                      image: "${PAUSE_IMAGE}"
+                EOF
+            check:
+              ($error == null): true
+        # 2. ServiceAccount unset, Pod unset: denied
+        - command:
+            entrypoint: sh
+            env:
+              - name: PAUSE_IMAGE
+                value: ($values.pauseImage || 'registry.k8s.io/pause:3.10.2@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4')
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --namespace=conformance-workloads --filename=- <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: token-probe-sa-unset-pod-unset
+                  namespace: conformance-workloads
+                  labels:
+                    app.kubernetes.io/managed-by: chainsaw
+                spec:
+                  serviceAccountName: token-conformance-sa-unset
+                  restartPolicy: Never
+                  containers:
+                    - name: probe
+                      image: "${PAUSE_IMAGE}"
+                EOF
+            check:
+              ($error != null): true
+              (contains($stderr, 'service-account-token-hardening')): true
+              (contains($stderr, 'require-automount-service-account-token-false')): true
+        # 3. ServiceAccount automountServiceAccountToken: true, Pod unset: admitted
+        - command:
+            entrypoint: sh
+            env:
+              - name: PAUSE_IMAGE
+                value: ($values.pauseImage || 'registry.k8s.io/pause:3.10.2@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4')
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --namespace=conformance-workloads --filename=- <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: token-probe-sa-true-pod-unset
+                  namespace: conformance-workloads
+                  labels:
+                    app.kubernetes.io/managed-by: chainsaw
+                spec:
+                  serviceAccountName: token-conformance-sa-true
+                  restartPolicy: Never
+                  containers:
+                    - name: probe
+                      image: "${PAUSE_IMAGE}"
+                EOF
+            check:
+              ($error == null): true
+        # 4. Pod automountServiceAccountToken: false: admitted
+        - command:
+            entrypoint: sh
+            env:
+              - name: PAUSE_IMAGE
+                value: ($values.pauseImage || 'registry.k8s.io/pause:3.10.2@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4')
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --namespace=conformance-workloads --filename=- <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: token-probe-pod-false
+                  namespace: conformance-workloads
+                  labels:
+                    app.kubernetes.io/managed-by: chainsaw
+                spec:
+                  serviceAccountName: token-conformance-sa-unset
+                  automountServiceAccountToken: false
+                  restartPolicy: Never
+                  containers:
+                    - name: probe
+                      image: "${PAUSE_IMAGE}"
+                EOF
+            check:
+              ($error == null): true
+        # 5. Pod with opt-in annotation (automount-service-account-token: "true"): admitted
+        - command:
+            entrypoint: sh
+            env:
+              - name: PAUSE_IMAGE
+                value: ($values.pauseImage || 'registry.k8s.io/pause:3.10.2@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4')
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --namespace=conformance-workloads --filename=- <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: token-probe-pod-opt-in-annotation
+                  namespace: conformance-workloads
+                  annotations:
+                    automount-service-account-token: "true"
+                  labels:
+                    app.kubernetes.io/managed-by: chainsaw
+                spec:
+                  serviceAccountName: token-conformance-sa-unset
+                  restartPolicy: Never
+                  containers:
+                    - name: probe
+                      image: "${PAUSE_IMAGE}"
+                EOF
+            check:
+              ($error == null): true
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - serviceaccount
+              - token-conformance-sa-false
+              - token-conformance-sa-unset
+              - token-conformance-sa-true
+              - --namespace=conformance-workloads
+              - --ignore-not-found=true
+              - --wait=false
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod
+              - token-probe-sa-false-pod-unset
+              - token-probe-sa-unset-pod-unset
+              - token-probe-sa-true-pod-unset
+              - token-probe-pod-false
+              - token-probe-pod-opt-in-annotation
+              - --namespace=conformance-workloads
+              - --ignore-not-found=true
+              - --wait=false

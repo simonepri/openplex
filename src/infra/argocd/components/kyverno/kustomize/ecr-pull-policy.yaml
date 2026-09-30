@@ -1,0 +1,211 @@
+# Protects short-lived ECR pull credentials in non-AWS team namespaces. Kubernetes admission and team RBAC allow only image-pull use of the Secret.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-ecr-pull-source
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [serviceaccounts, secrets]
+      - apiGroups: [external-secrets.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [externalsecrets]
+      - apiGroups: [generators.external-secrets.io]
+        apiVersions: [v1alpha1]
+        operations: [CREATE, UPDATE]
+        resources: [ecrauthorizationtokens]
+  variables:
+    - name: ecrSecret
+      expression: >-
+        object.kind == 'Secret' && object.metadata.name == 'ecr-pull'
+    - name: ecrServiceAccount
+      expression: >-
+        object.kind == 'ServiceAccount' && object.metadata.name == 'ecr-pull-token'
+    - name: ecrExternalSecret
+      expression: >-
+        object.kind == 'ExternalSecret' && object.metadata.name == 'ecr-pull'
+    - name: ecrGenerator
+      expression: >-
+        object.kind == 'ECRAuthorizationToken' && object.metadata.name == 'ecr-pull'
+  validations:
+    - expression: >-
+        !(variables.ecrServiceAccount || variables.ecrExternalSecret ||
+          variables.ecrGenerator) ||
+          request.userInfo.username ==
+            'system:serviceaccount:argocd:argocd-application-controller'
+      message: Only Argo CD may manage the reserved ECR pull identity resources.
+    - expression: >-
+        !variables.ecrSecret ||
+          request.userInfo.username ==
+            'system:serviceaccount:external-secrets-system:external-secrets'
+      message: Only External Secrets may materialize the ECR pull Secret.
+    - expression: >-
+        !variables.ecrSecret ||
+          (object.type == 'kubernetes.io/dockerconfigjson' &&
+            has(object.data) && size(object.data) == 1 &&
+            '.dockerconfigjson' in object.data &&
+            has(object.metadata.labels) &&
+            object.metadata.labels['app.kubernetes.io/managed-by'] ==
+              'external-secrets' &&
+            object.metadata.labels['app.kubernetes.io/name'] == 'ecr-pull' &&
+            has(object.metadata.ownerReferences) &&
+            object.metadata.ownerReferences.exists(owner,
+              owner.apiVersion == 'external-secrets.io/v1' &&
+              owner.kind == 'ExternalSecret' && owner.name == 'ecr-pull' &&
+              owner.controller))
+      message: The ECR pull Secret must have the exact controller-owned Docker credential shape.
+    - expression: >-
+        !variables.ecrServiceAccount ||
+          (has(object.automountServiceAccountToken) &&
+            !object.automountServiceAccountToken &&
+            has(object.metadata.annotations) &&
+            'eks.amazonaws.com/audience' in object.metadata.annotations &&
+            object.metadata.annotations['eks.amazonaws.com/audience'] ==
+              'sts.amazonaws.com' &&
+            'eks.amazonaws.com/role-arn' in object.metadata.annotations &&
+            object.metadata.annotations['eks.amazonaws.com/role-arn'].matches(
+              '^arn:aws(-[a-z]+)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$'))
+      message: The ECR token identity must use one explicit AWS role without an automounted token.
+    - expression: >-
+        !variables.ecrGenerator ||
+          (object.spec.region.matches(
+              '^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$') &&
+            has(object.spec.auth) && has(object.spec.auth.jwt) &&
+            has(object.spec.auth.jwt.serviceAccountRef) &&
+            object.spec.auth.jwt.serviceAccountRef.name == 'ecr-pull-token' &&
+            !has(object.spec.auth.jwt.serviceAccountRef.namespace) &&
+            !has(object.spec.auth.jwt.serviceAccountRef.audiences) &&
+            !has(object.spec.auth.secretRef) && !has(object.spec.role) &&
+            !has(object.spec.scope))
+      message: The ECR token generator must use only its namespace-local workload identity.
+    - expression: >-
+        !variables.ecrExternalSecret ||
+          (object.spec.refreshInterval == '1h' &&
+            !has(object.spec.secretStoreRef) && !has(object.spec.data) &&
+            has(object.spec.dataFrom) && size(object.spec.dataFrom) == 1 &&
+            has(object.spec.dataFrom[0].sourceRef) &&
+            has(object.spec.dataFrom[0].sourceRef.generatorRef) &&
+            object.spec.dataFrom[0].sourceRef.generatorRef.apiVersion ==
+              'generators.external-secrets.io/v1alpha1' &&
+            object.spec.dataFrom[0].sourceRef.generatorRef.kind ==
+              'ECRAuthorizationToken' &&
+            object.spec.dataFrom[0].sourceRef.generatorRef.name == 'ecr-pull' &&
+            has(object.spec.target) && object.spec.target.name == 'ecr-pull' &&
+            object.spec.target.creationPolicy == 'Owner' &&
+            object.spec.target.deletionPolicy == 'Delete' &&
+            has(object.spec.target.template) &&
+            object.spec.target.template.engineVersion == 'v2' &&
+            object.spec.target.template.type == 'kubernetes.io/dockerconfigjson' &&
+            has(object.spec.target.template.metadata) &&
+            has(object.spec.target.template.metadata.labels) &&
+            object.spec.target.template.metadata.labels[
+              'app.kubernetes.io/managed-by'] == 'external-secrets' &&
+            object.spec.target.template.metadata.labels[
+              'app.kubernetes.io/name'] == 'ecr-pull' &&
+            has(object.spec.target.template.data) &&
+            size(object.spec.target.template.data) == 1 &&
+            '.dockerconfigjson' in object.spec.target.template.data)
+      message: The ECR pull ExternalSecret must use the exact generator and Docker credential target.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-ecr-pull-source
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-ecr-pull-source
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels: {app.kubernetes.io/part-of: team-lane}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-ecr-pull-consumer
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [UPDATE]
+        resources: [pods/ephemeralcontainers]
+  variables:
+    - name: podSpec
+      expression: object.spec
+    - name: volumeReference
+      expression: >-
+        has(variables.podSpec.volumes) && variables.podSpec.volumes.exists(volume,
+          (has(volume.secret) && volume.secret.secretName == 'ecr-pull') ||
+          (has(volume.projected) && volume.projected.sources.exists(source,
+            has(source.secret) && source.secret.name == 'ecr-pull')) ||
+          (has(volume.csi) && has(volume.csi.nodePublishSecretRef) &&
+            volume.csi.nodePublishSecretRef.name == 'ecr-pull') ||
+          (has(volume.cephfs) && has(volume.cephfs.secretRef) &&
+            volume.cephfs.secretRef.name == 'ecr-pull') ||
+          (has(volume.cinder) && has(volume.cinder.secretRef) &&
+            volume.cinder.secretRef.name == 'ecr-pull') ||
+          (has(volume.flexVolume) && has(volume.flexVolume.secretRef) &&
+            volume.flexVolume.secretRef.name == 'ecr-pull') ||
+          (has(volume.iscsi) && has(volume.iscsi.secretRef) &&
+            volume.iscsi.secretRef.name == 'ecr-pull') ||
+          (has(volume.rbd) && has(volume.rbd.secretRef) &&
+            volume.rbd.secretRef.name == 'ecr-pull') ||
+          (has(volume.scaleIO) && has(volume.scaleIO.secretRef) &&
+            volume.scaleIO.secretRef.name == 'ecr-pull') ||
+          (has(volume.storageos) && has(volume.storageos.secretRef) &&
+            volume.storageos.secretRef.name == 'ecr-pull'))
+    - name: envReference
+      expression: >-
+        variables.podSpec.containers.exists(container,
+          (has(container.env) && container.env.exists(item,
+            has(item.valueFrom) && has(item.valueFrom.secretKeyRef) &&
+              item.valueFrom.secretKeyRef.name == 'ecr-pull')) ||
+          (has(container.envFrom) && container.envFrom.exists(item,
+            has(item.secretRef) && item.secretRef.name == 'ecr-pull'))) ||
+        (has(variables.podSpec.initContainers) &&
+          variables.podSpec.initContainers.exists(container,
+            (has(container.env) && container.env.exists(item,
+              has(item.valueFrom) && has(item.valueFrom.secretKeyRef) &&
+                item.valueFrom.secretKeyRef.name == 'ecr-pull')) ||
+            (has(container.envFrom) && container.envFrom.exists(item,
+              has(item.secretRef) && item.secretRef.name == 'ecr-pull')))) ||
+        (has(variables.podSpec.ephemeralContainers) &&
+          variables.podSpec.ephemeralContainers.exists(container,
+            (has(container.env) && container.env.exists(item,
+              has(item.valueFrom) && has(item.valueFrom.secretKeyRef) &&
+                item.valueFrom.secretKeyRef.name == 'ecr-pull')) ||
+            (has(container.envFrom) && container.envFrom.exists(item,
+              has(item.secretRef) && item.secretRef.name == 'ecr-pull'))))
+  validations:
+    - expression: '!variables.volumeReference && !variables.envReference'
+      message: The ECR pull credential may be used only through imagePullSecrets.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-ecr-pull-consumer
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-ecr-pull-consumer
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels: {app.kubernetes.io/part-of: team-lane}

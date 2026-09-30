@@ -1,0 +1,264 @@
+# Declares the Cleaner custom resource for detecting and recycling nodes holding corrupt container images.
+
+apiVersion: apps.projectsveltos.io/v1alpha1
+kind: Cleaner
+metadata:
+  name: corrupt-image-node-cleaner
+  labels:
+    app.kubernetes.io/name: k8s-cleaner
+    app.kubernetes.io/part-of: cluster-runtime
+spec:
+  schedule: "*/5 * * * *"
+  action: Transform
+  occurrenceThreshold: 1
+  transform: |
+    function transform()
+      local hs = {}
+      local dryRun = true
+      if obj.metadata and obj.metadata.annotations and obj.metadata.annotations["k8s-cleaner.io/dry-run"] == "false" then
+        dryRun = false
+      end
+
+      if dryRun then
+        hs.resource = obj
+        hs.message = string.format("[DRY-RUN] Would taint node %s with NoSchedule, evict pods, and recycle node", (obj.metadata and obj.metadata.name) or "")
+        return hs
+      end
+
+      if not obj.spec then obj.spec = {} end
+      if not obj.spec.taints then obj.spec.taints = {} end
+
+      local hasTaint = false
+      for _, t in ipairs(obj.spec.taints) do
+        if t.key == "node.kubernetes.io/corrupt-image" and t.effect == "NoSchedule" then
+          hasTaint = true
+          break
+        end
+      end
+
+      if not hasTaint then
+        table.insert(obj.spec.taints, {
+          key = "node.kubernetes.io/corrupt-image",
+          value = "true",
+          effect = "NoSchedule"
+        })
+      end
+
+      hs.resource = obj
+      hs.message = string.format("Tainted node %s with NoSchedule due to corrupt image anomaly", (obj.metadata and obj.metadata.name) or "")
+      return hs
+    end
+  resourcePolicySet:
+    resourceSelectors:
+      - kind: Pod
+        group: ""
+        version: v1
+        excludeDeleted: true
+      - kind: Node
+        group: ""
+        version: v1
+        excludeDeleted: true
+    aggregatedSelection: |
+      local function parseTimestamp(timestampStr)
+        if not timestampStr then return nil end
+        local y, mon, d, h, mi, s = string.match(timestampStr, '(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)')
+        if not y then return nil end
+        return os.time({
+          year = tonumber(y), month = tonumber(mon), day = tonumber(d),
+          hour = tonumber(h), min = tonumber(mi), sec = tonumber(s)
+        })
+      end
+
+      local function getImageKey(cs, containerSpec)
+        local key = nil
+        if cs then
+          if cs.imageID and cs.imageID ~= '' then
+            key = cs.imageID
+          elseif cs.image and cs.image ~= '' then
+            key = cs.image
+          end
+        end
+        if not key and containerSpec then
+          key = containerSpec.image
+        end
+        if not key then return 'unknown' end
+        key = string.gsub(key, '^[a-z0-9_-]+://', '')
+        return key
+      end
+
+      function evaluate()
+        local pods = {}
+        local nodes = {}
+        for _, r in ipairs(resources) do
+          if r.kind == 'Pod' then
+            table.insert(pods, r)
+          elseif r.kind == 'Node' then
+            if r.metadata and r.metadata.name then
+              nodes[r.metadata.name] = r
+            end
+          end
+        end
+
+        local healthyReplicas = {}
+        local crashloopData = {}
+
+        for _, pod in ipairs(pods) do
+          local isDeleting = (pod.metadata and pod.metadata.deletionTimestamp ~= nil)
+          local nodeName = (pod.spec and pod.spec.nodeName) or ''
+          if not isDeleting and nodeName ~= '' then
+            local containerStatuses = (pod.status and pod.status.containerStatuses) or {}
+            local containerSpecs = (pod.spec and pod.spec.containers) or {}
+
+            for i, cs in ipairs(containerStatuses) do
+              local cSpec = containerSpecs[i]
+              local imgKey = getImageKey(cs, cSpec)
+
+              local isRunning = false
+              if pod.status and pod.status.phase == 'Running' then
+                if (cs.ready == true or (cs.state and cs.state.running ~= nil)) and
+                   not (cs.state and cs.state.waiting and (cs.state.waiting.reason == 'CrashLoopBackOff' or cs.state.waiting.reason == 'Error')) then
+                  isRunning = true
+                end
+              end
+
+              if isRunning then
+                if not healthyReplicas[imgKey] then
+                  healthyReplicas[imgKey] = {}
+                end
+                healthyReplicas[imgKey][nodeName] = (healthyReplicas[imgKey][nodeName] or 0) + 1
+              end
+
+              local isCrashLoop = false
+              local restartCount = cs.restartCount or 0
+              if cs.state and cs.state.waiting and (cs.state.waiting.reason == 'CrashLoopBackOff' or cs.state.waiting.reason == 'Error') then
+                isCrashLoop = true
+              elseif cs.lastState and cs.lastState.terminated and cs.lastState.terminated.exitCode ~= nil and cs.lastState.terminated.exitCode ~= 0 then
+                isCrashLoop = true
+              end
+
+              local inWindow = true
+              if cs.lastState and cs.lastState.terminated and cs.lastState.terminated.finishedAt then
+                local finishedEpoch = parseTimestamp(cs.lastState.terminated.finishedAt)
+                if finishedEpoch then
+                  local diff = os.difftime(os.time(), finishedEpoch)
+                  if diff > 600 or diff < -60 then
+                    inWindow = false
+                  end
+                end
+              end
+
+              if isCrashLoop and restartCount >= 3 and inWindow then
+                if not crashloopData[imgKey] then
+                  crashloopData[imgKey] = {}
+                end
+                if not crashloopData[imgKey][nodeName] then
+                  crashloopData[imgKey][nodeName] = {
+                    restarts = 0,
+                    pods = {},
+                    podNames = {}
+                  }
+                end
+                crashloopData[imgKey][nodeName].restarts = crashloopData[imgKey][nodeName].restarts + restartCount
+                table.insert(crashloopData[imgKey][nodeName].pods, pod)
+                table.insert(crashloopData[imgKey][nodeName].podNames, (pod.metadata and pod.metadata.name) or 'unknown')
+              end
+            end
+          end
+        end
+
+        local flaggedNodeNames = {}
+        local detectedAnomalies = {}
+
+        for imgKey, nodeMap in pairs(crashloopData) do
+          for nodeName, info in pairs(nodeMap) do
+            if info.restarts >= 3 then
+              local healthyElsewhere = 0
+              if healthyReplicas[imgKey] then
+                for otherNode, count in pairs(healthyReplicas[imgKey]) do
+                  if otherNode ~= nodeName then
+                    healthyElsewhere = healthyElsewhere + count
+                  end
+                end
+              end
+
+              if healthyElsewhere >= 1 then
+                flaggedNodeNames[nodeName] = true
+                table.insert(detectedAnomalies, {
+                  nodeName = nodeName,
+                  image = imgKey,
+                  restarts = info.restarts,
+                  podNames = info.podNames,
+                  healthyElsewhere = healthyElsewhere
+                })
+              end
+            end
+          end
+        end
+
+        local matchingResources = {}
+        for nodeName, _ in pairs(flaggedNodeNames) do
+          if nodes[nodeName] then
+            table.insert(matchingResources, {resource = nodes[nodeName]})
+          else
+            table.insert(matchingResources, {
+              resource = {
+                apiVersion = 'v1',
+                kind = 'Node',
+                metadata = { name = nodeName }
+              }
+            })
+          end
+        end
+
+        local actionReports = {}
+        for _, anomaly in ipairs(detectedAnomalies) do
+          local nodeObj = nodes[anomaly.nodeName]
+          local isKarpenter = false
+          local nodeClaimName = nil
+          local isManagedGroup = false
+          local nodegroupName = nil
+
+          if nodeObj and nodeObj.metadata then
+            local labels = nodeObj.metadata.labels or {}
+            local annotations = nodeObj.metadata.annotations or {}
+
+            if labels['karpenter.sh/nodepool'] or labels['karpenter.sh/provisioner-name'] or annotations['karpenter.sh/nodeclaim'] then
+              isKarpenter = true
+              nodeClaimName = annotations['karpenter.sh/nodeclaim'] or labels['karpenter.sh/nodepool']
+            end
+
+            if labels['eks.amazonaws.com/nodegroup'] or labels['alpha.eksctl.io/nodegroup-name'] or labels['cloud.google.com/gke-nodepool'] then
+              isManagedGroup = true
+              nodegroupName = labels['eks.amazonaws.com/nodegroup'] or labels['alpha.eksctl.io/nodegroup-name'] or labels['cloud.google.com/gke-nodepool']
+            end
+          end
+
+          local lifecycleAction = ''
+          if isKarpenter then
+            lifecycleAction = string.format('delete Karpenter NodeClaim %s', nodeClaimName or ('for node ' .. anomaly.nodeName))
+          elseif isManagedGroup then
+            lifecycleAction = string.format('inform operator to recycle managed node group instance %s (nodegroup: %s)', anomaly.nodeName, nodegroupName or 'default')
+          else
+            lifecycleAction = string.format('inform operator to recycle node %s', anomaly.nodeName)
+          end
+
+          local report = string.format(
+            '[DRY-RUN] Corrupt image detected on node "%s" for image "%s" (%d restarts, crashloop; %d healthy replica(s) running on other nodes). Actions: [1] taint node NoSchedule (node.kubernetes.io/corrupt-image=true:NoSchedule), [2] evict %d affected pod(s) [%s], [3] emit CorruptImageAnomalyDetected event, [4] %s',
+            anomaly.nodeName, anomaly.image, anomaly.restarts, anomaly.healthyElsewhere,
+            #anomaly.podNames, table.concat(anomaly.podNames, ', '), lifecycleAction
+          )
+          table.insert(actionReports, report)
+        end
+
+        local hs = {}
+        hs.resources = matchingResources
+        if #matchingResources > 0 then
+          hs.message = table.concat(actionReports, '\n')
+        else
+          hs.message = 'No corrupt image anomalies detected across cluster nodes.'
+        end
+        return hs
+      end
+  notifications:
+    - name: corrupt-image-anomaly-event
+      type: Event

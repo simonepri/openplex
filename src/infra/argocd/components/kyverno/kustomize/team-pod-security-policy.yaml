@@ -1,0 +1,211 @@
+# Keeps native restricted audit and warning on team namespaces while Kyverno enforces restricted pod security and the non-root user-namespace rule.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-pod-security-profile
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [namespaces]
+  variables:
+    # LINT.IfChange(team-lane-identity-label)
+    - name: isTeamNamespace
+      expression: >-
+        (has(object.metadata.labels) &&
+          'app.kubernetes.io/part-of' in object.metadata.labels &&
+          object.metadata.labels['app.kubernetes.io/part-of'] == 'team-lane') ||
+        (request.operation == 'UPDATE' && has(oldObject.metadata.labels) &&
+          'app.kubernetes.io/part-of' in oldObject.metadata.labels &&
+          oldObject.metadata.labels['app.kubernetes.io/part-of'] == 'team-lane')
+      # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/policies.yaml:team-lane-identity-label,//src/infra/argocd/components/team_namespace/helm/templates/_helpers.tpl:team-lane-identity-label)
+  # LINT.IfChange(team-pod-security-profile)
+  validations:
+    - expression: >-
+        !variables.isTeamNamespace || (has(object.metadata.labels) &&
+          'app.kubernetes.io/part-of' in object.metadata.labels &&
+          object.metadata.labels['app.kubernetes.io/part-of'] == 'team-lane' &&
+          'kueue.x-k8s.io/managed' in object.metadata.labels &&
+          object.metadata.labels['kueue.x-k8s.io/managed'] == 'true' &&
+          object.metadata.labels['pod-security.kubernetes.io/audit'] == 'restricted' &&
+          object.metadata.labels['pod-security.kubernetes.io/audit-version'] == 'latest' &&
+          object.metadata.labels['pod-security.kubernetes.io/warn'] == 'restricted' &&
+          object.metadata.labels['pod-security.kubernetes.io/warn-version'] == 'latest' &&
+          !('pod-security.kubernetes.io/enforce' in object.metadata.labels) &&
+          !('pod-security.kubernetes.io/enforce-version' in object.metadata.labels))
+      message: Team namespaces must retain native restricted audit and warning while Kyverno owns enforcement.
+      # LINT.ThenChange(//src/infra/argocd/components/team_namespace/helm/templates/lane.yaml:team-pod-security-profile)
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-pod-security-profile
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-pod-security-profile
+  validationActions: [Deny]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-user-namespace-nonroot
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: containers
+      expression: >-
+        object.spec.containers +
+          (has(object.spec.initContainers) ? object.spec.initContainers : []) +
+          (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
+    - name: podRequiresNonRoot
+      expression: >-
+        has(object.spec.securityContext) &&
+          has(object.spec.securityContext.runAsNonRoot) &&
+          object.spec.securityContext.runAsNonRoot
+    - name: containersRequireNonRoot
+      expression: >-
+        variables.containers.all(container,
+          has(container.securityContext) && has(container.securityContext.runAsNonRoot)
+            ? container.securityContext.runAsNonRoot
+            : variables.podRequiresNonRoot)
+    - name: excludesRootUID
+      expression: >-
+        (!has(object.spec.securityContext) ||
+          !has(object.spec.securityContext.runAsUser) ||
+          object.spec.securityContext.runAsUser != 0) &&
+        variables.containers.all(container,
+          !has(container.securityContext) ||
+            !has(container.securityContext.runAsUser) ||
+            container.securityContext.runAsUser != 0)
+  validations:
+    - expression: >-
+        !has(object.spec.hostUsers) || object.spec.hostUsers ||
+          (variables.containersRequireNonRoot && variables.excludesRootUID)
+      message: Team Pods using a user namespace must retain the non-root runtime contract.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-user-namespace-nonroot
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-user-namespace-nonroot
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels: {app.kubernetes.io/part-of: team-lane}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-pod-security-restricted
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: containers
+      expression: >-
+        object.spec.containers +
+          (has(object.spec.initContainers) ? object.spec.initContainers : []) +
+          (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
+    - name: podRequiresNonRoot
+      expression: >-
+        has(object.spec.securityContext) &&
+          has(object.spec.securityContext.runAsNonRoot) &&
+          object.spec.securityContext.runAsNonRoot
+    - name: nonRootEnforced
+      expression: >-
+        variables.podRequiresNonRoot || variables.containers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.runAsNonRoot) &&
+          c.securityContext.runAsNonRoot)
+    - name: privilegeEscalationDisallowed
+      expression: >-
+        variables.containers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.allowPrivilegeEscalation) &&
+          !c.securityContext.allowPrivilegeEscalation)
+    - name: hostNamespacesDisallowed
+      expression: >-
+        (!has(object.spec.hostNetwork) || !object.spec.hostNetwork) && (!has(object.spec.hostPID) || !object.spec.hostPID) && (!has(object.spec.hostIPC) || !object.spec.hostIPC)
+    - name: hostPathDisallowed
+      expression: >-
+        !has(object.spec.volumes) || object.spec.volumes.all(v, !has(v.hostPath))
+    - name: allCapabilitiesDropped
+      expression: >-
+        variables.containers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.capabilities) &&
+          has(c.securityContext.capabilities.drop) &&
+          'ALL' in c.securityContext.capabilities.drop)
+  validations:
+    - expression: variables.nonRootEnforced
+      message: Team Pods must enforce runAsNonRoot at pod or container level.
+    - expression: variables.privilegeEscalationDisallowed
+      message: All containers in team Pods must set allowPrivilegeEscalation to false.
+    - expression: variables.hostNamespacesDisallowed
+      message: Team Pods must not share host network, PID, or IPC namespaces.
+    - expression: variables.hostPathDisallowed
+      message: Team Pods must not mount hostPath volumes.
+    - expression: variables.allCapabilitiesDropped
+      message: All containers in team Pods must drop ALL capabilities.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-pod-security-restricted
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-pod-security-restricted
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels: {app.kubernetes.io/part-of: team-lane}
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: governed-parcagpu-pod-security
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: true
+  validationFailureAction: Enforce
+  rules:
+    - name: restricted-pod-security
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels:
+                  kueue.x-k8s.io/managed: "true"
+      validate:
+        podSecurity:
+          level: restricted
+          version: latest

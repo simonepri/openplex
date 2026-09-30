@@ -1,0 +1,227 @@
+# Configures base Helm values for Kyverno admission controller and policy engine across fleet clusters.
+
+# LINT.IfChange(kyverno-chart-version)
+crds:
+  # Kyverno's schema-heavy CRDs can exceed Argo's per-resource Lua health
+  # budget during a fleet rollout. Their apply result remains enforced, while
+  # controller Deployments provide the meaningful runtime health signal.
+  annotations:
+    argocd.argoproj.io/ignore-healthcheck: "true"
+  migration:
+    # This fleet is bootstrapped directly on Kyverno v3 CRDs. The upstream
+    # post-upgrade migration hook is both unnecessary and non-idempotent under
+    # repeated Argo syncs because its hook RBAC is deleted after completion.
+    enabled: false
+    image:
+      tag: v1.19.1@sha256:ced7b2be0b04250cabfe695f15307f69eb715fe23234816388af4f3812915b2a
+    podSecurityContext: {runAsNonRoot: true, runAsUser: 65532}
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      runAsNonRoot: true
+kyverno-api:
+  # The API subchart owns Kyverno's CEL policy CRDs separately from the
+  # legacy CRD subchart above, so it needs the same Argo health exclusion.
+  annotations:
+    argocd.argoproj.io/ignore-healthcheck: "true"
+admissionController:
+  rbac:
+    clusterRole:
+      extraResources:
+        - apiGroups: [autoscaling.k8s.io]
+          resources: [verticalpodautoscalers, verticalpodautoscalercheckpoints]
+          verbs: [create, update, patch, delete, get, list, watch]
+        - apiGroups: [gateway.networking.k8s.io]
+          resources: [httproutes]
+          verbs: [get, list]
+  createSelfSignedCert: false
+  initContainer:
+    image:
+      tag: v1.19.1@sha256:c25c47461f06f2845a48c319ae86fbbc1730a7b9ed5b701889c9dc1f9ee94b09
+  container:
+    image:
+      tag: v1.19.1@sha256:b31d8511ae5fd6010e2a01ea72ebae08eb82fa51d91af14a1d9fe989949b4edb
+    extraArgs: &kyverno-leader-election-args
+      leaderElectionRetryPeriod: 10s
+    resources:
+      requests: {cpu: 200m, memory: 256Mi}
+      limits: {cpu: 500m, memory: 512Mi}
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      seccompProfile: {type: RuntimeDefault}
+  priorityClassName: cluster-operators
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: {type: RuntimeDefault}
+  startupProbe:
+    failureThreshold: 60
+    periodSeconds: 10
+    timeoutSeconds: 10
+  livenessProbe:
+    # Readiness removes a saturated webhook from service immediately; liveness
+    # stays tolerant so transient API pressure cannot create a restart cascade.
+    failureThreshold: 12
+    timeoutSeconds: 10
+  antiAffinity: {enabled: true}
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [admission-controller]
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  podAnnotations:
+    signoz.io/path: /metrics
+    signoz.io/port: "8000"
+    signoz.io/scrape: "true"
+  replicas: 2
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+  topologySpreadConstraints: []
+backgroundController:
+  rbac:
+    clusterRole:
+      extraResources:
+        - apiGroups: [autoscaling.k8s.io]
+          resources: [verticalpodautoscalers, verticalpodautoscalercheckpoints]
+          verbs: [create, update, patch, delete, get, list, watch]
+  image:
+    tag: v1.19.1@sha256:8f1e9143373a27578cafc2d28d2c66ba0926c63b4c77e63de8d2fdd4a122859f
+
+  extraArgs: *kyverno-leader-election-args
+  priorityClassName: cluster-operators
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  podSecurityContext: &kyverno-controller-pod-security
+    runAsGroup: 65534
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile: {type: RuntimeDefault}
+  securityContext: &kyverno-controller-security
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    privileged: false
+    readOnlyRootFilesystem: true
+    runAsGroup: 65534
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile: {type: RuntimeDefault}
+  resources: &kyverno-secondary-resources
+    requests: {cpu: 100m, memory: 64Mi}
+    limits: {cpu: 250m, memory: 128Mi}
+  startupProbe: &kyverno-controller-startup
+    failureThreshold: 60
+    periodSeconds: 10
+    timeoutSeconds: 10
+  livenessProbe: &kyverno-controller-liveness
+    failureThreshold: 12
+    timeoutSeconds: 10
+  antiAffinity: {enabled: true}
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [background-controller]
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  podAnnotations:
+    signoz.io/path: /metrics
+    signoz.io/port: "8000"
+    signoz.io/scrape: "true"
+  replicas: 2
+  topologySpreadConstraints: []
+cleanupController:
+  image:
+    tag: v1.19.1@sha256:67a48e62a8d8f8120c86914ff822b90017c54054c7b64ef8a1555645e9d9761e
+  extraArgs: *kyverno-leader-election-args
+  priorityClassName: cluster-operators
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  podSecurityContext: *kyverno-controller-pod-security
+  securityContext: *kyverno-controller-security
+  resources: *kyverno-secondary-resources
+  startupProbe: *kyverno-controller-startup
+  livenessProbe: *kyverno-controller-liveness
+  antiAffinity: {enabled: true}
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [cleanup-controller]
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  podAnnotations:
+    signoz.io/path: /metrics
+    signoz.io/port: "8000"
+    signoz.io/scrape: "true"
+  replicas: 2
+  topologySpreadConstraints: []
+reportsController:
+  image:
+    tag: v1.19.1@sha256:c0eee97b9b44a0dd35805d56b358fa52548480f79d4944602b9609538eccd64c
+  extraArgs: *kyverno-leader-election-args
+  priorityClassName: cluster-operators
+  apiPriorityAndFairness: true
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  podSecurityContext: *kyverno-controller-pod-security
+  securityContext: *kyverno-controller-security
+  resources: *kyverno-secondary-resources
+  startupProbe: *kyverno-controller-startup
+  livenessProbe: *kyverno-controller-liveness
+  antiAffinity: {enabled: true}
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [reports-controller]
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  podAnnotations:
+    signoz.io/path: /metrics
+    signoz.io/port: "8000"
+    signoz.io/scrape: "true"
+  replicas: 2
+  topologySpreadConstraints: []
+test:
+  image:
+    tag: v1.19.1@sha256:31bb42ce7f5b2e27c1cf633aeff4f0cad1f5bb63761e2cb09f0e25cdd26572bf
+webhooksCleanup:
+  image:
+    tag: v1.19.1@sha256:31bb42ce7f5b2e27c1cf633aeff4f0cad1f5bb63761e2cb09f0e25cdd26572bf
+# LINT.ThenChange(//src/infra/argocd/apps/ctrl.yaml:kyverno-chart-version,//src/infra/argocd/apps/cells.yaml:kyverno-chart-version,//src/bazel/module_deps/vendor_helm_charts.MODULE.bazel:kyverno-chart-version)
+features:
+  forceFailurePolicyIgnore: {enabled: false}
+  logging:
+    # Trace-level controller logs amplify CPU and I/O pressure during fleet
+    # recovery without adding useful production diagnostics.
+    format: json
+    verbosity: 0
+  policyExceptions: {enabled: false}
+  registryClient:
+    allowInsecure: false
+    credentialHelpers: [amazon, azure, default, github, google]

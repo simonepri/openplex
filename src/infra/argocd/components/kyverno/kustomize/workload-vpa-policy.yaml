@@ -1,0 +1,294 @@
+# Generates companion VerticalPodAutoscaler resources dynamically for workloads with bounded requests and limits.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: workload-vpa-generation-v2
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: workload-vpa-generation-v2
+spec:
+  admission: true
+  background: true
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: stamp-workload-logical-name
+      match:
+        any:
+          - resources:
+              kinds: [Job, RayCluster, RayJob]
+              operations: [CREATE]
+      preconditions:
+        all:
+          - key: >-
+              {{ request.object.metadata.labels."logical-name" || '' }}
+            operator: Equals
+            value: ''
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              logical-name: >-
+                {{ regex_replace_all('-[0-9]{8,14}[a-z0-9]*$', request.object.metadata.name, '-x') }}
+    - name: generate-companion-vpa-deployment
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              operations: [CREATE, UPDATE]
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchExpressions:
+                  - key: vpa
+                    operator: In
+                    values: ["false", "off", "custom"]
+          - resources:
+              selector:
+                matchLabels:
+                  com.coder.resource: "true"
+          - resources:
+              selector:
+                matchExpressions:
+                  - key: kueue.x-k8s.io/queue-name
+                    operator: Exists
+      preconditions:
+        all:
+          - key: >-
+              {{ request.object.metadata.annotations."vpa.autoscaling.k8s.io/enabled" || 'true' }}
+            operator: NotIn
+            value: ["false", "off", "custom"]
+          # Kueue terminates an admitted pod whose requests drift from its
+          # Workload, so queue-managed workloads keep the sizing Kueue admitted.
+          - key: >-
+              {{ request.object.spec.template.metadata.labels."kueue.x-k8s.io/queue-name" || '' }}
+            operator: Equals
+            value: ''
+      generate:
+        apiVersion: autoscaling.k8s.io/v1
+        kind: VerticalPodAutoscaler
+        name: "{{ request.object.metadata.name }}"
+        namespace: "{{ request.object.metadata.namespace }}"
+        synchronize: true
+        generateExisting: true
+        data:
+          metadata:
+            labels:
+              app.kubernetes.io/managed-by: kyverno
+              app.kubernetes.io/name: "{{ request.object.metadata.name }}"
+              logical-name: >-
+                {{ request.object.metadata.labels."logical-name" || regex_replace_all('-[0-9]{8,14}[a-z0-9]*$', request.object.metadata.name, '-x') }}
+            ownerReferences:
+              - apiVersion: apps/v1
+                kind: Deployment
+                name: "{{ request.object.metadata.name }}"
+                uid: "{{ request.object.metadata.uid }}"
+                controller: true
+                blockOwnerDeletion: true
+          spec:
+            targetRef:
+              apiVersion: apps/v1
+              kind: Deployment
+              name: "{{ request.object.metadata.name }}"
+            updatePolicy:
+              updateMode: "{{ request.object.metadata.annotations.\"vpa.autoscaling.k8s.io/update-mode\" || 'InPlace' }}"
+            resourcePolicy:
+              containerPolicies:
+                - containerName: "*"
+                  controlledValues: RequestsOnly
+                  controlledResources:
+                    - cpu
+                    - memory
+                  minAllowed:
+                    cpu: "{{ request.object.metadata.annotations.\"vpa.autoscaling.k8s.io/min-cpu\" || '10m' }}"
+                    memory: "{{ request.object.metadata.annotations.\"vpa.autoscaling.k8s.io/min-memory\" || '32Mi' }}"
+
+    - name: generate-companion-vpa-statefulset
+      match:
+        any:
+          - resources:
+              kinds: [StatefulSet]
+              operations: [CREATE, UPDATE]
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchExpressions:
+                  - key: vpa
+                    operator: In
+                    values: ["false", "off", "custom"]
+          - resources:
+              selector:
+                matchExpressions:
+                  - key: kueue.x-k8s.io/queue-name
+                    operator: Exists
+      preconditions:
+        all:
+          - key: >-
+              {{ request.object.metadata.annotations."vpa.autoscaling.k8s.io/enabled" || 'true' }}
+            operator: NotIn
+            value: ["false", "off", "custom"]
+          # Kueue terminates an admitted pod whose requests drift from its
+          # Workload, so queue-managed workloads keep the sizing Kueue admitted.
+          - key: >-
+              {{ request.object.spec.template.metadata.labels."kueue.x-k8s.io/queue-name" || '' }}
+            operator: Equals
+            value: ''
+      generate:
+        apiVersion: autoscaling.k8s.io/v1
+        kind: VerticalPodAutoscaler
+        name: "{{ request.object.metadata.name }}"
+        namespace: "{{ request.object.metadata.namespace }}"
+        synchronize: true
+        generateExisting: true
+        data:
+          metadata:
+            labels:
+              app.kubernetes.io/managed-by: kyverno
+              app.kubernetes.io/name: "{{ request.object.metadata.name }}"
+              logical-name: >-
+                {{ regex_replace_all('-[0-9]+-[0-9]+$', request.object.metadata.name, '-x-x') }}
+            ownerReferences:
+              - apiVersion: apps/v1
+                kind: StatefulSet
+                name: "{{ request.object.metadata.name }}"
+                uid: "{{ request.object.metadata.uid }}"
+                controller: true
+                blockOwnerDeletion: true
+          spec:
+            targetRef:
+              apiVersion: apps/v1
+              kind: StatefulSet
+              name: "{{ request.object.metadata.name }}"
+            updatePolicy:
+              updateMode: "{{ request.object.metadata.annotations.\"vpa.autoscaling.k8s.io/update-mode\" || 'InPlace' }}"
+            resourcePolicy:
+              containerPolicies:
+                - containerName: "*"
+                  controlledValues: RequestsOnly
+                  controlledResources:
+                    - cpu
+                    - memory
+                  minAllowed:
+                    cpu: "{{ request.object.metadata.annotations.\"vpa.autoscaling.k8s.io/min-cpu\" || '10m' }}"
+                    memory: "{{ request.object.metadata.annotations.\"vpa.autoscaling.k8s.io/min-memory\" || '32Mi' }}"
+
+    - name: generate-companion-vpa-daemonset
+      match:
+        any:
+          - resources:
+              kinds: [DaemonSet]
+              operations: [CREATE, UPDATE]
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchExpressions:
+                  - key: vpa
+                    operator: In
+                    values: ["false", "off", "custom"]
+      preconditions:
+        all:
+          - key: >-
+              {{ request.object.metadata.annotations."vpa.autoscaling.k8s.io/enabled" || 'true' }}
+            operator: NotIn
+            value: ["false", "off", "custom"]
+      generate:
+        apiVersion: autoscaling.k8s.io/v1
+        kind: VerticalPodAutoscaler
+        name: "{{ request.object.metadata.name }}"
+        namespace: "{{ request.object.metadata.namespace }}"
+        synchronize: true
+        generateExisting: true
+        data:
+          metadata:
+            labels:
+              app.kubernetes.io/managed-by: kyverno
+              app.kubernetes.io/name: "{{ request.object.metadata.name }}"
+              logical-name: >-
+                {{ request.object.metadata.labels."logical-name" || request.object.metadata.name }}
+            ownerReferences:
+              - apiVersion: apps/v1
+                kind: DaemonSet
+                name: "{{ request.object.metadata.name }}"
+                uid: "{{ request.object.metadata.uid }}"
+                controller: true
+                blockOwnerDeletion: true
+          spec:
+            targetRef:
+              apiVersion: apps/v1
+              kind: DaemonSet
+              name: "{{ request.object.metadata.name }}"
+            updatePolicy:
+              updateMode: "{{ request.object.metadata.annotations.\"vpa.autoscaling.k8s.io/update-mode\" || 'Initial' }}"
+            resourcePolicy:
+              containerPolicies:
+                - containerName: "*"
+                  controlledValues: RequestsOnly
+                  controlledResources:
+                    - cpu
+                    - memory
+                  minAllowed:
+                    cpu: "{{ request.object.metadata.annotations.\"vpa.autoscaling.k8s.io/min-cpu\" || '10m' }}"
+                    memory: "{{ request.object.metadata.annotations.\"vpa.autoscaling.k8s.io/min-memory\" || '32Mi' }}"
+
+    - name: generate-companion-vpa-batch
+      match:
+        any:
+          - resources:
+              kinds: [Job, RayCluster]
+              operations: [CREATE]
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchExpressions:
+                  - key: vpa
+                    operator: In
+                    values: ["false", "off", "custom"]
+      preconditions:
+        all:
+          - key: >-
+              {{ request.object.metadata.annotations."vpa.autoscaling.k8s.io/enabled" || 'true' }}
+            operator: NotIn
+            value: ["false", "off", "custom"]
+      generate:
+        apiVersion: autoscaling.k8s.io/v1
+        kind: VerticalPodAutoscaler
+        name: "{{ request.object.metadata.name }}"
+        namespace: "{{ request.object.metadata.namespace }}"
+        synchronize: true
+        generateExisting: true
+        data:
+          metadata:
+            labels:
+              app.kubernetes.io/managed-by: kyverno
+              app.kubernetes.io/name: "{{ request.object.metadata.name }}"
+              logical-name: "{{ request.object.metadata.labels.\"logical-name\" || request.object.metadata.name }}"
+            ownerReferences:
+              - apiVersion: "{{ request.object.apiVersion }}"
+                kind: "{{ request.object.kind }}"
+                name: "{{ request.object.metadata.name }}"
+                uid: "{{ request.object.metadata.uid }}"
+                controller: true
+                blockOwnerDeletion: true
+          spec:
+            targetRef:
+              apiVersion: "{{ request.object.apiVersion }}"
+              kind: "{{ request.object.kind }}"
+              name: "{{ request.object.metadata.name }}"
+            updatePolicy:
+              updateMode: Initial
+            resourcePolicy:
+              containerPolicies:
+                - containerName: "*"
+                  controlledValues: RequestsOnly
+                  controlledResources:
+                    - cpu
+                    - memory
+                  minAllowed:
+                    cpu: 10m
+                    memory: 32Mi
