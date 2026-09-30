@@ -1,0 +1,3 @@
+# Supplies cluster-selected namespaces for network isolation baseline policies.
+
+namespaces: []

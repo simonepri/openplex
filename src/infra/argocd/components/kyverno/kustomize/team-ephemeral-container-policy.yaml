@@ -1,0 +1,37 @@
+# Denies ephemeral containers in every team namespace; the team-lane chart stamps the team label consumed by this policy binding.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-ephemeral-containers
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [UPDATE]
+        resources: [pods/ephemeralcontainers]
+  validations:
+    - expression: >-
+        !has(object.spec.ephemeralContainers) || size(object.spec.ephemeralContainers) == 0
+      message: Team pods must not embed ephemeral containers.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-ephemeral-containers
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-ephemeral-containers
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels: {app.kubernetes.io/part-of: team-lane}

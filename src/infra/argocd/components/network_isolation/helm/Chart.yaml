@@ -1,0 +1,8 @@
+# Defines Helm chart metadata for the cluster-scoped ingress-isolation baseline rendered by each fleet composition Application after workload namespaces are available.
+
+apiVersion: v2
+name: network-isolation
+description: Namespace ingress-isolation baselines for one Kubernetes cluster.
+type: application
+version: 0.1.0
+appVersion: 1.0.0

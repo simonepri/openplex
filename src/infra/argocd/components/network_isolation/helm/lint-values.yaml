@@ -1,0 +1,5 @@
+# Provides representative namespaces for Bazel's first-party Helm render checks; two entries prove resource names remain namespace-local across a multi-doc render.
+
+namespaces:
+  - example-a
+  - example-b

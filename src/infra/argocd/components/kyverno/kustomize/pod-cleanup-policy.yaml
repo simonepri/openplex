@@ -1,0 +1,45 @@
+# Configures Kyverno cleanup controller RBAC and declarative ClusterCleanupPolicy to prune preempted and evicted pods.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:cleanup-pods
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kyverno-cleanup-pods
+    rbac.kyverno.io/aggregate-to-cleanup-controller: "true"
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, delete]
+---
+apiVersion: kyverno.io/v2
+kind: ClusterCleanupPolicy
+metadata:
+  name: cleanup-failed-pods
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: cleanup-failed-pods
+spec:
+  schedule: "*/15 * * * *"
+  match:
+    any:
+      - resources:
+          kinds: [Pod]
+  conditions:
+    all:
+      - key: "{{ target.status.phase }}"
+        operator: Equals
+        value: Failed
+      - key: "{{ target.status.reason || '' }}"
+        operator: AnyIn
+        value:
+          - Evicted
+          - Preempting
+          - NodeAffinity
+          - Shutdown
+          - DisruptionTarget
