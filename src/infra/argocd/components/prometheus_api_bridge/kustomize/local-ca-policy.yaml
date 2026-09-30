@@ -1,0 +1,99 @@
+# Mutates local runtime admission to mount repository CA into Prometheus bridge pods.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: prometheus-api-bridge-local-ca
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: trust-local-observability-door
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              names: [prometheus-api-bridge]
+              namespaces: [signoz]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: bridge
+                  app.kubernetes.io/instance: prometheus-api-bridge
+                  app.kubernetes.io/name: prometheus-api-bridge
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers
+            preconditions:
+              all:
+                - key: '{{ element.name }}'
+                  operator: Equals
+                  value: bridge
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: bridge
+                        env:
+                          - name: SSL_CERT_FILE
+                            value: /etc/local-ca/ca.crt
+                        volumeMounts:
+                          - name: prometheus-api-bridge-control-ca
+                            mountPath: /etc/local-ca
+                            readOnly: true
+                    volumes:
+                      - name: prometheus-api-bridge-control-ca
+                        configMap:
+                          name: prometheus-api-bridge-control-ca
+                          items:
+                            - {key: ca.crt, path: ca.crt}
+    - name: trust-local-observability-door-collector
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              names: [prometheus-api-bridge-collector]
+              namespaces: [signoz]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: collector
+                  app.kubernetes.io/instance: prometheus-api-bridge
+                  app.kubernetes.io/name: prometheus-api-bridge
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers
+            preconditions:
+              all:
+                - key: '{{ element.name }}'
+                  operator: Equals
+                  value: collector
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: collector
+                        env:
+                          - name: SSL_CERT_FILE
+                            value: /etc/local-ca/ca.crt
+                        volumeMounts:
+                          - name: prometheus-api-bridge-control-ca
+                            mountPath: /etc/local-ca
+                            readOnly: true
+                    volumes:
+                      - name: prometheus-api-bridge-control-ca
+                        configMap:
+                          name: prometheus-api-bridge-control-ca
+                          items:
+                            - {key: ca.crt, path: ca.crt}

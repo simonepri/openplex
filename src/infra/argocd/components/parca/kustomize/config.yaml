@@ -1,0 +1,19 @@
+# Configures ConfigMap supplying the Parca server's object-storage configuration (local filesystem backend), rendered by every `<cluster>-parca` control registration.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: parca
+  namespace: parca
+  labels:
+    app.kubernetes.io/name: parca
+    app.kubernetes.io/instance: parca-server
+    app.kubernetes.io/component: profile-store
+    app.kubernetes.io/managed-by: argocd
+data:
+  parca.yaml: |
+    object_storage:
+      bucket:
+        type: FILESYSTEM
+        config:
+          directory: /var/lib/parca/object-storage

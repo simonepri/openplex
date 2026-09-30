@@ -1,0 +1,111 @@
+# Proves NetworkPolicies enforce intra-namespace connectivity while denying cross-boundary traffic to defend cluster network isolation.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: isolate-cross-team-network-traffic
+  labels:
+    cadence: commit
+    capability: networking
+    mutates: scratch
+spec:
+  # Keep Chainsaw namespace allocation inside this package's fixture boundary.
+  namespace: networking-e2e
+  concurrent: false
+  timeouts:
+    apply: 30s
+    assert: 30s
+    cleanup: 2m
+    delete: 2m
+    exec: 30s
+  steps:
+    - try:
+        - apply:
+            file: fixtures/networking/policy-conformance.test.k8s.yaml
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - pod/allowed-server
+              - pod/allowed-client
+              - --namespace=networking-e2e
+              - --for=condition=Ready
+              - --timeout=45s
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - pod/denied-server
+              - pod/denied-client
+              - --namespace=networking-denied
+              - --for=condition=Ready
+              - --timeout=45s
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=networking-e2e
+              - allowed-client
+              - --
+              - curl
+              - -s
+              - -o
+              - /dev/null
+              - -w
+              - "%{http_code}"
+              - http://allowed-server.networking-e2e.svc:8080
+            check:
+              (trim_space($stdout)): "200"
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=networking-denied
+              - denied-client
+              - --
+              - sh
+              - -ec
+              - >-
+                ! curl --connect-timeout 2 --max-time 3 -s http://allowed-server.networking-e2e.svc:8080
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=networking-e2e
+              - allowed-client
+              - --
+              - sh
+              - -ec
+              - >-
+                ! curl --connect-timeout 2 --max-time 3 -s http://denied-server.networking-denied.svc:8080
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod
+              - allowed-server
+              - allowed-client
+              - --namespace=networking-e2e
+              - --grace-period=0
+              - --force
+              - --ignore-not-found=true
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod
+              - denied-server
+              - denied-client
+              - --namespace=networking-denied
+              - --grace-period=0
+              - --force
+              - --ignore-not-found=true
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - namespace/networking-e2e
+              - namespace/networking-denied
+              - --ignore-not-found=true
+              - --wait=false

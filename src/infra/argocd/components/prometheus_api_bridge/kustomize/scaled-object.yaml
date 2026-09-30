@@ -1,0 +1,45 @@
+# Configures KEDA ScaledObject driving horizontal autoscaling for the Prometheus API bridge query server under heavy PromQL dashboard or autoscaler workloads.
+
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: prometheus-api-bridge
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: prometheus-api-bridge
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: prometheus-api-bridge
+  pollingInterval: 30
+  minReplicaCount: 2
+  maxReplicaCount: 6
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 15
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 120
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-api-bridge.signoz.svc.cluster.local:9090
+        metricName: bridge_http_requests_per_sec
+        query: sum(rate(http_requests_total{job="prometheus-api-bridge"}[2m]))
+        threshold: "150"
+        timeout: "30s"

@@ -1,0 +1,3 @@
+# Provides synthetic dynamic inputs for Bazel's pinned vendor Helm render. Argo CD replaces this cluster name from the destination cluster registration.
+
+clusterName: manifest-checks

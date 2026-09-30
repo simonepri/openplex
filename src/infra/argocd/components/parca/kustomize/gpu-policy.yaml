@@ -1,0 +1,190 @@
+# Enforces parcaGPU is injected into the CUDA process. The Parca Agent observes the resulting USDT probes but cannot lend its process capabilities to a workload.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: governed-parcagpu-injection
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  rules:
+    - name: inject-library-volume
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector: &team-namespace-selector
+                matchLabels:
+                  kueue.x-k8s.io/managed: "true"
+      mutate:
+        foreach:
+          - list: request.object.spec.containers
+            preconditions:
+              all:
+                - key: '{{ element.resources.requests."nvidia.com/gpu" || `0` }}'
+                  operator: GreaterThan
+                  value: 0
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: parcagpu-library
+                    image: >-
+                      ghcr.io/parca-dev/parcagpu:0.3.2@sha256:23ac8c02dcf974b290b48daa274a033db5e9e710b655605e50e90fbd89f37561
+                    imagePullPolicy: IfNotPresent
+                    command: [/bin/sh, -c]
+                    args:
+                      - >-
+                        cp /usr/lib/libparcagpucupti.so /parcagpu/libparcagpucupti.so && chmod 0555 /parcagpu/libparcagpucupti.so
+                    resources:
+                      requests: {cpu: 10m, memory: 8Mi}
+                      limits: {cpu: 100m, memory: 32Mi}
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities: {drop: [ALL]}
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      runAsGroup: 65532
+                      runAsNonRoot: true
+                      runAsUser: 65532
+                      seccompProfile: {type: RuntimeDefault}
+                    volumeMounts:
+                      - name: parcagpu-library
+                        mountPath: /parcagpu
+                volumes:
+                  - name: parcagpu-library
+                    emptyDir: {sizeLimit: 8Mi}
+    - name: inject-gpu-container
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector: *team-namespace-selector
+      mutate:
+        foreach:
+          - list: request.object.spec.containers
+            preconditions:
+              all:
+                - key: '{{ element.resources.requests."nvidia.com/gpu" || `0` }}'
+                  operator: GreaterThan
+                  value: 0
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: '{{ element.name }}'
+                    env:
+                      - name: CUDA_INJECTION64_PATH
+                        value: /opt/parcagpu/libparcagpucupti.so
+                      - name: PARCAGPU_PC_SAMPLING_RATE
+                        value: "100"
+                    volumeMounts:
+                      - name: parcagpu-library
+                        mountPath: /opt/parcagpu
+                        readOnly: true
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-parcagpu-containment
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  variables:
+    - name: gpuContainers
+      expression: >-
+        object.spec.containers.filter(container,
+
+          has(container.resources) &&
+          has(container.resources.requests) &&
+          'nvidia.com/gpu' in container.resources.requests &&
+          quantity(string(container.resources.requests['nvidia.com/gpu'])).isInteger() &&
+          quantity(string(container.resources.requests['nvidia.com/gpu'])).isGreaterThan(
+            quantity('0')))
+    - name: injectedContainers
+      expression: >-
+        object.spec.containers.filter(container,
+
+          has(container.securityContext) &&
+          has(container.securityContext.capabilities) &&
+          has(container.securityContext.capabilities.add) &&
+          container.securityContext.capabilities.add.exists(capability,
+            capability == 'PERFMON'))
+  validations:
+    - expression: >-
+        size(variables.injectedContainers) == 0
+      message: CAP_PERFMON is restricted strictly to Parca profiler DaemonSets and cannot be granted to GPU workloads.
+    - expression: >-
+        variables.gpuContainers.all(container,
+
+          has(container.securityContext) &&
+          has(container.securityContext.allowPrivilegeEscalation) &&
+          !container.securityContext.allowPrivilegeEscalation &&
+          has(container.securityContext.privileged) &&
+          !container.securityContext.privileged &&
+          has(container.securityContext.capabilities) &&
+          has(container.securityContext.capabilities.drop) &&
+          container.securityContext.capabilities.drop == ['ALL'] &&
+          (!has(container.securityContext.capabilities.add) ||
+           size(container.securityContext.capabilities.add) == 0))
+      message: GPU containers must drop ALL capabilities without privilege escalation.
+    - expression: >-
+        variables.gpuContainers.all(container,
+
+          has(container.env) &&
+          container.env.filter(item,
+            item.name == 'CUDA_INJECTION64_PATH' &&
+            has(item.value) &&
+            item.value == '/opt/parcagpu/libparcagpucupti.so').size() == 1 &&
+          container.env.filter(item,
+            item.name == 'PARCAGPU_PC_SAMPLING_RATE' &&
+            has(item.value) &&
+            item.value == '100').size() == 1 &&
+          has(container.volumeMounts) &&
+          container.volumeMounts.filter(mount,
+            mount.name == 'parcagpu-library' &&
+            mount.mountPath == '/opt/parcagpu' &&
+            has(mount.readOnly) && mount.readOnly).size() == 1)
+      message: GPU containers must retain the exact ParcaGPU environment and read-only library mount.
+    - expression: >-
+        size(variables.gpuContainers) == 0 || (has(object.spec.initContainers) &&
+
+          object.spec.initContainers.filter(container,
+            container.name == 'parcagpu-library' &&
+            container.image.matches('^ghcr[.]io/parca-dev/parcagpu:[^@]+@sha256:[0-9a-f]{64}$') &&
+            container.securityContext.runAsNonRoot &&
+            !container.securityContext.privileged &&
+            !container.securityContext.allowPrivilegeEscalation &&
+            container.securityContext.capabilities.drop == ['ALL']).size() == 1 &&
+          has(object.spec.volumes) &&
+          object.spec.volumes.filter(volume,
+            volume.name == 'parcagpu-library' &&
+            has(volume.emptyDir)).size() == 1)
+      message: GPU pods must obtain the pinned ParcaGPU library from the reviewed non-root init container and bounded emptyDir.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-parcagpu-containment
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-parcagpu-containment
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kueue.x-k8s.io/managed: "true"

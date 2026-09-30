@@ -1,0 +1,118 @@
+# Configures base Helm values for OpenCost, applied on every ctrl and cell cluster with the cloud-cost capability; provider files and overlays add the namespace, NetworkPolicy, and cloud-cost bindings.
+
+fullnameOverride: opencost
+pdb: {enabled: true, minAvailable: 1}
+plugins: {enabled: false}
+service:
+  extraPorts: []
+serviceAccount:
+  create: true
+  name: opencost
+  automountServiceAccountToken: true
+podAutomountServiceAccountToken: true
+# Provider billing exports and OpenCost allocation share these stable semantic
+# dimensions; chart-generated app labels retain the service/component detail.
+podLabels:
+  app.kubernetes.io/component: opencost
+  cost-center: shared-infrastructure
+  environment: production
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile: {type: RuntimeDefault}
+rbac: {enabled: true}
+opencost:
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: opencost
+                app.kubernetes.io/name: opencost
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints: []
+  # Fleet defaults are allocation/list-pricing only. The fleet child Application may
+  # inject credential-free JSON and enable Cloud Cost solely when the selected
+  # cluster registration carries opencost-cloud-cost-reader=true.
+  cloudIntegrationJSON: ""
+  cloudIntegrationSecret: "opencost-cloud-integration"
+  cloudCost: {enabled: false}
+  carbonCost: {enabled: false}
+  customPricing: {enabled: false}
+  exporter:
+    replicas: 2
+    collectorDataSource: {enabled: false}
+    defaultClusterId: unconfigured
+    # OpenCost exits fatally when Prometheus is unreachable during startup.
+    # Wait for a successful Prometheus API response without requiring the
+    # freshly started telemetry pipeline to have produced any series yet.
+    command:
+      - /bin/sh
+      - -ec
+      - |-
+        bridge='http://prometheus-api-bridge.signoz.svc.cluster.local:9090/api/v1/query?query=up'
+        until wget -q -T 30 -O - "$bridge" | grep -q '"status":"success"'; do
+          sleep 5
+        done
+        exec /go/bin/app
+    image:
+      registry: ghcr.io
+      repository: opencost/opencost
+      tag: 1.121.3@sha256:4cdd173253e5abba048dfe2cfa968707a5b59d774157d5356940d0d923a6c281
+    extraEnv:
+      CURRENT_CLUSTER_ID_FILTER_ENABLED: "true"
+      PROM_CLUSTER_ID_LABEL: cluster
+      KUBECOST_SCRAPE_INTERVAL: 60s
+      PROMETHEUS_QUERY_TIMEOUT: 30s
+    resources:
+      requests: {cpu: 100m, memory: 128Mi}
+      limits: {cpu: "1", memory: 1Gi}
+    startupProbe:
+      # Keep the pod stable through the bounded 20-minute cold-start window;
+      # the command gate above still fails closed until the bridge is usable.
+      failureThreshold: 240
+      timeoutSeconds: 5
+    livenessProbe:
+      timeoutSeconds: 5
+    readinessProbe:
+      timeoutSeconds: 5
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1000
+    prometheusDataSource: {queryResolutionSeconds: 300}
+  prometheus:
+    external:
+      enabled: true
+      url: http://prometheus-api-bridge.signoz.svc.cluster.local:9090
+    internal:
+      enabled: false
+  ui:
+    enabled: true
+    image:
+      registry: ghcr.io
+      repository: opencost/opencost-ui
+      tag: 1.121.2@sha256:65dca449aef1fd8fdacca5988ffdbdea015663d3f710a4c3f3af30abb3630fe1
+    modelFqdn: "127.0.0.1:9003"
+    # LINT.IfChange(opencost-api-port)
+    uiPort: 9090
+    # LINT.ThenChange(//src/infra/argocd/components/opencost/kustomize/metrics-network-policy.yaml:opencost-api-port)
+    resources:
+      requests: {cpu: 10m, memory: 55Mi}
+      limits: {cpu: 100m, memory: 256Mi}
+    livenessProbe:
+      timeoutSeconds: 5
+    readinessProbe:
+      timeoutSeconds: 5
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      runAsNonRoot: true
+      runAsUser: 1001
+      runAsGroup: 1000

@@ -1,0 +1,117 @@
+# Executes Prometheus queries against the SigNoz query door to defend end-to-end telemetry routing, mutual TLS, and authentication across clusters.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: observability-door-query-probe
+  namespace: otel-system
+  labels:
+    app.kubernetes.io/component: query-conformance
+    app.kubernetes.io/managed-by: chainsaw
+    app.kubernetes.io/name: observability-door-query-probe
+    app.kubernetes.io/part-of: observability
+spec:
+  activeDeadlineSeconds: 90
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 60
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: query-conformance
+        app.kubernetes.io/managed-by: chainsaw
+        app.kubernetes.io/name: observability-door-query-probe
+        app.kubernetes.io/part-of: observability
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 0
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: query
+          image: ($values.pythonImage)
+          command: [python, -c]
+          env:
+            - {name: INSTALLATION_CLUSTER_DOMAIN, value: ($values.clusterDomain)}
+          args:
+            - |-
+              import json
+              import os
+              import pathlib
+              import ssl
+              import urllib.error
+              import urllib.request
+
+              url = (
+                  f"https://observability.{os.environ['INSTALLATION_CLUSTER_DOMAIN']}/api/v1/query"
+                  "?query=up%7Bjob%3D~%22.%2B%22%7D"
+              )
+              context = ssl.create_default_context(cafile="/etc/local-ca/ca.crt")
+
+              def query(headers=None):
+                  request = urllib.request.Request(url, headers=headers or {})
+                  try:
+                      with urllib.request.urlopen(request, context=context, timeout=40) as response:
+                          return response.status, response.read()
+                  except urllib.error.HTTPError as error:
+                      return error.code, error.read()
+
+              denied_status, _ = query()
+              if denied_status != 401:
+                  raise RuntimeError(f"unauthenticated query returned HTTP {denied_status}, expected 401")
+
+              token = pathlib.Path("/etc/observability-door/query-token").read_text().strip()
+              status, body = query({"signoz-api-key": token})
+              if status != 200:
+                  raise RuntimeError(f"authenticated query returned HTTP {status}: {body.decode()}")
+              payload = json.loads(body)
+              results = payload.get("data", {}).get("result", [])
+              if payload.get("status") != "success" or not results:
+                  raise RuntimeError(f"authenticated query returned no live series: {payload}")
+
+              ingest_token = pathlib.Path("/etc/observability-door/ingest-token").read_text().strip()
+              for signal in ("logs", "metrics", "traces"):
+                  ingest_url = url.split("/api/")[0] + "/v1/" + signal
+                  for authorization in (None, "Bearer invalid-probe-token", "Bearer " + ingest_token):
+                      headers = {"Content-Type": "application/json"}
+                      if authorization is not None:
+                          headers["Authorization"] = authorization
+                      request = urllib.request.Request(ingest_url, data=b"{}", headers=headers)
+                      try:
+                          with urllib.request.urlopen(request, context=context, timeout=40) as response:
+                              ingest_status = response.status
+                      except urllib.error.HTTPError as error:
+                          ingest_status = error.code
+                      if authorization == "Bearer " + ingest_token:
+                          if ingest_status != 200:
+                              raise RuntimeError(f"authenticated {signal} ingest returned HTTP {ingest_status}")
+                      elif ingest_status not in (401, 403):
+                          raise RuntimeError(f"unauthorized {signal} ingest returned HTTP {ingest_status}")
+          resources:
+            requests: {cpu: 10m, memory: 24Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: local-ca
+              mountPath: /etc/local-ca
+              readOnly: true
+            - name: query-token
+              mountPath: /etc/observability-door
+              readOnly: true
+      volumes:
+        - name: local-ca
+          configMap:
+            name: cluster-local-ca
+            items: [{key: ca.crt, path: ca.crt}]
+        - name: query-token
+          secret:
+            secretName: observability-door-cell
+            items:
+              - {key: prometheus-api-key, path: query-token}
+              - {key: token, path: ingest-token}

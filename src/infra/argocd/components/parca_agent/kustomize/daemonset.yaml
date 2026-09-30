@@ -1,0 +1,162 @@
+# Deploys DaemonSet running the Parca agent for whole-node continuous eBPF CPU profiling.
+
+# LINT.IfChange(parca-agent-privilege-exception)
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: parca-agent
+  namespace: parca
+  annotations:
+    ignore-check.kube-linter.io/host-pid: >-
+      Whole-node eBPF profiles must resolve host process identities.
+    ignore-check.kube-linter.io/privilege-escalation-container: >-
+      The eBPF attach path requires SYS_ADMIN with escalation on the pinned kernel range; the policy in src/bazel/checks/trivy_source/policy.json classifies the architectural scanner findings.
+    ignore-check.kube-linter.io/privileged-container: >-
+      Privileged mode is the upstream-supported deployment for perf-event and debugfs access on every node.
+    ignore-check.kube-linter.io/run-as-non-root: >-
+      eBPF program loading requires root on the pinned kernel range.
+    ignore-check.kube-linter.io/sensitive-host-mounts: >-
+      Read-only kernel debug and BTF hostPath mounts are how the profiler resolves symbols; no writable host paths are mounted.
+    ignore-check.kube-linter.io/writable-host-mount: >-
+      Parca agent requires writable access to host debugfs, cgroup, bpffs, and run mounts to attach eBPF probes and read runtime tracing data.
+  labels:
+    app.kubernetes.io/name: parca-agent
+    app.kubernetes.io/instance: parca-agent
+    app.kubernetes.io/component: profiler
+    app.kubernetes.io/managed-by: argocd
+spec:
+  minReadySeconds: 10
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: parca-agent
+      app.kubernetes.io/instance: parca-agent
+      app.kubernetes.io/component: profiler
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      annotations:
+        # yamllint disable-line rule:line-length
+        checksum/config: c394938100dbb871c953cf03da431889568d19813426e9f61a5bd04f37664084
+        signoz.io/path: /metrics
+        signoz.io/port: "7071"
+        signoz.io/scrape: "true"
+      labels:
+        app.kubernetes.io/name: parca-agent
+        app.kubernetes.io/instance: parca-agent
+        app.kubernetes.io/component: profiler
+        app.kubernetes.io/managed-by: argocd
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      automountServiceAccountToken: true
+      hostPID: true
+      serviceAccountName: parca-agent
+      priorityClassName: node-agents
+      terminationGracePeriodSeconds: 60
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - operator: Exists
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: parca-agent
+          # NOTE(simonepri): Profiling does not currently capture workload profiles in local containerized
+          # environments like Kind or Minikube because the agent cannot translate PIDs from nested
+          # descendant namespaces. The fixes are merged in the upstream eBPF profiler
+          # (open-telemetry/opentelemetry-ebpf-profiler#1538 and #1801; parca-dev/opentelemetry-ebpf-profiler#341).
+          # TODO(simonepri): Bump parca-agent once a release incorporates these changes and enables PID namespace translation.
+          # yamllint disable-line rule:line-length
+          image: ghcr.io/parca-dev/parca-agent:v0.50.0@sha256:4cf33a2a8d9ce885e5b6c1fb4d1bd28458d0c1db42afdb7894d7c3a9c64a3bcf
+          imagePullPolicy: IfNotPresent
+          command: [/parca-agent]
+          args:
+            - --analytics-opt-out
+            - --config-path=/etc/parca-agent/parca-agent.yaml
+            - --debuginfo-compress
+            - --debuginfo-upload-disable=false
+            - --enable-oom-prof
+            - --enable-oom-prof-allocs
+            - --http-address=:7071
+            - --instrument-cuda-launch=true
+            - --log-format=json
+            - --merge-gpu-profiles
+            - --metadata-external-labels=cluster=__CLUSTER_NAME_REQUIRED__
+            - --node=$(NODE_NAME)
+            - --off-cpu-threshold=0.1
+            - --profiling-enable-error-frames
+            - --remote-store-address=observability.invalid:443
+            - --remote-store-bearer-token-file=/etc/observability-door/token
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - {name: http, containerPort: 7071, protocol: TCP}
+          startupProbe:
+            tcpSocket: {port: http}
+            failureThreshold: 30
+            periodSeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: [SYS_ADMIN, PERFMON]
+              drop: [NET_RAW]
+            privileged: true
+            readOnlyRootFilesystem: true
+            runAsUser: 0
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: run, mountPath: /run}
+            - {name: boot, mountPath: /boot, readOnly: true}
+            - {name: modules, mountPath: /lib/modules, readOnly: true}
+            - {name: debugfs, mountPath: /sys/kernel/debug}
+            - {name: cgroup, mountPath: /sys/fs/cgroup}
+            - {name: bpffs, mountPath: /sys/fs/bpf}
+            - {name: config, mountPath: /etc/parca-agent, readOnly: true}
+            - {name: ingest-token, mountPath: /etc/observability-door, readOnly: true}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 256Mi}
+        - name: run
+          hostPath: {path: /run, type: Directory}
+        - name: boot
+          hostPath: {path: /boot, type: DirectoryOrCreate}
+        - name: modules
+          hostPath: {path: /lib/modules, type: Directory}
+        - name: debugfs
+          hostPath: {path: /sys/kernel/debug, type: Directory}
+        - name: cgroup
+          hostPath: {path: /sys/fs/cgroup, type: Directory}
+        - name: bpffs
+          hostPath: {path: /sys/fs/bpf, type: Directory}
+        - name: config
+          configMap:
+            name: parca-agent
+        - name: ingest-token
+          secret: {secretName: observability-door-parca}
+# LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/policies.yaml:parca-agent-privilege-exception)

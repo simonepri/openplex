@@ -1,0 +1,609 @@
+# KuberhealthyCheck manifests running recurring Chainsaw synthetic smoke and behavioral tests to continuously verify cluster health.
+
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: chainsaw-smoke-cli
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-smoke-cli
+spec:
+  runInterval: 15m
+  timeout: 5m
+  extraAnnotations:
+    automount-service-account-token: "true"
+  extraLabels:
+    app.kubernetes.io/name: chainsaw-smoke-cli
+    kuberhealthy-check-name: chainsaw-smoke-cli
+  podSpec:
+    serviceAccountName: chainsaw-smoke-check
+    restartPolicy: Never
+    automountServiceAccountToken: true
+    securityContext:
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: chainsaw-smoke-cli
+        image: ghcr.io/kyverno/chainsaw:v0.2.15@sha256:527f3be2b9ec0580cb0bc84540a0fee99406b011c24ae3a30953e525af60809d
+        imagePullPolicy: IfNotPresent
+        command:
+          - /scripts/run-chainsaw-smoke-cli.sh
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: scripts
+            mountPath: /scripts
+    volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: scripts
+        configMap:
+          name: chainsaw-smoke-check-scripts
+          defaultMode: 493
+---
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: chainsaw-smoke-dns
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-smoke-dns
+spec:
+  runInterval: 15m
+  timeout: 5m
+  extraAnnotations:
+    automount-service-account-token: "true"
+  extraLabels:
+    app.kubernetes.io/name: chainsaw-smoke-dns
+    kuberhealthy-check-name: chainsaw-smoke-dns
+  podSpec:
+    serviceAccountName: chainsaw-smoke-check
+    restartPolicy: Never
+    automountServiceAccountToken: true
+    securityContext:
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: chainsaw-smoke-dns
+        image: ghcr.io/kyverno/chainsaw:v0.2.15@sha256:527f3be2b9ec0580cb0bc84540a0fee99406b011c24ae3a30953e525af60809d
+        imagePullPolicy: IfNotPresent
+        command:
+          - /scripts/run-chainsaw-smoke-dns.sh
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: scripts
+            mountPath: /scripts
+    volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: scripts
+        configMap:
+          name: chainsaw-smoke-check-scripts
+          defaultMode: 493
+---
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: chainsaw-smoke-apiserver
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-smoke-apiserver
+spec:
+  runInterval: 15m
+  timeout: 5m
+  extraAnnotations:
+    automount-service-account-token: "true"
+  extraLabels:
+    app.kubernetes.io/name: chainsaw-smoke-apiserver
+    kuberhealthy-check-name: chainsaw-smoke-apiserver
+  podSpec:
+    serviceAccountName: chainsaw-smoke-check
+    restartPolicy: Never
+    automountServiceAccountToken: true
+    securityContext:
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: chainsaw-smoke-apiserver
+        image: ghcr.io/kyverno/chainsaw:v0.2.15@sha256:527f3be2b9ec0580cb0bc84540a0fee99406b011c24ae3a30953e525af60809d
+        imagePullPolicy: IfNotPresent
+        command:
+          - /scripts/run-chainsaw-smoke-apiserver.sh
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: scripts
+            mountPath: /scripts
+    volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: scripts
+        configMap:
+          name: chainsaw-smoke-check-scripts
+          defaultMode: 493
+---
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: chainsaw-identity
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-identity
+spec:
+  runInterval: 15m
+  timeout: 5m
+  extraAnnotations:
+    automount-service-account-token: "true"
+  extraLabels:
+    app.kubernetes.io/name: chainsaw-identity
+    kuberhealthy-check-name: chainsaw-identity
+  podSpec:
+    serviceAccountName: chainsaw-identity
+    restartPolicy: Never
+    automountServiceAccountToken: true
+    securityContext:
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: chainsaw-identity
+        image: ghcr.io/kyverno/chainsaw:v0.2.15@sha256:527f3be2b9ec0580cb0bc84540a0fee99406b011c24ae3a30953e525af60809d
+        imagePullPolicy: IfNotPresent
+        command:
+          - /scripts/run-chainsaw-check.sh
+          - chainsaw-identity
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: scripts
+            mountPath: /scripts
+          - name: tests
+            mountPath: /tests
+    volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: scripts
+        configMap:
+          name: chainsaw-scripts
+          defaultMode: 493
+      - name: tests
+        configMap:
+          name: chainsaw-identity-tests
+          items:
+            - key: chainsaw-test.yaml
+              path: chainsaw-test.yaml
+            - key: values.yaml
+              path: values.yaml
+            - key: kustomization.yaml
+              path: fixtures/identity/kustomization.yaml
+            - key: local-login.test.k8s.yaml
+              path: fixtures/identity/local-login.test.k8s.yaml
+            - key: login.py
+              path: fixtures/identity/login.py
+---
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: chainsaw-scheduling
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-scheduling
+spec:
+  runInterval: 15m
+  timeout: 5m
+  extraAnnotations:
+    automount-service-account-token: "true"
+  extraLabels:
+    app.kubernetes.io/name: chainsaw-scheduling
+    kuberhealthy-check-name: chainsaw-scheduling
+  podSpec:
+    serviceAccountName: chainsaw-scheduling
+    restartPolicy: Never
+    automountServiceAccountToken: true
+    securityContext:
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: chainsaw-scheduling
+        image: ghcr.io/kyverno/chainsaw:v0.2.15@sha256:527f3be2b9ec0580cb0bc84540a0fee99406b011c24ae3a30953e525af60809d
+        imagePullPolicy: IfNotPresent
+        command:
+          - /scripts/run-chainsaw-check.sh
+          - chainsaw-scheduling
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: scripts
+            mountPath: /scripts
+          - name: tests
+            mountPath: /tests
+    volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: scripts
+        configMap:
+          name: chainsaw-scripts
+          defaultMode: 493
+      - name: tests
+        configMap:
+          name: chainsaw-scheduling-tests
+          items:
+            - key: chainsaw-test.yaml
+              path: chainsaw-test.yaml
+            - key: values.yaml
+              path: values.yaml
+            - key: conformance-probe-job.test.k8s.yaml
+              path: fixtures/scheduling/conformance-probe-job.test.k8s.yaml
+            - key: conformance-probe-queue.test.k8s.yaml
+              path: fixtures/scheduling/conformance-probe-queue.test.k8s.yaml
+---
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: chainsaw-networking
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-networking
+spec:
+  runInterval: 15m
+  timeout: 5m
+  extraAnnotations:
+    automount-service-account-token: "true"
+  extraLabels:
+    app.kubernetes.io/name: chainsaw-networking
+    kuberhealthy-check-name: chainsaw-networking
+  podSpec:
+    serviceAccountName: chainsaw-networking
+    restartPolicy: Never
+    automountServiceAccountToken: true
+    securityContext:
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: chainsaw-networking
+        image: ghcr.io/kyverno/chainsaw:v0.2.15@sha256:527f3be2b9ec0580cb0bc84540a0fee99406b011c24ae3a30953e525af60809d
+        imagePullPolicy: IfNotPresent
+        command:
+          - /scripts/run-chainsaw-check.sh
+          - chainsaw-networking
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: scripts
+            mountPath: /scripts
+          - name: tests
+            mountPath: /tests
+    volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: scripts
+        configMap:
+          name: chainsaw-scripts
+          defaultMode: 493
+      - name: tests
+        configMap:
+          name: chainsaw-networking-tests
+          items:
+            - key: chainsaw-test.yaml
+              path: chainsaw-test.yaml
+            - key: values.yaml
+              path: values.yaml
+            - key: policy-conformance.test.k8s.yaml
+              path: fixtures/networking/policy-conformance.test.k8s.yaml
+---
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: chainsaw-secrets
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-secrets
+spec:
+  runInterval: 15m
+  timeout: 5m
+  extraAnnotations:
+    automount-service-account-token: "true"
+  extraLabels:
+    app.kubernetes.io/name: chainsaw-secrets
+    kuberhealthy-check-name: chainsaw-secrets
+  podSpec:
+    serviceAccountName: chainsaw-secrets
+    restartPolicy: Never
+    automountServiceAccountToken: true
+    securityContext:
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: chainsaw-secrets
+        image: ghcr.io/kyverno/chainsaw:v0.2.15@sha256:527f3be2b9ec0580cb0bc84540a0fee99406b011c24ae3a30953e525af60809d
+        imagePullPolicy: IfNotPresent
+        command:
+          - /scripts/run-chainsaw-check.sh
+          - chainsaw-secrets
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: scripts
+            mountPath: /scripts
+          - name: tests
+            mountPath: /tests
+    volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: scripts
+        configMap:
+          name: chainsaw-scripts
+          defaultMode: 493
+      - name: tests
+        configMap:
+          name: chainsaw-secrets-tests
+          items:
+            - key: chainsaw-test.yaml
+              path: chainsaw-test.yaml
+            - key: values.yaml
+              path: values.yaml
+            - key: chainsaw-consumer.test.k8s.yaml
+              path: fixtures/secrets/chainsaw-consumer.test.k8s.yaml
+            - key: chainsaw-fixture.test.k8s.yaml
+              path: fixtures/secrets/chainsaw-fixture.test.k8s.yaml
+---
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: chainsaw-storage
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-storage
+spec:
+  runInterval: 15m
+  timeout: 5m
+  extraAnnotations:
+    automount-service-account-token: "true"
+  extraLabels:
+    app.kubernetes.io/name: chainsaw-storage
+    kuberhealthy-check-name: chainsaw-storage
+  podSpec:
+    serviceAccountName: chainsaw-storage
+    restartPolicy: Never
+    automountServiceAccountToken: true
+    securityContext:
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: chainsaw-storage
+        image: ghcr.io/kyverno/chainsaw:v0.2.15@sha256:527f3be2b9ec0580cb0bc84540a0fee99406b011c24ae3a30953e525af60809d
+        imagePullPolicy: IfNotPresent
+        command:
+          - /scripts/run-chainsaw-check.sh
+          - chainsaw-storage
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: scripts
+            mountPath: /scripts
+          - name: tests
+            mountPath: /tests
+    volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: scripts
+        configMap:
+          name: chainsaw-scripts
+          defaultMode: 493
+      - name: tests
+        configMap:
+          name: chainsaw-storage-tests
+          items:
+            - key: chainsaw-test.yaml
+              path: chainsaw-test.yaml
+            - key: values.yaml
+              path: values.yaml
+            - key: gateway-name-resolution-probe.test.k8s.yaml
+              path: fixtures/storage/gateway-name-resolution-probe.test.k8s.yaml
+---
+apiVersion: comcast.github.io/v1
+kind: KuberhealthyCheck
+metadata:
+  name: chainsaw-observability
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-observability
+spec:
+  runInterval: 15m
+  timeout: 5m
+  extraAnnotations:
+    automount-service-account-token: "true"
+  extraLabels:
+    app.kubernetes.io/name: chainsaw-observability
+    kuberhealthy-check-name: chainsaw-observability
+  podSpec:
+    serviceAccountName: chainsaw-observability
+    restartPolicy: Never
+    automountServiceAccountToken: true
+    securityContext:
+      runAsGroup: 65532
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: chainsaw-observability
+        image: ghcr.io/kyverno/chainsaw:v0.2.15@sha256:527f3be2b9ec0580cb0bc84540a0fee99406b011c24ae3a30953e525af60809d
+        imagePullPolicy: IfNotPresent
+        command:
+          - /scripts/run-chainsaw-check.sh
+          - chainsaw-observability
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: scripts
+            mountPath: /scripts
+          - name: tests
+            mountPath: /tests
+    volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 64Mi
+      - name: scripts
+        configMap:
+          name: chainsaw-scripts
+          defaultMode: 493
+      - name: tests
+        configMap:
+          name: chainsaw-observability-tests
+          items:
+            - key: chainsaw-test.yaml
+              path: chainsaw-test.yaml
+            - key: values.yaml
+              path: values.yaml
+            - key: door-query.test.k8s.yaml
+              path: fixtures/observability/door-query.test.k8s.yaml

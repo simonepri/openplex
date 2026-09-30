@@ -1,0 +1,10 @@
+# Declares shared container image digests and test fixture parameters to defend Chainsaw test suites against unpinned dependencies and registry drift.
+
+# keep-sorted start
+# nosemgrep: repository.architecture.no-hardcoded-component-domains, repository.architecture.no-hardcoded-local-domains-in-base-values
+clusterDomain: c.corp.local.internal
+# nosemgrep: repository.lint.forbidden-domain-patterns
+publicDomain: local.internal
+pythonImage: >-
+  docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df
+# keep-sorted end

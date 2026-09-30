@@ -1,0 +1,46 @@
+# Completes upstream Kuberhealthy Pod Security profile at admission by dropping ALL capabilities to comply with restricted Pod Security Standards.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: kuberhealthy-pod-security-defaults
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberhealthy-pod-security-defaults
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: drop-container-capabilities
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [kuberhealthy]
+              operations: [CREATE, UPDATE]
+      mutate:
+        foreach:
+          - list: request.object.spec.containers
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: '{{ element.name }}'
+                    securityContext:
+                      capabilities:
+                        drop: [ALL]
+          - list: request.object.spec.initContainers || `[]`
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: '{{ element.name }}'
+                    securityContext:
+                      capabilities:
+                        drop: [ALL]
