@@ -1,0 +1,207 @@
+// Visualizes GitOps reconciliation loops, repositories, and cluster targets.
+
+digraph gitops {
+  rankdir=LR; compound=true; newrank=true;
+  graph [fontname="Helvetica", nodesep=0.25, ranksep=0.45];
+  node  [fontname="Helvetica"];
+  edge  [fontname="Helvetica", fontsize=9, color="#8A8A9A", arrowsize=0.7, penwidth=1.4];
+
+  // =============================================================
+  // SECTION 1: INITIAL DEPLOYMENT (DAY 1)
+  // =============================================================
+  subgraph cluster_day1 {
+    label="Initial Deployment (Day 1 Bootstrap & Reconcile)";
+    style="rounded"; color="#8A8A9A"; penwidth=1.2; fontsize=13; fontcolor="#3A3A4A";
+
+    subgraph cluster_tier1 {
+      label="Step 1 · Upstream Sources & Bootstrap (apps/)";
+      style="filled,rounded"; fillcolor="#F5EFFF"; color="#6E40C9"; fontsize=11; fontcolor="#4B3E8E";
+
+      subgraph { rank=same; "opentofu"; "github"; }
+      "opentofu" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/opentofu.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8">OpenTofu<BR/><B>argo_bootstrap</B></FONT></TD></TR></TABLE>>];
+      "github" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/github.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8">Git Repository<BR/><B>Platform Manifests</B></FONT></TD></TR></TABLE>>];
+
+      subgraph { rank=same; "fleet_root"; }
+      "fleet_root" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#6E40C9" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/argocd.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8"><B>fleet-root</B><BR/>Application (apps/)</FONT></TD></TR></TABLE>>];
+    }
+
+    subgraph cluster_tier2 {
+      label="Step 2 · Fleet ApplicationSets & Multi-Cluster Dispatch (fleet/)";
+      style="filled,rounded"; fillcolor="#EDE8DF"; color="#8A5A2B"; fontsize=11; fontcolor="#8A5A2B";
+
+      subgraph { rank=same; "clusters_yaml"; }
+      "clusters_yaml" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#8A5A2B" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/kubernetes.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8"><B>clusters.yaml</B><BR/>Fleet Registry</FONT></TD></TR></TABLE>>];
+
+      subgraph { rank=same; "cell_apps"; "ctrl_apps"; }
+      "ctrl_apps" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#4B3E8E" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#EFECF9" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/argocd.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8"><B>ctrl-apps</B><BR/>Wave 10</FONT></TD></TR></TABLE>>];
+      "cell_apps" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#8A5A2B" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#EDE8DF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/argocd.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8"><B>cell-apps</B><BR/>Wave 20</FONT></TD></TR></TABLE>>];
+
+      subgraph cluster_destinations {
+        label="Enrolled Cluster Fleet";
+        style="filled,rounded"; fillcolor="#FDFBF4"; color="#C9BFA6"; fontsize=10; fontcolor="#5A5A6A";
+        subgraph { rank=same; "dest_cells"; "dest_ctrl"; }
+        "dest_ctrl" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#4B3E8E" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#EFECF9" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/kubernetes.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8">Control Cluster<BR/><B>ctrl-&lt;cloud&gt;</B></FONT></TD></TR></TABLE>>];
+        "dest_cells" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#8A5A2B" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#EDE8DF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/kubernetes.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8">Cell Clusters (1..N)<BR/><B>cell-&lt;cloud&gt;</B></FONT></TD></TR></TABLE>>];
+      }
+    }
+
+    subgraph cluster_tier3 {
+      label="Step 3 · In-Cluster Atomic Components & 5-Tier Sync Wave Contract (components/)";
+      style="filled,rounded"; fillcolor="#F4F4F8"; color="#4A4A5A"; fontsize=11; fontcolor="#202030";
+
+      // -------------------------------------------------------------
+      // LANE 2: CELL CLUSTERS (cell 1..N)
+      // -------------------------------------------------------------
+      subgraph cluster_cell_track {
+        label="Cell Clusters (cell 1..N) · Elastic Compute, Caches & Team Workloads";
+        style="filled,rounded"; fillcolor="#FBF8F5"; color="#8A5A2B"; penwidth=1.3; fontsize=10; fontcolor="#8A5A2B";
+
+        subgraph cluster_cell_w0 {
+          label="Wave 0: Scaffolding";
+          style="filled,rounded"; fillcolor="#FFFFFF"; color="#8A8A9A"; fontsize=9; fontcolor="#4A4A5A";
+          subgraph { rank=same; "k_w0_contracts"; "k_w0_extsecrets"; "k_w0_namespaces"; }
+          "k_w0_contracts" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/generic-block.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7">CRDs &amp; API<BR/>Contracts</FONT></TD></TR></TABLE>>];
+          "k_w0_extsecrets" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/external-secrets.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7">External<BR/>Secrets</FONT></TD></TR></TABLE>>];
+          "k_w0_namespaces" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/kubernetes.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7">Namespaces<BR/>&amp; RBAC</FONT></TD></TR></TABLE>>];
+        }
+
+        subgraph cluster_cell_w1 {
+          label="Wave 1: Admission";
+          style="filled,rounded"; fillcolor="#FEF8ED"; color="#B26B00"; fontsize=9; fontcolor="#7A4800";
+          subgraph { rank=same; "k_w1_certmanager"; "k_w1_kyverno"; }
+          "k_w1_certmanager" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#B26B00" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/cert-manager.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>cert-manager</B><BR/>Local Trust</FONT></TD></TR></TABLE>>];
+          "k_w1_kyverno" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#B26B00" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/kyverno.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Kyverno</B><BR/>Admission</FONT></TD></TR></TABLE>>];
+        }
+
+        subgraph cluster_cell_w2 {
+          label="Wave 2: Autoscaling & Ingress";
+          style="filled,rounded"; fillcolor="#F0F6FB"; color="#2E6DA4"; fontsize=9; fontcolor="#1B4D75";
+          subgraph { rank=same; "k_w2_karpenter"; "k_w2_gateway"; }
+          "k_w2_karpenter" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#2E6DA4" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/karpenter.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Karpenter</B><BR/>Autoscaler</FONT></TD></TR></TABLE>>];
+          "k_w2_gateway" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#2E6DA4" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/envoy.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Envoy Gateway</B><BR/>Ingress</FONT></TD></TR></TABLE>>];
+        }
+
+        subgraph cluster_cell_w3 {
+          label="Wave 3: Caching & Transport";
+          style="filled,rounded"; fillcolor="#F0F8F0"; color="#3C763D"; fontsize=9; fontcolor="#245524";
+          subgraph { rank=same; "k_w3_dragonfly"; "k_w3_tailscale"; }
+          "k_w3_dragonfly" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#3C763D" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/dragonfly.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Dragonfly</B><BR/>P2P Peer Agent</FONT></TD></TR></TABLE>>];
+          "k_w3_tailscale" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#3C763D" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/tailscale.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Tailscale</B><BR/>Access Router</FONT></TD></TR></TABLE>>];
+        }
+
+        subgraph cluster_cell_w4 {
+          label="Wave 4: Compute Runtimes & Jobs";
+          style="filled,rounded"; fillcolor="#FDF2F0"; color="#A94442"; fontsize=9; fontcolor="#7A2826";
+          subgraph { rank=same; "k_w4_kueue"; "k_w4_ray"; }
+          subgraph { rank=same; "k_w4_parca"; "k_w4_workloads"; }
+          "k_w4_kueue" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/kueue.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Kueue</B><BR/>Batch Quotas</FONT></TD></TR></TABLE>>];
+          "k_w4_ray" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/ray.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>KubeRay</B><BR/>Compute Clusters</FONT></TD></TR></TABLE>>];
+          "k_w4_parca" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/parca.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Parca</B><BR/>eBPF Agent</FONT></TD></TR></TABLE>>];
+          "k_w4_workloads" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/kubernetes.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Team Jobs</B><BR/>Ray Runs &amp; Pods</FONT></TD></TR></TABLE>>];
+          "k_w4_kueue" -> "k_w4_parca" [style=invis];
+        }
+
+        "k_w0_contracts" -> "k_w1_certmanager" [ltail=cluster_cell_w0, lhead=cluster_cell_w1, label="CRDs ready", color="#B26B00", penwidth=1.4];
+        "k_w1_kyverno" -> "k_w2_karpenter" [ltail=cluster_cell_w1, lhead=cluster_cell_w2, label="admission ready", color="#2E6DA4", penwidth=1.4];
+        "k_w2_karpenter" -> "k_w3_dragonfly" [ltail=cluster_cell_w2, lhead=cluster_cell_w3, label="ingress ready", color="#3C763D", penwidth=1.4];
+        "k_w3_dragonfly" -> "k_w4_kueue" [ltail=cluster_cell_w3, lhead=cluster_cell_w4, label="transport ready", color="#A94442", penwidth=1.4];
+      }
+      // -------------------------------------------------------------
+      // LANE 1: CONTROL CLUSTER (ctrl)
+      // -------------------------------------------------------------
+      subgraph cluster_ctrl_track {
+        label="Control Cluster (ctrl) · Management Hub, Storage & Governance";
+        style="filled,rounded"; fillcolor="#F8F6FD"; color="#4B3E8E"; penwidth=1.3; fontsize=10; fontcolor="#4B3E8E";
+
+        subgraph cluster_ctrl_w0 {
+          label="Wave 0: Scaffolding";
+          style="filled,rounded"; fillcolor="#FFFFFF"; color="#8A8A9A"; fontsize=9; fontcolor="#4A4A5A";
+          subgraph { rank=same; "c_w0_contracts"; "c_w0_extsecrets"; "c_w0_namespaces"; }
+          "c_w0_contracts" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/generic-block.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7">CRDs &amp; API<BR/>Contracts</FONT></TD></TR></TABLE>>];
+          "c_w0_extsecrets" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/external-secrets.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7">External<BR/>Secrets</FONT></TD></TR></TABLE>>];
+          "c_w0_namespaces" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/kubernetes.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7">Namespaces<BR/>&amp; RBAC</FONT></TD></TR></TABLE>>];
+        }
+
+        subgraph cluster_ctrl_w1 {
+          label="Wave 1: Admission";
+          style="filled,rounded"; fillcolor="#FEF8ED"; color="#B26B00"; fontsize=9; fontcolor="#7A4800";
+          subgraph { rank=same; "c_w1_certmanager"; "c_w1_kyverno"; }
+          "c_w1_certmanager" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#B26B00" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/cert-manager.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>cert-manager</B><BR/>Trust &amp; CAs</FONT></TD></TR></TABLE>>];
+          "c_w1_kyverno" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#B26B00" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/kyverno.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Kyverno</B><BR/>Admission</FONT></TD></TR></TABLE>>];
+        }
+
+        subgraph cluster_ctrl_w2 {
+          label="Wave 2: Operators";
+          style="filled,rounded"; fillcolor="#F0F6FB"; color="#2E6DA4"; fontsize=9; fontcolor="#1B4D75";
+          subgraph { rank=same; "c_w2_gateway"; "c_w2_cnpg"; "c_w2_clickhouse_op"; }
+          "c_w2_gateway" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#2E6DA4" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/envoy.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Envoy Gateway</B><BR/>Ingress</FONT></TD></TR></TABLE>>];
+          "c_w2_cnpg" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#2E6DA4" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/cloudnativepg.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>CloudNativePG</B><BR/>Operator</FONT></TD></TR></TABLE>>];
+          "c_w2_clickhouse_op" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#2E6DA4" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/clickhouse.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>ClickHouse</B><BR/>Operator</FONT></TD></TR></TABLE>>];
+        }
+
+        subgraph cluster_ctrl_w3 {
+          label="Wave 3: Platform Stores & Services";
+          style="filled,rounded"; fillcolor="#F0F8F0"; color="#3C763D"; fontsize=9; fontcolor="#245524";
+          subgraph { rank=same; "c_w3_postgres"; "c_w3_clickhouse"; "c_w3_signoz"; }
+          subgraph { rank=same; "c_w3_dex"; "c_w3_coder"; "c_w3_headscale"; }
+          "c_w3_postgres" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#3C763D" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/postgresql.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>PostgreSQL</B><BR/>Clusters</FONT></TD></TR></TABLE>>];
+          "c_w3_clickhouse" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#3C763D" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/clickhouse.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>ClickHouse</B><BR/>Clusters</FONT></TD></TR></TABLE>>];
+          "c_w3_signoz" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#3C763D" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/signoz.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>SigNoz</B><BR/>APM &amp; Logs</FONT></TD></TR></TABLE>>];
+          "c_w3_dex" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#3C763D" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/dex.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Dex</B><BR/>OIDC IdP</FONT></TD></TR></TABLE>>];
+          "c_w3_coder" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#3C763D" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/coder.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Coder</B><BR/>Workspaces</FONT></TD></TR></TABLE>>];
+          "c_w3_headscale" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#3C763D" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/headscale.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Headscale</B><BR/>Tailnet Hub</FONT></TD></TR></TABLE>>];
+          "c_w3_postgres" -> "c_w3_dex" [style=invis];
+        }
+
+        subgraph cluster_ctrl_w4 {
+          label="Wave 4: Security & Profiling";
+          style="filled,rounded"; fillcolor="#FDF2F0"; color="#A94442"; fontsize=9; fontcolor="#7A2826";
+          subgraph { rank=same; "c_w4_trivy"; "c_w4_kubescape"; "c_w4_parca"; }
+          "c_w4_trivy" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/trivy.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Trivy</B><BR/>Scanner</FONT></TD></TR></TABLE>>];
+          "c_w4_kubescape" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/kubescape.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Kubescape</B><BR/>Posture</FONT></TD></TR></TABLE>>];
+          "c_w4_parca" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/parca.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Parca</B><BR/>Server</FONT></TD></TR></TABLE>>];
+        }
+
+        "c_w0_contracts" -> "c_w1_certmanager" [ltail=cluster_ctrl_w0, lhead=cluster_ctrl_w1, label="CRDs ready", color="#B26B00", penwidth=1.4];
+        "c_w1_kyverno" -> "c_w2_gateway" [ltail=cluster_ctrl_w1, lhead=cluster_ctrl_w2, label="admission ready", color="#2E6DA4", penwidth=1.4];
+        "c_w2_cnpg" -> "c_w3_postgres" [ltail=cluster_ctrl_w2, lhead=cluster_ctrl_w3, label="operators ready", color="#3C763D", penwidth=1.4];
+        "c_w3_coder" -> "c_w4_trivy" [ltail=cluster_ctrl_w3, lhead=cluster_ctrl_w4, label="stores ready", color="#A94442", penwidth=1.4];
+      }
+
+    }
+  }
+
+  // =============================================================
+  // SECTION 2: DAY 2 OPERATIONS (Continuous Promotion & Releases)
+  // =============================================================
+  subgraph cluster_day2 {
+    label="Day 2 Operations (Continuous Promotion & Releases)";
+    style="filled,rounded,dashed"; fillcolor="#FDFBF4"; color="#6E40C9"; penwidth=1.6; fontsize=12; fontcolor="#4B3E8E";
+
+    "day2_git" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/github.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8">Git Repository<BR/><B>Workload Source</B></FONT></TD></TR></TABLE>>];
+    "day2_ecr" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#C9BFA6" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#FDFBF4" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/generic-registry.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8">Container Registry<BR/><B>ECR / OCI</B></FONT></TD></TR></TABLE>>];
+    "kargo" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#6E40C9" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="36" HEIGHT="36"><IMG SRC="src/infra/docs/assets/icons/kargo.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="8"><B>Kargo</B><BR/>Git Promotion</FONT></TD></TR></TABLE>>];
+
+    "day2_git" -> "day2_ecr" [label="1. CI publishes image", color="#6E40C9", fontcolor="#6E40C9", penwidth=1.5];
+    "day2_ecr" -> "kargo" [label="2. watches digest", color="#6E40C9", fontcolor="#6E40C9", penwidth=1.5];
+  }
+
+  // Initial bootstrap flow
+  "opentofu" -> "fleet_root" [label="1. provisions & bootstraps", color="#6E40C9", fontcolor="#6E40C9", penwidth=1.6];
+  "github" -> "fleet_root" [label="2. tracks HEAD", color="#8A8A9A"];
+
+  // Fleet dispatch flow
+  "fleet_root" -> "ctrl_apps" [label="3. deploys root apps", color="#4B3E8E", penwidth=1.5];
+  "fleet_root" -> "cell_apps" [label="3. deploys cell apps", color="#8A5A2B", penwidth=1.5];
+  "clusters_yaml" -> "cell_apps" [label="matrix generator", color="#8A5A2B", style="dashed"];
+  "ctrl_apps" -> "dest_ctrl" [label="syncs control", color="#4B3E8E"];
+  "cell_apps" -> "dest_cells" [label="dispatches cells", color="#8A5A2B"];
+
+  // Reconciles waves
+  "dest_ctrl" -> "c_w0_namespaces" [lhead=cluster_ctrl_track, label="4. Wave 10: reconciles ctrl", color="#4B3E8E", penwidth=1.6];
+  "dest_cells" -> "k_w0_namespaces" [lhead=cluster_cell_track, label="4. Wave 20: reconciles cells", color="#8A5A2B", penwidth=1.6, style="dashed"];
+
+  // Wave 4 to Day 2 transition
+  "k_w4_workloads" -> "day2_git" [ltail=cluster_day1, label="Day 2: cluster active", color="#6E40C9", penwidth=1.5];
+  "kargo" -> "github" [label="promotes release commits to Git", color="#6E40C9", style="dashed", penwidth=1.5];
+}
