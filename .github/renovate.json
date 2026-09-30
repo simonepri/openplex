@@ -1,0 +1,384 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":dependencyDashboard", "group:monorepos", "group:recommended"],
+  "labels": ["dependencies"],
+  "rangeStrategy": "pin",
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": null,
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "from {{#if currentValue}}{{currentValue}}{{else}}{{currentDigestShort}}{{/if}} to {{#if newValue}}{{newValue}}{{else}}{{newDigestShort}}{{/if}}",
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Upstream Dependency Dashboard",
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "schedule": ["before 6am on Monday"],
+  "pip_requirements": {
+    "enabled": false
+  },
+  "kubernetes": {
+    "fileMatch": ["^src/infra/argocd/components/.+\\.ya?ml$", "^src/examples/.+\\.k8s\\.ya?ml$"]
+  },
+  "argocd": {
+    "fileMatch": ["^src/infra/argocd/.*\\.ya?ml$"]
+  },
+  "bazel-module": {
+    "fileMatch": ["(^|/)MODULE\\.bazel$"]
+  },
+  "terraform": {
+    "fileMatch": ["(^|/)\\.tf$", "(^|/)\\.tofu$"]
+  },
+  "helm-values": {
+    "fileMatch": ["(^|/)values.*\\.ya?ml$"]
+  },
+  "mise": {
+    "fileMatch": ["(^|/)mise\\.toml$", "(^|/)workspace-mise\\.toml$"]
+  },
+  "customManagers": [
+    {
+      "description": "Update the pinned local Git HTTP server package.",
+      "customType": "regex",
+      "fileMatch": ["^src/infra/tools/cloud_emulator/runtime\\.py$"],
+      "matchStrings": ["busybox-extras=(?<currentValue>[0-9][^\\s]+)"],
+      "datasourceTemplate": "repology",
+      "depNameTemplate": "alpine_3_22/busybox-extras",
+      "versioningTemplate": "loose"
+    },
+    {
+      "description": "Update stack and in-cluster image tags and digests atomically.",
+      "customType": "regex",
+      "fileMatch": ["^src/infra/argocd/components/.+\\.ya?ml$"],
+      "matchStrings": [
+        "[A-Za-z][A-Za-z0-9_-]*:\\s*[\"'](?<depName>(?:[a-z0-9.-]+(?::[0-9]+)?/)?[a-z0-9_.-]+(?:/[a-z0-9_.-]+)*):(?<currentValue>[^\"'@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']\\s*#\\s*renovate:\\s*datasource=docker(?:\\s+packageName=\\S+)?"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "description": "Update stack and in-cluster mutable image tags without treating the repository as the version.",
+      "customType": "regex",
+      "fileMatch": ["^src/infra/argocd/components/.+\\.ya?ml$"],
+      "matchStrings": [
+        "[A-Za-z][A-Za-z0-9_-]*:\\s*[\"'](?<depName>(?:[a-z0-9.-]+(?::[0-9]+)?/)?[a-z0-9_.-]+(?:/[a-z0-9_.-]+)*):(?<currentValue>[^\"'@\\s]+)[\"']\\s*#\\s*renovate:\\s*datasource=docker(?:\\s+packageName=\\S+)?"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "description": "Update annotated stack and in-cluster chart pins, including adjacent image digests.",
+      "customType": "regex",
+      "fileMatch": ["^src/infra/argocd/components/.+\\.ya?ml$"],
+      "matchStrings": [
+        "[A-Za-z][A-Za-z0-9_-]*:\\s*[\"']?(?<currentValue>[^:\\s#@\"']+)[\"']?\\s*#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+packageName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?(?:\\s+extractVersion=(?<extractVersion>\\S+))?(?:\\r?\\n\\s+[A-Za-z][A-Za-z0-9_-]*Digest:\\s*[\"']?(?<currentDigest>sha256:[a-f0-9]{64})[\"']?)?"
+      ]
+    },
+    {
+      "description": "Update Helm charts in Argo CD ApplicationSets (HTTPS repositories)",
+      "customType": "regex",
+      "fileMatch": ["^src/infra/argocd/apps/.*\\.ya?ml$"],
+      "matchStrings": [
+        "chart:\\s*(?<depName>[^\\s]+)\\s*\\r?\\n\\s*chartRepo:\\s*(?<registryUrl>https?://[^\\s]+)\\s*\\r?\\n\\s*chartVersion:\\s*[\"']?(?<currentValue>[^'\"\\s]+)[\"']?"
+      ],
+      "datasourceTemplate": "helm"
+    },
+    {
+      "description": "Update Helm charts in Argo CD ApplicationSets (OCI registries)",
+      "customType": "regex",
+      "fileMatch": ["^src/infra/argocd/apps/.*\\.ya?ml$"],
+      "matchStrings": [
+        "chart:\\s*(?<depName>[^\\s]+)\\s*\\r?\\n\\s*chartRepo:\\s*(?<ociHost>(?:quay\\.io|ghcr\\.io|registry-1\\.docker\\.io)/[^\\s]+)\\s*\\r?\\n\\s*chartVersion:\\s*[\"']?(?<currentValue>[^'\"\\s]+)[\"']?"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "{{{ociHost}}}/{{{depName}}}"
+    },
+    {
+      "description": "Update npm tools in mise configuration files",
+      "customType": "regex",
+      "fileMatch": ["(^|/)mise\\.toml$", "(^|/)workspace-mise\\.toml$"],
+      "matchStrings": [
+        "\"npm:(?<depName>[^\"]+)\"\\s*=\\s*\\{\\s*version\\s*=\\s*\"(?<currentValue>[^\"]+)\"",
+        "\"npm:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "npm"
+    },
+    {
+      "description": "Update github tools in mise configuration files",
+      "customType": "regex",
+      "fileMatch": ["(^|/)mise\\.toml$", "(^|/)workspace-mise\\.toml$"],
+      "matchStrings": [
+        "\"github:(?<depName>[^\"/]+/[^\"/]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "description": "Update Kyverno controller images in values.yaml",
+      "customType": "regex",
+      "fileMatch": ["^src/infra/argocd/components/kyverno/helm/values\\.ya?ml$"],
+      "matchStrings": [
+        "admissionController:[\\s\\S]*?container:[\\s\\S]*?tag:\\s*(?<currentValue>v[0-9.]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "ghcr.io/kyverno/kyverno",
+      "versioningTemplate": "docker"
+    },
+    {
+      "description": "Update Bazel vendored Helm charts from HTTPS repositories",
+      "customType": "regex",
+      "fileMatch": ["^src/bazel/module_deps/vendor_helm_charts\\.MODULE\\.bazel$"],
+      "matchStrings": [
+        "vendor_helm_chart\\(\\s*name\\s*=\\s*\"[^\"]+\",\\s*chart_name\\s*=\\s*\"(?<depName>[^\"]+)\",\\s*repository\\s*=\\s*\"(?<registryUrl>https?://[^\"]+)\",\\s*sha256\\s*=\\s*\"[a-f0-9]{64}\",\\s*version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "helm"
+    },
+    {
+      "description": "Update Bazel vendored Helm charts from OCI registries",
+      "customType": "regex",
+      "fileMatch": ["^src/bazel/module_deps/vendor_helm_charts\\.MODULE\\.bazel$"],
+      "matchStrings": [
+        "url\\s*=\\s*\"oci://(?<depName>(?:quay\\.io|ghcr\\.io|registry-1\\.docker\\.io|registry\\.k8s\\.io)/[^\"/]+/[^:\"]+):(?<currentValue>[^\"\\s]+)\""
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Update AWS eStargz snapshotter image in Karpenter AWS bootstrap scripts and node pools",
+      "customType": "regex",
+      "fileMatch": [
+        "^src/infra/argocd/components/karpenter_aws/bootstrap/stargz-bootstrap.*\\.sh$",
+        "^src/infra/argocd/components/karpenter_aws/kustomize/node-pool\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "stargz_image=[\"'](?<depName>ghcr\\.io/containerd/stargz-snapshotter):(?<currentValue>[^\"'@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})[\"']"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Ignore internal local, cluster, and infra synthetic docker images",
+      "matchDatasources": ["docker"],
+      "matchPackagePatterns": [
+        "^local/",
+        "^docker\\.io/cluster/",
+        "^docker\\.io/infra/",
+        "^cluster/",
+        "^infra/"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Ignore BuildBuddy mock / test versions like v99.99.99",
+      "matchPackageNames": ["gcr.io/flame-public/buildbuddy-app-onprem"],
+      "allowedVersions": "!/v99\\./"
+    },
+    {
+      "description": "Retain engine minimum version ranges for Terraform and OpenTofu compatibility",
+      "matchManagers": ["terraform"],
+      "matchDepTypes": ["required_version"],
+      "rangeStrategy": "auto"
+    },
+    {
+      "description": "Retain Python minor range in pyproject.toml aligned with Bazel toolchain",
+      "matchManagers": ["pep621"],
+      "matchPackageNames": ["python"],
+      "enabled": false
+    },
+    {
+      "description": "Ignore bare image names extracted by helm-values from GPU operator and rawfile-localpv values",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": [
+        "container-toolkit",
+        "dcgm-exporter",
+        "gpu-operator",
+        "k8s-device-plugin",
+        "k8s-mig-manager",
+        "sig-storage/csi-node-driver-registrar",
+        "sig-storage/csi-provisioner",
+        "sig-storage/csi-resizer"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "The workload graph owns OCI versions; digest-only MODULE pulls have no reliable release tag.",
+      "matchManagers": ["bazel-module"],
+      "matchDatasources": ["docker"],
+      "matchFileNames": ["MODULE.bazel"],
+      "matchPackageNames": [
+        "docker.io/rayproject/ray",
+        "index.docker.io/rayproject/ray",
+        "rayproject/ray",
+        "docker.io/openebs/rawfile-localpv",
+        "index.docker.io/openebs/rawfile-localpv",
+        "openebs/rawfile-localpv"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Group patch/minor Argo CD Helm charts",
+      "matchManagers": ["argocd", "helmv3"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Infra: Argo CD Helm charts (non-major)"
+    },
+    {
+      "description": "Group Terraform/OpenTofu providers and modules",
+      "matchManagers": ["terraform"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Infra: Terraform providers & modules"
+    },
+    {
+      "description": "Group Bazel module dependencies",
+      "matchManagers": ["bazel-module"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Bazel: Bzlmod rules & modules"
+    },
+    {
+      "description": "Group OpenTelemetry Python dependencies",
+      "matchPackagePatterns": ["^opentelemetry-"],
+      "groupName": "Python: OpenTelemetry SDK"
+    },
+    {
+      "description": "Group Python dev/lint tools",
+      "matchManagers": ["pep621"],
+      "matchDepTypes": ["dev"],
+      "groupName": "Python: dev dependencies"
+    },
+    {
+      "description": "Group OpenTelemetry JS dependencies",
+      "matchPackagePatterns": ["^@opentelemetry/"],
+      "groupName": "TypeScript: OpenTelemetry SDK"
+    },
+    {
+      "description": "Group Svelte ecosystem",
+      "matchPackagePatterns": ["^@sveltejs/", "^svelte$"],
+      "groupName": "TypeScript: Svelte ecosystem"
+    },
+    {
+      "description": "Group dev machine tools in Coder workspace-mise.toml",
+      "matchFileNames": [
+        "src/infra/definitions/workspaces/templates/dev/container/config/workspace-mise.toml"
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Coder: dev workspace tools",
+      "labels": ["dependencies", "coder", "workspace"]
+    },
+    {
+      "description": "Group developer CLI tools in repository mise.toml",
+      "matchFileNames": ["mise.toml"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Mise: platform CLI tools"
+    },
+    {
+      "description": "Group Kyverno chart, vendored module chart, and controller container images atomically",
+      "matchPackageNames": ["kyverno", "ghcr.io/kyverno/kyverno"],
+      "groupName": "Kyverno: chart & controller suite"
+    },
+    {
+      "description": "Group AWS eStargz snapshotter image in Karpenter AWS bootstrap scripts and node pools atomically",
+      "matchPackageNames": ["ghcr.io/containerd/stargz-snapshotter"],
+      "groupName": "Karpenter AWS: eStargz snapshotter"
+    },
+    {
+      "description": "Group Kargo chart and controller container images atomically",
+      "matchPackageNames": ["kargo", "ghcr.io/akuity/kargo", "ghcr.io/akuity/kargo-charts/kargo"],
+      "groupName": "Kargo: chart & controller suite"
+    },
+    {
+      "description": "Group ClickHouse server, keeper, operator, and exporter suite atomically",
+      "matchPackageNames": [
+        "altinity-clickhouse-operator",
+        "altinity/clickhouse-operator",
+        "altinity/metrics-exporter",
+        "clickhouse/clickhouse-server",
+        "docker.io/clickhouse/clickhouse-server",
+        "clickhouse/clickhouse-keeper",
+        "docker.io/clickhouse/clickhouse-keeper"
+      ],
+      "groupName": "ClickHouse: operator & database suite"
+    },
+    {
+      "description": "Group SigNoz operator, collector, query service, and frontend suite atomically",
+      "matchPackageNames": [
+        "signoz",
+        "signoz-operator",
+        "signoz/signoz",
+        "docker.io/signoz/signoz",
+        "signoz/signoz-otel-collector",
+        "docker.io/signoz/signoz-otel-collector"
+      ],
+      "groupName": "SigNoz: full observability suite"
+    },
+    {
+      "description": "Group Kueue chart and controller container images atomically",
+      "matchPackageNames": [
+        "kueue",
+        "registry.k8s.io/kueue/kueue",
+        "registry.k8s.io/kueue/charts/kueue"
+      ],
+      "groupName": "Kueue: chart & controller suite"
+    },
+    {
+      "description": "Group CloudNative-PG and Barman Cloud backup suite atomically",
+      "matchPackageNames": [
+        "cloudnative-pg",
+        "plugin-barman-cloud",
+        "ghcr.io/cloudnative-pg/plugin-barman-cloud",
+        "ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar"
+      ],
+      "groupName": "CloudNative-PG & Barman backup suite"
+    },
+    {
+      "description": "Group Coder chart and server container image atomically",
+      "matchPackageNames": ["coder", "ghcr.io/coder/coder"],
+      "groupName": "Coder: platform server & chart"
+    },
+    {
+      "description": "Group Kubescape operator and storage container images atomically",
+      "matchPackageNames": [
+        "kubescape-operator",
+        "quay.io/kubescape/kubescape",
+        "quay.io/kubescape/storage"
+      ],
+      "groupName": "Kubescape: operator & storage suite"
+    },
+    {
+      "description": "Group KEDA autoscaler and HTTP add-on charts atomically",
+      "matchPackageNames": ["keda", "keda-add-ons-http"],
+      "groupName": "KEDA: autoscaler & HTTP add-on"
+    },
+    {
+      "description": "Group multiarch Bazel base image digests atomically",
+      "matchPackageNames": [
+        "dragonfly_client_base_linux_amd64",
+        "dragonfly_client_base_linux_arm64"
+      ],
+      "groupName": "Bazel OCI: Dragonfly client base multiarch"
+    },
+    {
+      "description": "Group multiarch Bazel base image digests atomically",
+      "matchPackageNames": ["dragonfly_sso_base_linux_amd64", "dragonfly_sso_base_linux_arm64_v8"],
+      "groupName": "Bazel OCI: Dragonfly SSO base multiarch"
+    },
+    {
+      "description": "Group multiarch Bazel base image digests atomically",
+      "matchPackageNames": ["headscale_base_linux_amd64", "headscale_base_linux_arm64_v8"],
+      "groupName": "Bazel OCI: Headscale base multiarch"
+    },
+    {
+      "description": "Group multiarch Bazel base image digests atomically",
+      "matchPackageNames": ["k3s_base_linux_amd64", "k3s_base_linux_arm64_v8"],
+      "groupName": "Bazel OCI: k3s base multiarch"
+    },
+    {
+      "description": "Group multiarch Bazel base image digests atomically",
+      "matchPackageNames": ["workspace_dev_base_linux_amd64", "workspace_dev_base_linux_arm64_v8"],
+      "groupName": "Bazel OCI: workspace dev base multiarch"
+    },
+    {
+      "description": "Never group major updates across any ecosystem",
+      "matchUpdateTypes": ["major"],
+      "groupName": null,
+      "labels": ["breaking-change", "major-bump"]
+    }
+  ]
+}

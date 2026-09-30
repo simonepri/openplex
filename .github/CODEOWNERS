@@ -1,0 +1,17 @@
+# Defines code ownership mappings aligning peer example projects and deployment roots with owning teams.
+
+# keep-sorted start
+/src/examples/batch_cron/ @simonepri
+/src/examples/ray_data/ @simonepri
+/src/examples/ray_serve/ @simonepri
+/src/examples/ray_train/ @simonepri
+/src/examples/svelte_web/ @simonepri
+/src/infra/definitions/teams/examples.yaml @simonepri
+# keep-sorted end
+# The complete infrastructure project is operator-owned.
+/src/infra/ @simonepri
+/src/bazel/ @simonepri
+# Atlantis's repository workflow and CI ownership boundary are operator-owned.
+/.github/atlantis.yaml @simonepri
+/.github/CODEOWNERS @simonepri
+/.github/workflows/ @simonepri

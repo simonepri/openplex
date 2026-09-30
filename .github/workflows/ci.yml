@@ -1,0 +1,109 @@
+# GitHub Actions workflow running mise-driven continuous integration tasks, validation checks, and image publishing.
+
+name: ci
+"on":
+  pull_request: {}
+  push:
+    branches: [main]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read # Required to read repository contents
+jobs:
+  ci:
+    name: Run CI
+    if: vars.USE_BUILDBUDDY != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read # Required to read repository contents
+      id-token: write # Required for AWS OIDC authentication
+      packages: write # Required to push workload images to GHCR fallback
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf \
+            /opt/hostedtoolcache \
+            /usr/lib/jvm \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/share/boost \
+            /usr/local/share/powershell \
+            /usr/local/share/vcpkg \
+            /usr/local/share/chromium \
+            /usr/local/lib/node_modules
+          sudo swapoff -a || true
+          sudo rm -f /swapfile /mnt/swapfile || true
+          sudo docker image prune --all --force || true
+          df -h
+      # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # v4.2.5
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518
+        with:
+          cache: true
+      # v4.2.2
+      - name: Cache Bazel
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf
+        with:
+          path: |
+            ~/.cache/bazel/repository
+            ~/.cache/bazel/disk_cache
+          key: bazel-${{ runner.os }}-${{ hashFiles('**/BUILD', '**/BUILD.bazel', 'MODULE.bazel', 'WORKSPACE.bazel', '.bazelrc') }}
+          restore-keys: |
+            bazel-${{ runner.os }}-
+      - name: Configure CI Bazel profile
+        run: |
+          cat << EOF >> .bazelrc.user
+          common --config=ci
+          common --repository_cache=$HOME/.cache/bazel/repository
+          build --disk_cache=$HOME/.cache/bazel/disk_cache
+          build --experimental_disk_cache_gc_max_size=10G
+          EOF
+      - name: Run CI
+        run: mise run ci
+      - name: Configure container registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: registry-auth
+        env:
+          CONFIGURED_REGISTRY: ${{ vars.WORKLOAD_REGISTRY }}
+        run: |
+          git_repo="$(yq -r '.git.url' src/infra/installation.yaml)"
+          current_repo="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          if [[ "$current_repo" != "$git_repo" ]]; then
+            echo "Repository does not match installation coordinate, skipping publication."
+            echo "matched=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "matched=true" >> "$GITHUB_OUTPUT"
+          registry="${CONFIGURED_REGISTRY:-$(yq -r '.oci.image_root' src/infra/installation.yaml)}"
+          echo "WORKLOAD_REGISTRY=$registry" >> "$GITHUB_ENV"
+          stream_tag="$(bash src/bazel/rules/oci/stream_tag.sh "$GITHUB_SHA")"
+          echo "WORKLOAD_STREAM_TAG=ci-$stream_tag" >> "$GITHUB_ENV"
+          echo "WORKLOAD_EXTRA_TAGS=main" >> "$GITHUB_ENV"
+      # v5.1.1
+      - name: Authenticate to the AWS origin
+        if: steps.registry-auth.outputs.matched == 'true' && contains(env.WORKLOAD_REGISTRY, '.dkr.ecr.')
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        with:
+          aws-region: ${{ vars.AWS_WORKLOAD_REGISTRY_REGION }}
+          role-to-assume: ${{ vars.AWS_WORKLOAD_REGISTRY_ROLE_ARN }}
+      - name: Log in to the AWS origin
+        if: steps.registry-auth.outputs.matched == 'true' && contains(env.WORKLOAD_REGISTRY, '.dkr.ecr.')
+        run: >-
+          aws ecr get-login-password | docker login "${WORKLOAD_REGISTRY%%/*}" --username AWS --password-stdin
+      - name: Authenticate the GHCR origin
+        if: steps.registry-auth.outputs.matched == 'true' && !contains(env.WORKLOAD_REGISTRY, '.dkr.ecr.')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          echo "$GH_TOKEN" | docker login "${WORKLOAD_REGISTRY%%/*}" --username "$GITHUB_ACTOR" --password-stdin
+      - name: Publish affected images
+        if: steps.registry-auth.outputs.matched == 'true'
+        run: python3 src/bazel/tools/diff/cli.py publish
