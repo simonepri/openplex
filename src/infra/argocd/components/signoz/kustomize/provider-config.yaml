@@ -1,0 +1,20 @@
+# Connects SigNoz custom resources to the in-cluster API server endpoint.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: signoz
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: resource-provider
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  endpoint:
+    value: http://signoz.signoz.svc.cluster.local:8080
+  auth:
+    header:
+      name: SIGNOZ-API-KEY
+      value: impersonation-mode-no-api-key
