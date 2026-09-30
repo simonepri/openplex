@@ -1,0 +1,8 @@
+{{/* Renders bootstrap AppProjects and root Application manifests dynamically from values input. */}}
+
+{{- range $index, $object := .Values.objects }}
+{{- if gt $index 0 }}
+---
+{{- end }}
+{{ toYaml $object }}
+{{- end }}

@@ -1,0 +1,40 @@
+"""Defines OpenTofu module check targets for the Argo CD bootstrap component."""
+
+# gazelle:resolve py hcl2 @dev_python_deps//python_hcl2
+
+load("@rules_python//python:defs.bzl", "py_test")
+load("@rules_tf//tf:def.bzl", "tf_module")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+tf_module(
+    name = "argo_bootstrap",
+    providers = [
+        "helm",
+        "kubernetes",
+    ],
+    skip_validation = True,
+)
+
+package_sources()
+
+py_test(
+    name = "health_test",
+    srcs = ["health_test.py"],
+    args = [
+        "$(location //src/bazel/tools:argocd)",
+        "$(location health.tf)",
+    ],
+    data = [
+        "health.tf",
+        "//src/bazel/tools:argocd",
+    ],
+    deps = ["@dev_python_deps//python_hcl2"],
+)
+
+py_test(
+    name = "registration_test",
+    srcs = ["registration_test.py"],
+    args = ["$(location main.tf)"],
+    data = ["main.tf"],
+    deps = ["@dev_python_deps//python_hcl2"],
+)

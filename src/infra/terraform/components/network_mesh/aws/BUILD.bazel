@@ -1,0 +1,18 @@
+"""Defines OpenTofu module check targets for AWS Tailscale subnet routers and EC2 instances."""
+
+load("@rules_tf//tf:def.bzl", "tf_module")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+tf_module(
+    name = "aws",
+    providers = [
+        "aws",
+        "tailscale",
+    ],
+    skip_validation = True,
+    deps = [
+        "//src/infra/terraform/components/network_mesh/_interface",
+    ],
+)
+
+package_sources()

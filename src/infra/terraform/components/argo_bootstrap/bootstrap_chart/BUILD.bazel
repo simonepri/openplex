@@ -1,0 +1,11 @@
+"""Defines package sources and Helm template check targets for the Argo CD bootstrap internal chart."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "HELM_TEMPLATE", "package_sources", "source_set")
+
+source_set(
+    name = "helm_templates",
+    srcs = glob(["templates/**"]),
+    kind = HELM_TEMPLATE,
+)
+
+package_sources(exclude = ["templates/**"])
