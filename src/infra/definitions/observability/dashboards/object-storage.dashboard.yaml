@@ -1,0 +1,206 @@
+# Defines object-storage dashboard reconciled into SigNoz. It presents daily object storage rollups with dynamic arbitrary prefix navigation.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Dashboard
+metadata:
+  name: object-storage
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    # LINT.IfChange(storage-stats-rollup-readers)
+    jsonSpec: |-
+      {
+        "schemaVersion": "v6",
+        "image": "",
+        "name": "object-storage",
+        "tags": [
+          {"key": "category", "value": "storage"}
+        ],
+        "spec": {
+          "display": {
+            "name": "Object Storage",
+            "description": "Daily object storage rollups; use the dropdowns to navigate cells, days, and folder prefixes."
+          },
+          "variables": [
+            {
+              "kind": "ListVariable",
+              "spec": {
+                "name": "cell",
+                "display": {"name": "Cell", "description": "Storage cell"},
+                "allowAllValue": true,
+                "allowMultiple": true,
+                "sort": "alphabetical-asc",
+                "plugin": {
+                  "kind": "signoz/QueryVariable",
+                  "spec": {
+                    "queryValue": "SELECT cell FROM (SELECT DISTINCT cell FROM storage_stats.storage_prefix_daily FINAL UNION ALL SELECT '(no inventory yet)' AS cell WHERE NOT EXISTS (SELECT 1 FROM storage_stats.storage_prefix_daily FINAL LIMIT 1)) ORDER BY cell"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "TextVariable",
+              "spec": {
+                "name": "prefix",
+                "display": {"name": "Prefix", "description": "Filter by prefix or folder"},
+                "value": ""
+              }
+            },
+            {
+              "kind": "ListVariable",
+              "spec": {
+                "name": "selected_day",
+                "display": {"name": "Day", "description": "Day for the prefix table"},
+                "allowAllValue": false,
+                "allowMultiple": false,
+                "sort": "none",
+                "plugin": {
+                  "kind": "signoz/QueryVariable",
+                  "spec": {
+                    "queryValue": "SELECT day FROM (SELECT DISTINCT toString(day) AS day FROM storage_stats.storage_prefix_daily FINAL UNION ALL SELECT '(no inventory yet)' AS day WHERE NOT EXISTS (SELECT 1 FROM storage_stats.storage_prefix_daily FINAL LIMIT 1)) ORDER BY day DESC"
+                  }
+                }
+              }
+            }
+          ],
+          "panels": {
+            "storage-bytes-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Storage bytes over time", "description": "Total inventory bytes by day"},
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time", "fillSpans": false},
+                    "formatting": {"unit": "By", "decimalPrecision": "2"},
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    },
+                    "axes": {"softMin": 0, "softMax": null, "isLogScale": false},
+                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toDateTime(day) AS ts, sum(total_bytes) AS value FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN $cell AND (empty($prefix) OR startsWith(prefix, $prefix)) GROUP BY day ORDER BY day"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "storage-objects-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Object count over time", "description": "Total inventory objects by day"},
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time", "fillSpans": false},
+                    "formatting": {"unit": "none", "decimalPrecision": "0"},
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    },
+                    "axes": {"softMin": 0, "softMax": null, "isLogScale": false},
+                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toDateTime(day) AS ts, sum(object_count) AS value FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN $cell AND (empty($prefix) OR startsWith(prefix, $prefix)) GROUP BY day ORDER BY day"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "storage-folder-navigation": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Folder navigation",
+                  "description": "Dynamic hierarchy navigation under prefix; copy folder name into $prefix to drill down"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {
+                        "total_bytes": "By",
+                        "object_count": "none"
+                      },
+                      "decimalPrecision": "2"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT cell, if(empty($prefix), concat(splitByChar('/', prefix)[1], '/'), concat($prefix, splitByChar('/', substring(prefix, length($prefix) + 1))[1], '/')) AS folder, sum(object_count) AS object_count, sum(total_bytes) AS total_bytes FROM storage_stats.storage_prefix_daily FINAL WHERE toString(day) = if(empty($selected_day) OR $selected_day = '(no inventory yet)', (SELECT toString(max(day)) FROM storage_stats.storage_prefix_daily FINAL), $selected_day) AND cell IN $cell AND (empty($prefix) OR startsWith(prefix, $prefix)) AND (empty($prefix) OR prefix != $prefix) GROUP BY cell, folder ORDER BY cell ASC, total_bytes DESC LIMIT 500"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "layouts": [
+            {
+              "kind": "Grid",
+              "spec": {
+                "items": [
+                  {"x": 0, "y": 0, "width": 6, "height": 7, "content": {"$ref": "#/spec/panels/storage-bytes-over-time"}},
+                  {"x": 6, "y": 0, "width": 6, "height": 7, "content": {"$ref": "#/spec/panels/storage-objects-over-time"}},
+                  {"x": 0, "y": 7, "width": 12, "height": 8, "content": {"$ref": "#/spec/panels/storage-folder-navigation"}}
+                ]
+              }
+            }
+          ],
+          "duration": "30d",
+          "refreshInterval": "5m"
+        }
+      }
+    # LINT.ThenChange(//src/infra/argocd/components/clickhouse/kustomize/scripts/storage-stats-schema.sql:storage-stats-rollup-contract)

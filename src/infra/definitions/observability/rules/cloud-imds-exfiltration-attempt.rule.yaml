@@ -1,0 +1,53 @@
+# Defines the cloud IMDS exfiltration alert reconciled into SigNoz. Alerts when workloads attempt to query the link-local cloud metadata service (169.254.169.254).
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: cloud-imds-exfiltration-attempt
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Cloud IMDS exfiltration attempt detected
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: critical}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "body LIKE '%169.254.169.254%' AND (attributes_string['rule'] LIKE '%Metadata%' OR body LIKE '%Metadata%' OR body LIKE '%drop%' OR body LIKE '%denied%')"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: at_least_once
+              op: above
+              target: 0
+      description: Unauthorized attempt to query or probe the cloud instance metadata service (169.254.169.254); investigate the originating pod and identity credentials immediately.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 1h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1
