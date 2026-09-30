@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.invalid/internal/team.schema.json",
+  "title": "Platform team record",
+  "type": "object",
+  "properties": {
+    "slug": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 31,
+      "pattern": "^[a-z][a-z0-9]{1,30}$",
+      "not": {
+        "$ref": "#/$defs/reservedTeamSlug"
+      }
+    },
+    "cells": {
+      "$ref": "#/$defs/labelSelector"
+    },
+    "quota": {
+      "type": "object",
+      "properties": {
+        "classes": { "$ref": "#/$defs/quotaClasses" },
+        "cells": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^cell-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "classes": { "$ref": "#/$defs/quotaClasses" }
+            },
+            "required": ["classes"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["classes"],
+      "additionalProperties": false
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 63,
+        "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "dev_secrets": {
+      "description": "Debug-tier secret names readable by every developer and process in the team's workspaces, including coding agents; never use them as workload or production credentials.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 81,
+        "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"
+      },
+      "uniqueItems": true
+    },
+    "promotion": {
+      "enum": ["automatic", "manual", "triggered"]
+    },
+    "workspaces": {
+      "type": "boolean",
+      "default": true
+    },
+    "archive": {
+      "type": "boolean",
+      "default": true
+    },
+    "key_epoch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "members": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "email": { "type": "string", "format": "email" },
+          "roles": {
+            "type": "array",
+            "items": { "enum": ["dev", "ops"] },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "required": ["id", "email", "roles"],
+        "additionalProperties": false
+      },
+      "uniqueItems": true
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "dev": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "ops": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["slug", "cells", "quota", "projects", "promotion", "key_epoch"],
+  "additionalProperties": false,
+  "$defs": {
+    "reservedTeamSlug": {
+      "enum": [
+        "argo",
+        "argocd",
+        "coder",
+        "global",
+        "headscale",
+        "home",
+        "karpenter",
+        "kargo",
+        "kubescape",
+        "kyverno",
+        "meta",
+        "observability",
+        "opencost",
+        "profiling",
+        "scratch",
+        "tailscale",
+        "users",
+        "vault",
+        "velero",
+        "vpa"
+      ]
+    },
+    "labelKey": {
+      "type": "string",
+      "maxLength": 317,
+      "pattern": "^(?:[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)*/)?[A-Za-z0-9](?:[-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$"
+    },
+    "labelValue": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^(?:[A-Za-z0-9](?:[-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?)?$"
+    },
+    "labelSelector": {
+      "type": "object",
+      "properties": {
+        "matchLabels": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/labelKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/labelValue"
+          }
+        },
+        "matchExpressions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/labelKey"
+              },
+              "operator": {
+                "enum": ["In", "NotIn", "Exists", "DoesNotExist"]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/labelValue"
+                },
+                "uniqueItems": true
+              }
+            },
+            "required": ["key", "operator"],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "operator": {
+                      "enum": ["In", "NotIn"]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "values": {
+                      "minItems": 1
+                    }
+                  },
+                  "required": ["values"]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "operator": {
+                      "enum": ["Exists", "DoesNotExist"]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "values": {
+                      "maxItems": 0
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "quotaClasses": {
+      "type": "object",
+      "properties": {
+        "be": { "$ref": "#/$defs/quotaResources" },
+        "ha": { "$ref": "#/$defs/quotaResources" },
+        "ma": { "$ref": "#/$defs/quotaResources" },
+        "wa": { "$ref": "#/$defs/quotaResources" }
+      },
+      "minProperties": 1,
+      "additionalProperties": false
+    },
+    "accelerators": {
+      "type": "object",
+      "properties": {
+        "a10": { "$ref": "#/$defs/wholeQuantity" },
+        "a100-40gb": { "$ref": "#/$defs/wholeQuantity" },
+        "a100-80gb": { "$ref": "#/$defs/wholeQuantity" },
+        "a10g": { "$ref": "#/$defs/wholeQuantity" },
+        "b200": { "$ref": "#/$defs/wholeQuantity" },
+        "b300": { "$ref": "#/$defs/wholeQuantity" },
+        "h100": { "$ref": "#/$defs/wholeQuantity" },
+        "h100-nvl-94gb": { "$ref": "#/$defs/wholeQuantity" },
+        "h200": { "$ref": "#/$defs/wholeQuantity" },
+        "l4": { "$ref": "#/$defs/wholeQuantity" },
+        "l40s": { "$ref": "#/$defs/wholeQuantity" },
+        "rtx-pro-server-6000": { "$ref": "#/$defs/wholeQuantity" },
+        "t4": { "$ref": "#/$defs/wholeQuantity" },
+        "v100": { "$ref": "#/$defs/wholeQuantity" },
+        "v5e-2x2": { "$ref": "#/$defs/wholeQuantity" }
+      },
+      "additionalProperties": false
+    },
+    "quotaResources": {
+      "type": "object",
+      "properties": {
+        "accelerators": { "$ref": "#/$defs/accelerators" },
+        "a10": { "$ref": "#/$defs/wholeQuantity" },
+        "a100-40gb": { "$ref": "#/$defs/wholeQuantity" },
+        "a100-80gb": { "$ref": "#/$defs/wholeQuantity" },
+        "a10g": { "$ref": "#/$defs/wholeQuantity" },
+        "b200": { "$ref": "#/$defs/wholeQuantity" },
+        "b300": { "$ref": "#/$defs/wholeQuantity" },
+        "cpu": { "$ref": "#/$defs/wholeQuantity" },
+        "google.com/tpu": { "$ref": "#/$defs/wholeQuantity" },
+        "h100": { "$ref": "#/$defs/wholeQuantity" },
+        "h100-nvl-94gb": { "$ref": "#/$defs/wholeQuantity" },
+        "h200": { "$ref": "#/$defs/wholeQuantity" },
+        "l4": { "$ref": "#/$defs/wholeQuantity" },
+        "l40s": { "$ref": "#/$defs/wholeQuantity" },
+        "memory": { "$ref": "#/$defs/wholeGiQuantity" },
+        "nvidia.com/gpu": { "$ref": "#/$defs/wholeQuantity" },
+        "rtx-pro-server-6000": { "$ref": "#/$defs/wholeQuantity" },
+        "t4": { "$ref": "#/$defs/wholeQuantity" },
+        "v100": { "$ref": "#/$defs/wholeQuantity" },
+        "v5e-2x2": { "$ref": "#/$defs/wholeQuantity" }
+      },
+      "required": ["cpu", "memory"],
+      "additionalProperties": false
+    },
+    "wholeQuantity": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "wholeGiQuantity": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*Gi)$"
+    }
+  }
+}

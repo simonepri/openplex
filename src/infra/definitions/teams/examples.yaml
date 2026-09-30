@@ -1,0 +1,60 @@
+# Declares example teams, capability tiers, quotas, and cluster memberships.
+
+slug: examples
+cells:
+  matchLabels:
+    role: cell
+quota:
+  classes:
+    ha: {cpu: "4", memory: 6Gi}
+    ma: {cpu: "1", memory: 6Gi}
+    wa: {cpu: "1", memory: 2Gi}
+    be: {cpu: "0", memory: "0"}
+  cells:
+    cell-aws-usw2:
+      classes:
+        ha: {cpu: "16", memory: 64Gi, accelerators: {a100-80gb: "2"}}
+        ma: {cpu: "32", memory: 128Gi, accelerators: {h100: "4"}}
+        wa: {cpu: "16", memory: 64Gi, accelerators: {l4: "2"}}
+        be: {cpu: "0", memory: "0"}
+    cell-gcp-euw4:
+      classes:
+        ha: {cpu: "16", memory: 64Gi, accelerators: {l4: "2"}}
+        ma: {cpu: "32", memory: 128Gi, accelerators: {l4: "4", v5e-2x2: "1"}}
+        wa: {cpu: "16", memory: 64Gi, accelerators: {l4: "2", v5e-2x2: "1"}}
+        be: {cpu: "0", memory: "0"}
+projects:
+  # keep-sorted start
+  - batch_cron
+  - ray_data
+  - ray_serve
+  - ray_train
+  - svelte_web
+  # keep-sorted end
+dev_secrets:
+  # keep-sorted start
+  - slack_bot_token
+  - temporal_cloud_api_key
+  # keep-sorted end
+promotion: automatic
+workspaces: true
+archive: true
+key_epoch: 1
+capabilities:
+  dev:
+    - traces
+    - workspaces
+  ops:
+    - gitops
+    - profiling
+    - traces
+    - workspaces
+members:
+  - id: "08a8684b-db88-4b73-90a9-3cd1661f5466"
+    email: ops@local.internal
+    roles:
+      - ops
+  - id: "c8379f28-1337-4f35-95fd-353efd40b3ee"
+    email: dev@local.internal
+    roles:
+      - dev
