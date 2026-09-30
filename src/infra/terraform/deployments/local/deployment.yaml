@@ -1,0 +1,116 @@
+# Self-contained local deployment manifest declaring installation coordinates, network services, and clusters.
+
+installation:
+  name: openplex
+  display_name: Openplex
+  # nosemgrep: repository.lint.forbidden-domain-patterns
+  public_domain: local.internal
+  intranet_domain: corp.local.internal
+  git:
+    url: git://172.19.255.21:9418/openplex.git
+
+network:
+  subnet: 172.19.0.0/16
+  # LINT.IfChange(local_dynamic_address_pool)
+  dynamic_range: 172.19.1.0/24
+  # LINT.ThenChange(//src/infra/tools/cloud_emulator/engine/storage.py:local_dynamic_address_pool,:local_dynamic_address_pool)
+  services:
+    # LINT.IfChange(local_floci_address)
+    floci: 172.19.0.2
+    # LINT.ThenChange(:local_floci_address,//src/infra/tools/cloud_emulator/stack/compose.yaml:local_floci_address)
+    gateway: 172.19.255.20
+    git: 172.19.255.21
+    git_watcher: 172.19.255.24
+    headscale: 172.19.255.23
+    origin_registry: 172.19.255.22
+
+clusters:
+  ctrl-eaws-lh1:
+    account_scope: eaws-local
+    cloud: eaws
+    labels:
+      cloud: eaws
+      profile: minimal
+      provider: floci
+      role: ctrl
+    name: ctrl-eaws-lh1
+    network:
+      index: 240
+      node_ipv4: 172.19.255.10
+      pod_cidr: 10.240.0.0/16
+      pod_cidrs_v6: []
+      service_cidr: 172.31.0.0/20
+      service_cidrs_v6: []
+      host_ports:
+        aws_api: 4566
+        ecr_registry: 15100
+        eks_api_server: {base: 6500, max: 6502}
+    provider: floci
+    region: lh1
+    role: ctrl
+    vpc_cidr: 10.0.0.0/16
+    availability_zones: ["us-west-2a", "us-west-2b"]
+    tier_subnets:
+      private: ["10.0.1.0/24", "10.0.2.0/24"]
+      public: ["10.0.10.0/24", "10.0.11.0/24"]
+      pod: ["10.0.64.0/18", "10.0.128.0/18"]
+  cell-eaws-lh1:
+    account_scope: eaws-local
+    cloud: eaws
+    compute:
+      ceiling:
+        cpu: "6"
+        memory: 20Gi
+      cpu_capabilities: []
+      floors:
+        be:
+          cpu: "0"
+          memory: "0"
+        ha:
+          cpu: "4"
+          memory: 12Gi
+        ma:
+          cpu: "1"
+          memory: 6Gi
+        wa:
+          cpu: "1"
+          memory: 2Gi
+      gpu_classes: {}
+      tpu_classes: {}
+    labels:
+      cloud: eaws
+      profile: minimal
+      provider: floci
+      role: cell
+    name: cell-eaws-lh1
+    network:
+      index: 241
+      node_ipv4: 172.19.255.11
+      pod_cidr: 10.241.0.0/16
+      pod_cidrs_v6: []
+      service_cidr: 172.31.16.0/20
+      service_cidrs_v6: []
+      host_ports:
+        aws_api: 4567
+        ecr_registry: 15101
+        eks_api_server: {base: 6503, max: 6504}
+    provider: floci
+    region: lh1
+    role: cell
+    vpc_cidr: 10.1.0.0/16
+    availability_zones: ["us-west-2a", "us-west-2b"]
+    tier_subnets:
+      private: ["10.1.1.0/24", "10.1.2.0/24"]
+      public: ["10.1.10.0/24", "10.1.11.0/24"]
+      pod: ["10.1.64.0/18", "10.1.128.0/18"]
+    workspaces:
+      enabled: true
+      resource_envelope:
+        cpu: {default: 1, max: 3, min: 1}
+        gpu_offers: {}
+        memory_gib: {default: 2, max: 8, min: 1}
+        # LINT.IfChange(local-workspace-storage-budget)
+        storage_gib: {default: 8, max: 48, min: 8}
+        # LINT.ThenChange(//src/infra/argocd/components/coder/kustomize/template-reconciler.k8s.yaml:local-workspace-storage-budget,//src/infra/argocd/components/rawfile_localpv/helm/values.yaml:local-workspace-storage-budget)
+        tmp_storage_gib: 64
+        tpu_offers: {}
