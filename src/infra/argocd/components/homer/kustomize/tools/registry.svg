@@ -1,3 +1,49 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:c713b8647ff0f6ec23813433b3a54d16ae1ebfe466151375e1ce1a1c02c1b0cf
-size 3325
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="reg-top" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="reg-left" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="reg-right" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0369a1"/>
+      <stop offset="100%" stop-color="#075985"/>
+    </linearGradient>
+  </defs>
+  <!-- Top Face -->
+  <polygon points="256,54 448,165 256,276 64,165" fill="url(#reg-top)"/>
+  <line x1="160" y1="110" x2="352" y2="220" stroke="#bae6fd" stroke-width="4" stroke-opacity="0.4"/>
+  <line x1="208" y1="82" x2="400" y2="192" stroke="#bae6fd" stroke-width="4" stroke-opacity="0.4"/>
+  <line x1="112" y1="137" x2="304" y2="248" stroke="#bae6fd" stroke-width="4" stroke-opacity="0.4"/>
+  <!-- Left Face -->
+  <polygon points="64,165 256,276 256,458 64,347" fill="url(#reg-left)"/>
+  <line x1="102" y1="187" x2="102" y2="369" stroke="#38bdf8" stroke-width="6" stroke-opacity="0.6"/>
+  <line x1="140" y1="209" x2="140" y2="391" stroke="#38bdf8" stroke-width="6" stroke-opacity="0.6"/>
+  <line x1="179" y1="232" x2="179" y2="413" stroke="#38bdf8" stroke-width="6" stroke-opacity="0.6"/>
+  <line x1="217" y1="254" x2="217" y2="436" stroke="#38bdf8" stroke-width="6" stroke-opacity="0.6"/>
+  <line x1="108" y1="191" x2="108" y2="373" stroke="#0369a1" stroke-width="4" stroke-opacity="0.7"/>
+  <line x1="146" y1="213" x2="146" y2="395" stroke="#0369a1" stroke-width="4" stroke-opacity="0.7"/>
+  <line x1="185" y1="235" x2="185" y2="417" stroke="#0369a1" stroke-width="4" stroke-opacity="0.7"/>
+  <line x1="223" y1="257" x2="223" y2="439" stroke="#0369a1" stroke-width="4" stroke-opacity="0.7"/>
+  <!-- Right Face (Doors) -->
+  <polygon points="256,276 448,165 448,347 256,458" fill="url(#reg-right)"/>
+  <line x1="352" y1="220" x2="352" y2="402" stroke="#0f172a" stroke-width="5"/>
+  <line x1="354" y1="221" x2="354" y2="403" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.5"/>
+  <polygon points="268,279 344,235 344,392 268,436" fill="#0284c7" fill-opacity="0.3"/>
+  <polygon points="360,226 436,182 436,339 360,383" fill="#0284c7" fill-opacity="0.3"/>
+  <line x1="294" y1="264" x2="294" y2="421" stroke="#e2e8f0" stroke-width="5" stroke-linecap="round"/>
+  <rect x="289" y="340" width="10" height="6" rx="2" fill="#94a3b8" transform="rotate(30 294 343)"/>
+  <line x1="410" y1="197" x2="410" y2="354" stroke="#e2e8f0" stroke-width="5" stroke-linecap="round"/>
+  <rect x="405" y="273" width="10" height="6" rx="2" fill="#94a3b8" transform="rotate(-30 410 276)"/>
+  <!-- Corner Castings -->
+  <polygon points="64,165 80,174 80,196 64,187" fill="#f8fafc"/>
+  <polygon points="256,54 272,63 256,72 240,63" fill="#f8fafc"/>
+  <polygon points="448,165 448,187 432,196 432,174" fill="#f8fafc"/>
+  <polygon points="256,276 272,285 256,295 240,285" fill="#f8fafc"/>
+  <polygon points="64,347 80,356 80,334 64,325" fill="#94a3b8"/>
+  <polygon points="256,458 272,449 256,439 240,449" fill="#94a3b8"/>
+  <polygon points="448,347 448,325 432,334 432,356" fill="#94a3b8"/>
+</svg>

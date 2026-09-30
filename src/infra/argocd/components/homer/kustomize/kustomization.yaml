@@ -16,6 +16,17 @@ configMapGenerator:
       # keep-sorted start
       - config.yml
       - custom.css
+      - render-config.sh
+      # keep-sorted end
+  - name: homer-icons
+    namespace: homer
+    files:
+      # keep-sorted start
+      - icons/apple-touch-icon.png
+      - icons/favicon-16x16.png
+      - icons/favicon-32x32.png
+      - icons/favicon.ico
+      - icons/logo.svg
       # keep-sorted end
   - name: homer-tools
     namespace: homer

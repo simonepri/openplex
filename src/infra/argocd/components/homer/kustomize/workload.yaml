@@ -69,53 +69,7 @@ spec:
         - name: render-config
           image: docker.io/b4bz/homer:v26.08.3@sha256:febc8967c9f7648ec37633ef3ae1ec90dbe8b7c46fecab80299f08f05be7ecb6
           imagePullPolicy: IfNotPresent
-          command: [/bin/sh, -c]
-          args:
-            - |
-              [ "$(echo "$CLUSTERS" | wc -w)" -eq 1 ] && export VELERO_URL="https://velero-ui.${CLUSTERS}.${ACCESS_DOMAIN}" || export VELERO_URL=""
-              export QUICK_YAML=$(for c in $CLUSTERS; do printf '\n          - name: "%s"\n            url: "https://velero-ui.%s.%s"\n            target: "_blank"' "$c" "$c" "$ACCESS_DOMAIN"; done)
-              [ -n "$QUICK_YAML" ] && export QUICK_YAML="        quick:${QUICK_YAML}"
-              case "$PROVIDER,$PUBLIC_DOMAIN,$ACCESS_DOMAIN" in
-                floci,*|*.localhost.floci.io,*|*local*|*floci*) export REGISTRY_URL="https://floci.${PUBLIC_DOMAIN}" ;;
-                gcp,*) export REGISTRY_URL="https://console.cloud.google.com/artifacts" ;;
-                *)
-                  if [ -n "$AWS_REGION" ]; then
-                    export REGISTRY_URL="https://${AWS_REGION}.console.aws.amazon.com/ecr/private-registry/repositories?region=${AWS_REGION}"
-                  elif [ "$PROVIDER" = "aws" ]; then
-                    export REGISTRY_URL="https://console.aws.amazon.com/ecr/repositories"
-                  else
-                    export REGISTRY_URL=""
-                  fi
-                  ;;
-              esac
-              sed -e "s|https://coder.invalid|https://coder.${PUBLIC_DOMAIN}|g;s|https://dragonfly.invalid|https://dragonfly.${PUBLIC_DOMAIN}|g;s|https://kargo.invalid|https://kargo.${PUBLIC_DOMAIN}|g;s|https://headlamp.invalid|https://headlamp.${PUBLIC_DOMAIN}|g;s|https://opencost.invalid|https://opencost.${PUBLIC_DOMAIN}|g" \
-                  -e "s|https://argocd.invalid|https://argocd.${PUBLIC_DOMAIN}|g;s|https://atlantis.invalid|https://atlantis.${PUBLIC_DOMAIN}|g;s|https://signoz.invalid|https://signoz.${PUBLIC_DOMAIN}|g;s|https://parca.invalid|https://parca.${PUBLIC_DOMAIN}|g" \
-                  /config-source/config.yml | awk '
-                    BEGIN {
-                      reg_url = ENVIRON["REGISTRY_URL"]
-                      gsub(/&/, "\\\\&", reg_url)
-                    }
-                    /      - name: "Registry"/ {
-                      in_registry = 1
-                      registry_block = $0 "\n"
-                      next
-                    }
-                    in_registry {
-                      registry_block = registry_block $0 "\n"
-                      if ($0 ~ /target: "_blank"/) {
-                        in_registry = 0
-                        if (reg_url != "") {
-                          sub("#REGISTRY_URL#", reg_url, registry_block)
-                          printf "%s", registry_block
-                        }
-                      }
-                      next
-                    }
-                    /#VELERO_URL#/ { sub("#VELERO_URL#", ENVIRON["VELERO_URL"]) }
-                    /#REGISTRY_URL#/ { sub("#REGISTRY_URL#", reg_url) }
-                    /# VELERO_QUICK_LINKS/ { if (ENVIRON["QUICK_YAML"] != "") print ENVIRON["QUICK_YAML"]; next }
-                    { print }
-                  ' > /config-rendered/config.yml
+          command: [/bin/sh, /config-source/render-config.sh]
           env:
             - name: PUBLIC_DOMAIN
               value: invalid
@@ -131,6 +85,8 @@ spec:
               value: ""
             - name: AWS_ACCOUNT_ID
               value: ""
+            - name: SSO_DOMAIN
+              value: configured-by-applicationset.invalid
           resources:
             requests: {cpu: 5m, memory: 8Mi}
             limits: {cpu: 50m, memory: 32Mi}
@@ -197,6 +153,13 @@ spec:
               mountPath: /www/assets/custom.css
               subPath: custom.css
               readOnly: true
+            - name: icons
+              mountPath: /www/assets/icons
+              readOnly: true
+            - name: icons
+              mountPath: /www/favicon.ico
+              subPath: favicon.ico
+              readOnly: true
             - name: tools
               mountPath: /www/assets/tools
               readOnly: true
@@ -209,9 +172,13 @@ spec:
       volumes:
         - name: config
           configMap:
+            defaultMode: 493
             name: homer-config
         - name: rendered-config
           emptyDir: {sizeLimit: 1Mi}
+        - name: icons
+          configMap:
+            name: homer-icons
         - name: tools
           configMap:
             name: homer-tools

@@ -1,0 +1,6 @@
+# Defines Git attributes for Argo CD component assets to prevent binary diff corruption.
+
+*.png -filter -diff -merge binary
+*.gif -filter -diff -merge binary
+*.ico -filter -diff -merge binary
+*.svg -filter -diff -merge

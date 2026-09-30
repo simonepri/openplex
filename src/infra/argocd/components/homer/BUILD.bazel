@@ -1,6 +1,7 @@
 """Check targets for the homer Argo CD component."""
 
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
@@ -21,4 +22,11 @@ manifest_checks(
     rendered = ":base_render",
 )
 
-package_sources()
+sh_library(
+    name = "shell",
+    srcs = [
+        "kustomize/render-config.sh",
+    ],
+)
+
+package_sources(exclude = ["**/*.sh"])
