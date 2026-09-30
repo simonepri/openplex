@@ -1,0 +1,135 @@
+# Defines the RayService custom resource running a Kueue-admitted PyTorch inference deployment on Kubernetes.
+
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: ray-serve-example
+  annotations:
+    kueue.x-k8s.io/elastic-job: "true"
+  labels:
+    !!merge <<: &workload-labels
+      app.kubernetes.io/name: ray-serve-example
+      cost-center: examples
+      environment: production
+      team: examples
+    availability-class: wa
+    latency-class: lt
+spec:
+  upgradeStrategy: {type: NewCluster}
+  serveService:
+    metadata:
+      labels: *workload-labels
+  serveConfigV2: |
+    proxy_location: HeadOnly
+    applications:
+      - name: predictor
+        import_path: examples.ray_serve.app:application
+        route_prefix: /
+  rayClusterConfig:
+    rayVersion: 2.57.0
+    enableInTreeAutoscaling: true
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: 0.0.0.0
+        num-cpus: "0"
+        temp-dir: /tmp/ray
+      template:
+        metadata:
+          annotations: &ray-annotations
+            signoz.io/path: /metrics
+            signoz.io/port: "8080"
+            signoz.io/scrape: "true"
+          labels:
+            !!merge <<: *workload-labels
+            app.kubernetes.io/component: ray-serve-head
+            ray.io/cluster: ray-serve-example
+        spec:
+          automountServiceAccountToken: true
+          serviceAccountName: ray-runner
+          containers:
+            - name: ray-head
+              image: registry.invalid/workloads/ray-serve@sha256:0000000000000000000000000000000000000000000000000000000000000000
+              env: &compile-cache-env
+                - {name: RAY_START_HOOK, value: examples.ray_serve.app.configure_ray_start}
+                - name: HOST_IP
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: status.hostIP
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: "http://$(HOST_IP):4318"
+                - name: OTEL_EXPORTER_OTLP_PROTOCOL
+                  value: "http/protobuf"
+                - name: OTEL_METRICS_EXPORTER
+                  value: "none"
+                - name: OTEL_SERVICE_NAME
+                  value: "ray-serve"
+                - {name: TORCHINDUCTOR_CACHE_DIR, value: /tmp/torchinductor}
+                - {name: TORCHINDUCTOR_FX_GRAPH_CACHE, value: "1"}
+                - {name: TORCHINDUCTOR_FX_GRAPH_REMOTE_CACHE, value: "1"}
+                - name: TORCHINDUCTOR_REDIS_URL
+                  valueFrom:
+                    secretKeyRef: {name: torch-compile-cache, key: redis-url}
+              resources:
+                requests: {cpu: 250m, memory: 1Gi}
+                limits: {cpu: "2", memory: 3Gi}
+              livenessProbe:
+                httpGet: {path: /api/healthz, port: 52365}
+                initialDelaySeconds: 90
+                periodSeconds: 10
+                timeoutSeconds: 2
+              securityContext: &container-security
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 1000
+                seccompProfile: {type: RuntimeDefault}
+              volumeMounts: &ray-volume-mounts
+                - {name: dshm, mountPath: /dev/shm}
+                - {name: ray-tmp, mountPath: /tmp}
+                - {name: torchinductor-cache, mountPath: /tmp/torchinductor}
+          volumes: &ray-volumes
+            - name: dshm
+              emptyDir: {medium: Memory, sizeLimit: 2Gi}
+            - {name: ray-tmp, emptyDir: {}}
+            - name: torchinductor-cache
+              emptyDir: {sizeLimit: 2Gi}
+    autoscalerOptions:
+      version: v2
+      securityContext: *container-security
+      volumeMounts:
+        - {name: ray-tmp, mountPath: /tmp}
+    workerGroupSpecs:
+      - groupName: replicas
+        numOfHosts: 1
+        priority: 0
+        replicas: 0
+        minReplicas: 0
+        maxReplicas: 1
+        rayStartParams: {temp-dir: /tmp/ray}
+        scaleStrategy: {}
+        template:
+          metadata:
+            annotations: *ray-annotations
+            labels:
+              !!merge <<: *workload-labels
+              app.kubernetes.io/component: ray-serve-worker
+              ray.io/cluster: ray-serve-example
+          spec:
+            automountServiceAccountToken: false
+            serviceAccountName: ray-runner
+            containers:
+              - name: ray-worker
+                image: registry.invalid/workloads/ray-serve@sha256:0000000000000000000000000000000000000000000000000000000000000000
+                env: *compile-cache-env
+                resources:
+                  requests: {cpu: 500m, memory: 2Gi}
+                  limits: {cpu: "1", memory: 4Gi}
+                readinessProbe:
+                  httpGet: {path: /api/local_raylet_healthz, port: 52365}
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 2
+                securityContext: *container-security
+                volumeMounts: *ray-volume-mounts
+            volumes: *ray-volumes

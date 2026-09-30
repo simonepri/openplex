@@ -1,0 +1,8 @@
+# Configures Kustomize resources for deploying and reconciling the Ray Train distributed training job.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - ray-train.k8s.yaml
+  # keep-sorted end

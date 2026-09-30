@@ -1,0 +1,139 @@
+# Defines the RayJob custom resource executing distributed multi-worker PyTorch model training via Kueue.
+
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: ray-train-example
+  labels:
+    !!merge <<: &workload-labels
+      app.kubernetes.io/name: ray-train-example
+      cost-center: examples
+      environment: production
+      team: examples
+    availability-class: wa
+    latency-class: lt
+spec:
+  entrypoint: python -m examples.ray_train.train
+  runtimeEnvYAML: |
+    env_vars:
+      AWS_PROFILE: team-s3
+      AWS_REGION: us-east-1
+      AWS_SHARED_CREDENTIALS_FILE: /var/run/cluster/s3/credentials
+      RAY_TRAIN_RUN_ID: __WORKLOAD_RUN_ID__
+      RAY_TRAIN_STORAGE_PATH: s3://__WORKLOAD_CELL_VIRTUAL__/home/examples
+      RAY_TRAIN_WORKERS: "2"
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 1800
+  submitterPodTemplate:
+    metadata:
+      labels:
+        !!merge <<: *workload-labels
+        app.kubernetes.io/component: ray-train-submitter
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: ray-job-submitter
+          image: registry.invalid/workloads/ray-train@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          env:
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://$(HOST_IP):4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            - name: OTEL_SERVICE_NAME
+              value: "ray-train"
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          securityContext: &container-security
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: {type: RuntimeDefault}
+  rayClusterSpec:
+    rayVersion: 2.57.0
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: 0.0.0.0
+        num-cpus: "0"
+        temp-dir: /tmp/ray
+      template:
+        metadata:
+          annotations: &ray-annotations
+            kueue.x-k8s.io/podset-group-name: ray-train-example
+            kueue.x-k8s.io/podset-required-topology: topology.kubernetes.io/zone
+            signoz.io/path: /metrics
+            signoz.io/port: "8080"
+            signoz.io/scrape: "true"
+          labels:
+            !!merge <<: *workload-labels
+            app.kubernetes.io/component: ray-train-head
+            ray.io/cluster: ray-train-example
+        spec:
+          automountServiceAccountToken: false
+          serviceAccountName: ray-runner
+          containers:
+            - name: ray-head
+              image: registry.invalid/workloads/ray-train@sha256:0000000000000000000000000000000000000000000000000000000000000000
+              env: &compile-cache-env
+                - {name: TORCHINDUCTOR_CACHE_DIR, value: /tmp/torchinductor}
+                - {name: TORCHINDUCTOR_FX_GRAPH_CACHE, value: "1"}
+                - {name: TORCHINDUCTOR_FX_GRAPH_REMOTE_CACHE, value: "1"}
+                - name: TORCHINDUCTOR_REDIS_URL
+                  valueFrom:
+                    secretKeyRef: {name: torch-compile-cache, key: redis-url}
+              resources:
+                requests: {cpu: 150m, memory: 1Gi}
+                limits: {cpu: "1", memory: 3Gi}
+              securityContext: *container-security
+              volumeMounts: &ray-volume-mounts
+                - {name: dshm, mountPath: /dev/shm}
+                - {name: ray-tmp, mountPath: /tmp}
+                - {name: serviceaccount-token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
+                - {name: torchinductor-cache, mountPath: /tmp/torchinductor}
+          volumes: &ray-volumes
+            - name: dshm
+              emptyDir: {medium: Memory, sizeLimit: 2Gi}
+            - {name: ray-tmp, emptyDir: {}}
+            - name: serviceaccount-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      expirationSeconds: 3600
+                      path: token
+            - name: torchinductor-cache
+              emptyDir: {sizeLimit: 2Gi}
+    workerGroupSpecs:
+      - groupName: trainers
+        replicas: 2
+        minReplicas: 2
+        maxReplicas: 2
+        rayStartParams: {temp-dir: /tmp/ray}
+        template:
+          metadata:
+            annotations: *ray-annotations
+            labels:
+              !!merge <<: *workload-labels
+              app.kubernetes.io/component: ray-train-worker
+              ray.io/cluster: ray-train-example
+          spec:
+            automountServiceAccountToken: false
+            serviceAccountName: ray-runner
+            containers:
+              - name: ray-worker
+                image: registry.invalid/workloads/ray-train@sha256:0000000000000000000000000000000000000000000000000000000000000000
+                env: *compile-cache-env
+                resources:
+                  requests: {cpu: "1", memory: 2Gi}
+                  limits: {cpu: "1", memory: 4Gi}
+                securityContext: *container-security
+                volumeMounts: *ray-volume-mounts
+            volumes: *ray-volumes
