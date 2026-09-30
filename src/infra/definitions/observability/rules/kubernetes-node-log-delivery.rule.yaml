@@ -1,0 +1,59 @@
+# Alerts when an active, ready Kubernetes node ceases sending log records for 10 minutes.
+# Decommissioned and terminating nodes are masked by joining against node readiness.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: kubernetes-node-log-delivery
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Kubernetes node log delivery stopped
+      alertType: METRIC_BASED_ALERT
+      labels:
+        severity: critical
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: promql
+              spec:
+                name: A
+                query: >-
+                  (sum by (cluster, node) (label_replace(label_replace(rate({__name__="otelcol_exporter_sent_log_records",exporter="otlp_http/signoz"}[10m]),"node","$1","k8s.node.name","(.*)"),"cluster","$1","k8s.cluster.name","(.*)")) or on (cluster, node) (0 * sum by (cluster, node) (label_replace(label_replace({__name__="k8s.node.condition_ready"} == 1,"node","$1","k8s.node.name","(.*)"),"cluster","$1","k8s.cluster.name","(.*)"))))
+                disabled: false
+                step: 60
+                legend: "{{cluster}} / {{node}}"
+          queryType: promql
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: all_the_times
+              op: below
+              target: 0.001
+      description: An active Kubernetes node has exported zero log records to SigNoz over the last 10 minutes; inspect the otel-collector-agent pod and systemd/journal logs on the node.
+      evaluation:
+        kind: rolling
+        spec:
+          evalWindow: 10m
+          frequency: 1m
+      notificationSettings:
+        usePolicy: true
+        renotify:
+          alertStates: [firing]
+          enabled: true
+          interval: 4h
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

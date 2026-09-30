@@ -1,0 +1,437 @@
+# Defines the synthetic-monitoring dashboard displaying Kuberhealthy and Chainsaw synthetic probe status, execution runs, and logs.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Dashboard
+metadata:
+  name: synthetic-monitoring
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    jsonSpec: |-
+      {
+        "schemaVersion": "v6",
+        "image": "",
+        "name": "synthetic-monitoring",
+        "tags": [
+          {
+            "key": "category",
+            "value": "health"
+          }
+        ],
+        "spec": {
+          "display": {
+            "name": "Synthetic Monitoring",
+            "description": "Unified synthetic health checks across Kuberhealthy and Chainsaw: recurring cluster smoke tests, synthetic probe status, check durations, and execution logs."
+          },
+          "variables": [
+            {
+              "kind": "ListVariable",
+              "spec": {
+                "name": "cluster",
+                "display": {
+                  "name": "Cluster",
+                  "description": "Filter by Kubernetes cluster name"
+                },
+                "allowAllValue": true,
+                "allowMultiple": true,
+                "sort": "alphabetical-asc",
+                "plugin": {
+                  "kind": "signoz/QueryVariable",
+                  "spec": {
+                    "queryValue": "SELECT DISTINCT resources_string['k8s.cluster.name'] AS cluster FROM signoz_logs.distributed_logs_v2 WHERE resources_string['k8s.cluster.name'] != '' ORDER BY cluster"
+                  }
+                }
+              }
+            }
+          ],
+          "panels": {
+            "synthetic-checks-total": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Total check executions (24h)",
+                  "description": "Total synthetic health check executions across the fleet in the last 24 hours"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.cluster.name'] IN $cluster AND (resources_string['k8s.namespace.name'] = 'kuberhealthy' OR resources_string['k8s.container.name'] = 'kuberhealthy' OR body LIKE '%kuberhealthy%' OR body LIKE '%chainsaw%')"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "synthetic-failures-count": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Failed checks (24h)",
+                  "description": "Total synthetic test failures and errors detected in the last 24 hours"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.cluster.name'] IN $cluster AND resources_string['k8s.namespace.name'] = 'kuberhealthy' AND (severity_text IN ('ERROR', 'FATAL') OR body LIKE '%failed%' OR body LIKE '%Failed%' OR body LIKE '%\"OK\": false%')"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "active-checker-pods": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Active synthetic checkers",
+                  "description": "Distinct active synthetic check pods and checkers seen in the last hour"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT uniqExact(resources_string['k8s.pod.name']) AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 1 HOUR AND resources_string['k8s.cluster.name'] IN $cluster AND resources_string['k8s.namespace.name'] = 'kuberhealthy'"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "synthetic-checks-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Synthetic test activity over time",
+                  "description": "Synthetic health check runs and status events grouped by hour"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": true,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": null
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfFiveMinutes(toDateTime(timestamp / 1000000000)) AS ts, multiIf(body LIKE '%\"OK\": true%' OR body LIKE '%check OK%' OR body LIKE '%Check pod finished successfully%', 'Passed', body LIKE '%\"OK\": false%' OR severity_text IN ('ERROR', 'FATAL') OR body LIKE '%failed%', 'Failed', 'Executed') AS status, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.cluster.name'] IN $cluster AND resources_string['k8s.namespace.name'] = 'kuberhealthy' GROUP BY ts, status ORDER BY ts"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "synthetic-checks-cpu-usage": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Synthetic checks CPU usage",
+                  "description": "Container CPU core usage for synthetic monitoring pods in the kuberhealthy namespace"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "3"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": null
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=\"kuberhealthy\",container=~\"chainsaw-.*\"}[5m]))",
+                          "legend": "{{container}}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "synthetic-checks-memory-usage": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Synthetic checks Memory usage",
+                  "description": "Container working set memory consumption for synthetic monitoring pods in the kuberhealthy namespace"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false
+                    },
+                    "formatting": {
+                      "unit": "By",
+                      "decimalPrecision": "2"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": null
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum by (container) (container_memory_working_set_bytes{namespace=\"kuberhealthy\",container=~\"chainsaw-.*\"})",
+                          "legend": "{{container}}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "synthetic-check-status-table": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Synthetic check status & metrics",
+                  "description": "Per-check synthetic health status, time of last run, last success, last failure, total successes, and failures"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {
+                        "successes": "none",
+                        "failures": "none",
+                        "executions": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH coalesce(nullIf(resources_string['k8s.pod.labels.kuberhealthy-check-name'], ''), nullIf(resources_string['k8s.pod.labels.kuberhealthy_check_name'], ''), nullIf(resources_string['k8s.pod.labels.app.kubernetes.io/name'], ''), nullIf(extract(resources_string['k8s.pod.name'], '^(.*?)-\\d+$'), ''), nullIf(replaceRegexpOne(resources_string['k8s.pod.name'], '-[a-z0-9]{8,10}-[a-z0-9]{5}$', ''), ''), 'unknown-check') AS check_id SELECT coalesce(nullIf(resources_string['k8s.cluster.name'], ''), 'unknown') AS cluster, transform(check_id, ['chainsaw-smoke-cli', 'chainsaw-smoke-dns', 'chainsaw-smoke-apiserver', 'chainsaw-smoke-metrics', 'chainsaw-identity', 'chainsaw-scheduling', 'chainsaw-networking', 'chainsaw-secrets', 'chainsaw-storage', 'chainsaw-observability'], ['verify-chainsaw-cli-readiness', 'resolve-cluster-dns-names', 'verify-kubernetes-api-health', 'verify-kubernetes-metrics-api', 'authenticate-catalog-tools-via-dex', 'admit-and-run-workload-through-kueue', 'isolate-cross-team-network-traffic', 'synchronize-secret-from-store', 'read-and-write-s3-objects-via-gateway', 'query-signoz-telemetry-via-egress-door'], check_id) AS check_name, multiIf(countIf(severity_text IN ('ERROR', 'FATAL') OR body LIKE '%failed%' OR body LIKE '%\"OK\": false%') > 0 AND maxIf(toDateTime(timestamp / 1000000000), severity_text IN ('ERROR', 'FATAL') OR body LIKE '%failed%' OR body LIKE '%\"OK\": false%') >= maxIf(toDateTime(timestamp / 1000000000), body LIKE '%\"OK\": true%' OR body LIKE '%check OK%' OR body LIKE '%finished successfully%'), 'Failing', 'Passing') AS current_status, max(toDateTime(timestamp / 1000000000)) AS last_run, nullIf(maxIf(toDateTime(timestamp / 1000000000), body LIKE '%\"OK\": true%' OR body LIKE '%check OK%' OR body LIKE '%finished successfully%'), toDateTime(0)) AS last_success, nullIf(maxIf(toDateTime(timestamp / 1000000000), severity_text IN ('ERROR', 'FATAL') OR body LIKE '%failed%' OR body LIKE '%\"OK\": false%'), toDateTime(0)) AS last_failure, countIf(body LIKE '%\"OK\": true%' OR body LIKE '%check OK%' OR body LIKE '%finished successfully%') AS successes, countIf(severity_text IN ('ERROR', 'FATAL') OR body LIKE '%failed%' OR body LIKE '%\"OK\": false%') AS failures, count() AS executions FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.cluster.name'] IN $cluster AND resources_string['k8s.namespace.name'] = 'kuberhealthy' AND resources_string['k8s.pod.name'] NOT LIKE 'kuberhealthy-%' GROUP BY cluster, check_name ORDER BY cluster ASC, last_run DESC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "recent-synthetic-logs": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Recent synthetic check logs",
+                  "description": "Audit stream of Kuberhealthy master aggregator and Chainsaw smoke test output"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {},
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toDateTime(timestamp / 1000000000) AS event_time, resources_string['k8s.cluster.name'] AS cluster, resources_string['k8s.pod.name'] AS pod, coalesce(severity_text, 'INFO') AS severity, body AS message FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.cluster.name'] IN $cluster AND resources_string['k8s.namespace.name'] = 'kuberhealthy' ORDER BY event_time DESC LIMIT 100"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "layouts": [
+            {
+              "kind": "Grid",
+              "spec": {
+                "items": [
+                  {"x": 0, "y": 0, "width": 4, "height": 4, "content": {"$ref": "#/spec/panels/synthetic-checks-total"}},
+                  {"x": 4, "y": 0, "width": 4, "height": 4, "content": {"$ref": "#/spec/panels/synthetic-failures-count"}},
+                  {"x": 8, "y": 0, "width": 4, "height": 4, "content": {"$ref": "#/spec/panels/active-checker-pods"}},
+                  {"x": 0, "y": 4, "width": 12, "height": 6, "content": {"$ref": "#/spec/panels/synthetic-checks-over-time"}},
+                  {"x": 0, "y": 10, "width": 6, "height": 6, "content": {"$ref": "#/spec/panels/synthetic-checks-cpu-usage"}},
+                  {"x": 6, "y": 10, "width": 6, "height": 6, "content": {"$ref": "#/spec/panels/synthetic-checks-memory-usage"}},
+                  {"x": 0, "y": 16, "width": 12, "height": 6, "content": {"$ref": "#/spec/panels/synthetic-check-status-table"}},
+                  {"x": 0, "y": 22, "width": 12, "height": 8, "content": {"$ref": "#/spec/panels/recent-synthetic-logs"}}
+                ]
+              }
+            }
+          ],
+          "duration": "24h",
+          "refreshInterval": "1m"
+        }
+      }

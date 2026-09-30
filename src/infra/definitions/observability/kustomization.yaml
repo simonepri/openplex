@@ -1,0 +1,37 @@
+# Defines platform observability base bundling cluster health rules, dashboards, and saved views.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: signoz
+resources:
+  # keep-sorted start
+  - dashboards/block-storage.dashboard.yaml
+  - dashboards/fleet-backup.dashboard.yaml
+  - dashboards/fleet-security.dashboard.yaml
+  - dashboards/object-storage.dashboard.yaml
+  - dashboards/synthetic-monitoring.dashboard.yaml
+  - dashboards/team-workloads.dashboard.yaml
+  - rules/argocd-sync-failure.rule.yaml
+  - rules/clickhouse-backup-stale.rule.yaml
+  - rules/cloud-imds-exfiltration-attempt.rule.yaml
+  - rules/cnpg-backup-stale.rule.yaml
+  - rules/falco-runtime-threat.rule.yaml
+  - rules/kargo-garbage-collector-stuck.rule.yaml
+  - rules/kubernetes-container-not-ready.rule.yaml
+  - rules/kubernetes-node-condition.rule.yaml
+  - rules/kubernetes-node-disk-pressure.rule.yaml
+  - rules/kubernetes-node-log-delivery.rule.yaml
+  - rules/kubernetes-node-memory-pressure.rule.yaml
+  - rules/kubernetes-node-not-ready.rule.yaml
+  - rules/kubernetes-node-pid-pressure.rule.yaml
+  - rules/kubernetes-pod-cpu-saturation.rule.yaml
+  - rules/kyverno-admission-denial.rule.yaml
+  - rules/nvidia-gpu-health.rule.yaml
+  - rules/signoz-collector-export-failure.rule.yaml
+  - rules/velero-backup-stale.rule.yaml
+  - rules/workspace-backup-stale.rule.yaml
+  - rules/workspace-container-restart.rule.yaml
+  - views/fleet-errors.view.yaml
+  - views/security-incidents.view.yaml
+  - views/slow-traces.view.yaml
+  # keep-sorted end

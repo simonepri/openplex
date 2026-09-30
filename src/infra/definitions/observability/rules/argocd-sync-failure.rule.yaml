@@ -1,0 +1,53 @@
+# Defines the Argo CD sync-failure alert reconciled into SigNoz. Sync retries are bounded, so a sync or hook that keeps failing leaves the app's last operation Failed, which fires until a later sync succeeds.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: argocd-sync-failure
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Argo CD sync failed
+      alertType: METRIC_BASED_ALERT
+      labels: {severity: warning}
+      condition:
+        alertOnAbsent: false
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: promql
+              spec:
+                name: A
+                query: >-
+                  max by (cluster, application) (kube_argocd_application_operation_phase{phase=~"Failed|Error"})
+                disabled: false
+                step: 60
+                legend: "{{cluster}} / {{application}}"
+          queryType: promql
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: at_least_once
+              op: above
+              target: 0
+      description: An Argo CD application's last sync ended as Failed or Error after exhausting its bounded retries; check the application's operation message and its hook Jobs.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 15m, frequency: 5m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 4h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

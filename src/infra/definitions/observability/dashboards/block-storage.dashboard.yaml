@@ -1,0 +1,427 @@
+# Defines block-storage dashboard reconciled into SigNoz. It presents fleet-wide persistent volumes, database datastore disks, and cache storage telemetry.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Dashboard
+metadata:
+  name: block-storage
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    jsonSpec: |-
+      {
+        "schemaVersion": "v6",
+        "image": "",
+        "name": "block-storage",
+        "tags": [
+          {"key": "category", "value": "storage"}
+        ],
+        "spec": {
+          "display": {
+            "name": "Block Storage",
+            "description": "Fleet-wide persistent volumes, database datastore disks, and cache storage telemetry."
+          },
+          "variables": [
+            {
+              "kind": "ListVariable",
+              "spec": {
+                "name": "cell",
+                "display": {"name": "Cell", "description": "Cluster or cell name"},
+                "allowAllValue": true,
+                "allowMultiple": true,
+                "sort": "alphabetical-asc",
+                "plugin": {
+                  "kind": "signoz/QueryVariable",
+                  "spec": {
+                    "queryValue": "SELECT DISTINCT JSONExtractString(labels, 'cluster') AS cluster FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name = 'kubelet_volume_stats_capacity_bytes' AND cluster != '' ORDER BY cluster"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "ListVariable",
+              "spec": {
+                "name": "namespace",
+                "display": {"name": "Namespace", "description": "Kubernetes namespace"},
+                "allowAllValue": true,
+                "allowMultiple": true,
+                "sort": "alphabetical-asc",
+                "plugin": {
+                  "kind": "signoz/QueryVariable",
+                  "spec": {
+                    "queryValue": "SELECT DISTINCT JSONExtractString(labels, 'namespace') AS namespace FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name = 'kubelet_volume_stats_capacity_bytes' AND namespace != '' ORDER BY namespace"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "ListVariable",
+              "spec": {
+                "name": "storage_class",
+                "display": {"name": "Storage Class", "description": "Persistent volume claim storage class"},
+                "allowAllValue": true,
+                "allowMultiple": true,
+                "sort": "alphabetical-asc",
+                "plugin": {
+                  "kind": "signoz/QueryVariable",
+                  "spec": {
+                    "queryValue": "SELECT DISTINCT JSONExtractString(labels, 'storageclass') AS storage_class FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name = 'kube_persistentvolumeclaim_info' AND storage_class != '' ORDER BY storage_class"
+                  }
+                }
+              }
+            }
+          ],
+          "panels": {
+            "stat-total-capacity": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Total Capacity", "description": "Total persistent volume capacity across the fleet"},
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time"},
+                    "formatting": {"unit": "By", "decimalPrecision": "2"},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum(kubelet_volume_stats_capacity_bytes)"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "stat-total-used": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Total Used", "description": "Total persistent volume space currently used across the fleet"},
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time"},
+                    "formatting": {"unit": "By", "decimalPrecision": "2"},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum(kubelet_volume_stats_used_bytes)"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "stat-volume-saturation": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Fleet Volume Saturation %", "description": "Fleet-wide volume utilization percentage"},
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time"},
+                    "formatting": {"unit": "percent", "decimalPrecision": "2"},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "(sum(kubelet_volume_stats_used_bytes) / sum(kubelet_volume_stats_capacity_bytes)) * 100"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "stat-near-capacity-count": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Near-Capacity Volumes Count", "description": "Count of persistent volumes exceeding 80% saturation"},
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time"},
+                    "formatting": {"unit": "none", "decimalPrecision": "0"},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "count(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.8) or vector(0)"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "volume-saturation-table": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Volume Saturation Table",
+                  "description": "Persistent volume claims ranked by disk saturation percentage"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {
+                        "capacity": "By",
+                        "used": "By",
+                        "utilization_pct": "percent"
+                      },
+                      "decimalPrecision": "2"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT JSONExtractString(ts.labels, 'namespace') AS namespace, JSONExtractString(ts.labels, 'persistentvolumeclaim') AS persistentvolumeclaim, maxIf(s.value, s.metric_name = 'kubelet_volume_stats_capacity_bytes') AS capacity, maxIf(s.value, s.metric_name = 'kubelet_volume_stats_used_bytes') AS used, round((used / capacity) * 100, 2) AS utilization_pct FROM signoz_metrics.distributed_samples_v4 s GLOBAL JOIN (SELECT fingerprint, any(labels) AS labels FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name IN ('kubelet_volume_stats_capacity_bytes', 'kubelet_volume_stats_used_bytes') GROUP BY fingerprint) ts ON s.fingerprint = ts.fingerprint WHERE s.metric_name IN ('kubelet_volume_stats_capacity_bytes', 'kubelet_volume_stats_used_bytes') AND s.unix_milli >= toUnixTimestamp64Milli(now64() - INTERVAL 1 HOUR) GROUP BY namespace, persistentvolumeclaim HAVING capacity > 0 ORDER BY utilization_pct DESC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "volume-usage-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Volume Usage Over Time",
+                  "description": "Persistent volume disk utilization stacked by Kubernetes namespace"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time", "fillSpans": false},
+                    "formatting": {"unit": "By", "decimalPrecision": "2"},
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    },
+                    "axes": {"softMin": 0, "softMax": null, "isLogScale": false},
+                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum by (namespace) (kubelet_volume_stats_used_bytes)",
+                          "legend": "{{namespace}}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "database-volumes": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Database Volumes (CNPG PostgreSQL & ClickHouse)",
+                  "description": "Persistent volume consumption across core platform datastore clusters"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time", "fillSpans": false},
+                    "formatting": {"unit": "By", "decimalPrecision": "2"},
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    },
+                    "axes": {"softMin": 0, "softMax": null, "isLogScale": false},
+                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum by (namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes{persistentvolumeclaim=~\".*postgres.*|.*clickhouse.*|.*keeper.*\"})",
+                          "legend": "{{namespace}} / {{persistentvolumeclaim}}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "cache-footprint": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Cache Footprint",
+                  "description": "In-memory and disk cache metrics across Redis and Valkey instances"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time", "fillSpans": false},
+                    "formatting": {"unit": "By", "decimalPrecision": "2"},
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    },
+                    "axes": {"softMin": 0, "softMax": null, "isLogScale": false},
+                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum by (__name__) ({__name__=~\"redis_memory_used_bytes|redis_memory_max_bytes\"})",
+                          "legend": "{{__name__}}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "node-host-disk": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Node Host Disk",
+                  "description": "Host node filesystem capacity and disk saturation"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time", "fillSpans": false},
+                    "formatting": {"unit": "percent", "decimalPrecision": "2"},
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    },
+                    "axes": {"softMin": 0, "softMax": 100, "isLogScale": false},
+                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "({__name__=\"k8s.node.filesystem.usage\"} / {__name__=\"k8s.node.filesystem.capacity\"}) * 100",
+                          "legend": "{{k8s.node.name}}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "layouts": [
+            {
+              "kind": "Grid",
+              "spec": {
+                "items": [
+                  {"x": 0, "y": 0, "width": 3, "height": 4, "content": {"$ref": "#/spec/panels/stat-total-capacity"}},
+                  {"x": 3, "y": 0, "width": 3, "height": 4, "content": {"$ref": "#/spec/panels/stat-total-used"}},
+                  {"x": 6, "y": 0, "width": 3, "height": 4, "content": {"$ref": "#/spec/panels/stat-volume-saturation"}},
+                  {"x": 9, "y": 0, "width": 3, "height": 4, "content": {"$ref": "#/spec/panels/stat-near-capacity-count"}},
+                  {"x": 0, "y": 4, "width": 12, "height": 8, "content": {"$ref": "#/spec/panels/volume-saturation-table"}},
+                  {"x": 0, "y": 12, "width": 6, "height": 7, "content": {"$ref": "#/spec/panels/volume-usage-over-time"}},
+                  {"x": 6, "y": 12, "width": 6, "height": 7, "content": {"$ref": "#/spec/panels/database-volumes"}},
+                  {"x": 0, "y": 19, "width": 6, "height": 7, "content": {"$ref": "#/spec/panels/cache-footprint"}},
+                  {"x": 6, "y": 19, "width": 6, "height": 7, "content": {"$ref": "#/spec/panels/node-host-disk"}}
+                ]
+              }
+            }
+          ],
+          "duration": "1h",
+          "refreshInterval": "1m"
+        }
+      }

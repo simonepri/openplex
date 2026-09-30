@@ -1,0 +1,326 @@
+# Defines fleet-backup dashboard reconciled into SigNoz. It presents real-time backup freshness, completion operations, and storage snapshots across PostgreSQL Barman, Velero, ClickHouse, and Kopia.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Dashboard
+metadata:
+  name: fleet-backup
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    jsonSpec: |-
+      {
+        "schemaVersion": "v6",
+        "image": "",
+        "name": "fleet-backup",
+        "tags": [
+          {"key": "category", "value": "backup"}
+        ],
+        "spec": {
+          "display": {
+            "name": "Backups",
+            "description": "Unified fleet backup telemetry: CloudNativePG Barman WAL & base backups, Velero cluster & volume snapshots, ClickHouse native backups, and Kopia workspace snapshots."
+          },
+          "variables": [],
+          "panels": {
+            "backup-freshness-postgres": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Hours since last PostgreSQL backup", "description": "CloudNativePG Barman WAL & base backup freshness per database"},
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {"total_events": "none", "hours_since_last_event": "hours"},
+                      "decimalPrecision": "1"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT resources_string['k8s.namespace.name'] AS namespace, replaceRegexpOne(resources_string['k8s.pod.name'], '-\\d+$', '') AS database, toFloat64(dateDiff('second', max(toDateTime(timestamp / 1000000000)), now())) / 3600.0 AS hours_since_last_event, count() AS total_events FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 7 DAY AND (body LIKE '%barman%' OR resources_string['k8s.container.name'] = 'barman-cloud') GROUP BY namespace, database ORDER BY hours_since_last_event ASC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "backup-freshness-velero": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Hours since last Velero backup", "description": "Cluster and volume snapshot freshness per schedule"},
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time", "fillSpans": false},
+                    "formatting": {"unit": "hours", "decimalPrecision": "1"},
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    },
+                    "axes": {"softMin": 0, "softMax": 48, "isLogScale": false},
+                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "(time() - (max by (cluster, schedule) (kube_velero_backup_completion_timestamp{phase=\"Completed\",schedule!=\"\"}) or on (cluster, schedule) (max by (cluster, schedule) (kube_velero_schedule_created)))) / 3600",
+                          "legend": "Velero: {{schedule}} ({{cluster}})"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "backup-freshness-clickhouse": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Hours since last ClickHouse backup", "description": "ClickHouse telemetry backup freshness per cluster cronjob"},
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time", "fillSpans": false},
+                    "formatting": {"unit": "hours", "decimalPrecision": "1"},
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    },
+                    "axes": {"softMin": 0, "softMax": 48, "isLogScale": false},
+                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "(time() - (max by (cluster, namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace=\"observability\",cronjob=\"signoz-clickhouse-backup\"}) or on (cluster, namespace, cronjob) (0 * max by (cluster, namespace, cronjob) (kube_cronjob_info{namespace=\"observability\",cronjob=\"signoz-clickhouse-backup\"})))) / 3600",
+                          "legend": "ClickHouse Telemetry ({{cluster}})"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "backup-operations-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Backup operations completed over time", "description": "Completed backup and snapshot events grouped by state tier"},
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {"timePreference": "global_time", "fillSpans": false},
+                    "formatting": {"unit": "none", "decimalPrecision": "0"},
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    },
+                    "axes": {"softMin": 0, "softMax": null, "isLogScale": false},
+                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfHour(toDateTime(timestamp / 1000000000)) AS ts, multiIf(resources_string['k8s.container.name'] = 'barman-cloud' OR body LIKE '%barman%' OR body LIKE '%wal-archive%' OR body LIKE '%base backup%', 'PostgreSQL Barman', resources_string['k8s.container.name'] = 'velero' OR body LIKE '%Backup completed%' OR body LIKE '%Completed % items%', 'Velero Cluster/PV', resources_string['k8s.container.name'] = 'backup' OR body LIKE '%clickhouse-backup%' OR body LIKE '%BACKUP DATABASE%', 'ClickHouse Telemetry', 'Kopia Workspace') AS tier, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 7 DAY AND ((body LIKE '%workspace snapshot catalogs%' OR body LIKE '%published % owner snapshot catalogs%' OR body LIKE '%finalized % workspace snapshot catalogs%') OR (body LIKE '%barman%' OR body LIKE '%wal-archive%' OR body LIKE '%base backup%' OR resources_string['k8s.container.name'] = 'barman-cloud') OR (body LIKE '%Backup completed%' OR body LIKE '%Completed % items%' OR resources_string['k8s.container.name'] = 'velero') OR (body LIKE '%clickhouse-backup%' OR body LIKE '%BACKUP DATABASE%' OR resources_string['k8s.container.name'] = 'backup')) GROUP BY ts, tier ORDER BY ts"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "database-backup-status": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "PostgreSQL database backup status", "description": "CloudNativePG database clusters and Barman archiving events"},
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {"total_events": "none", "hours_since_last_event": "hours"},
+                      "decimalPrecision": "1"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT resources_string['k8s.namespace.name'] AS namespace, resources_string['k8s.pod.name'] AS pod, toFloat64(dateDiff('second', max(toDateTime(timestamp / 1000000000)), now())) / 3600.0 AS hours_since_last_event, count() AS total_events FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 7 DAY AND (body LIKE '%barman%' OR resources_string['k8s.container.name'] = 'barman-cloud') GROUP BY namespace, pod ORDER BY hours_since_last_event ASC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "velero-backup-status": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Velero cluster backup schedule status", "description": "Cluster and volume backup execution history"},
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {"completed_count": "none"},
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT resources_string['k8s.namespace.name'] AS namespace, max(toDateTime(timestamp / 1000000000)) AS last_completed, count() AS completed_count, any(body) AS latest_status FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 7 DAY AND resources_string['k8s.container.name'] = 'velero' AND (body LIKE '%Backup completed%' OR body LIKE '%backup completed%') GROUP BY namespace ORDER BY last_completed DESC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "workspace-snapshots-rollup": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Developer workspace Kopia snapshot inventory", "description": "Workspace snapshot indexing execution history and catalog status"},
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {"execution_count": "none"},
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT max(toDateTime(timestamp / 1000000000)) AS last_run, resources_string['k8s.container.name'] AS step, body AS status_message, count() AS execution_count FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 7 DAY AND ((resources_string['k8s.namespace.name'] = 'workspace-backup-system' AND resources_string['k8s.container.name'] IN ('finalize-catalogs', 'publish-indexes')) OR body LIKE '%workspace snapshot catalogs%' OR body LIKE '%owner snapshot catalogs%') GROUP BY step, status_message ORDER BY last_run DESC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "recent-backup-logs": {
+              "kind": "Panel",
+              "spec": {
+                "display": {"name": "Recent backup execution & recovery drill logs", "description": "Unified audit stream across PostgreSQL, Velero, ClickHouse, and Kopia"},
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {},
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toDateTime(timestamp / 1000000000) AS event_time, multiIf(resources_string['k8s.container.name'] = 'barman-cloud' OR body LIKE '%barman%', 'PostgreSQL (Barman)', resources_string['k8s.container.name'] = 'velero', 'Cluster/PV (Velero)', resources_string['k8s.container.name'] = 'backup' OR body LIKE '%clickhouse-backup%', 'Telemetry (ClickHouse)', 'Workspace (Kopia)') AS tier, resources_string['k8s.namespace.name'] AS namespace, resources_string['k8s.pod.name'] AS pod, body AS message FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 7 DAY AND (resources_string['k8s.container.name'] IN ('velero', 'barman-cloud', 'backup') OR body LIKE '%backup%' OR body LIKE '%Backup%' OR body LIKE '%Kopia%') AND severity_text IN ('INFO', 'WARN', 'ERROR', 'FATAL') ORDER BY event_time DESC LIMIT 100"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "layouts": [
+            {
+              "kind": "Grid",
+              "spec": {
+                "items": [
+                  {"x": 0, "y": 0, "width": 4, "height": 6, "content": {"$ref": "#/spec/panels/backup-freshness-postgres"}},
+                  {"x": 4, "y": 0, "width": 4, "height": 6, "content": {"$ref": "#/spec/panels/backup-freshness-velero"}},
+                  {"x": 8, "y": 0, "width": 4, "height": 6, "content": {"$ref": "#/spec/panels/backup-freshness-clickhouse"}},
+                  {"x": 0, "y": 6, "width": 12, "height": 6, "content": {"$ref": "#/spec/panels/backup-operations-over-time"}},
+                  {"x": 0, "y": 12, "width": 4, "height": 6, "content": {"$ref": "#/spec/panels/database-backup-status"}},
+                  {"x": 4, "y": 12, "width": 4, "height": 6, "content": {"$ref": "#/spec/panels/velero-backup-status"}},
+                  {"x": 8, "y": 12, "width": 4, "height": 6, "content": {"$ref": "#/spec/panels/workspace-snapshots-rollup"}},
+                  {"x": 0, "y": 18, "width": 12, "height": 8, "content": {"$ref": "#/spec/panels/recent-backup-logs"}}
+                ]
+              }
+            }
+          ],
+          "duration": "7d",
+          "refreshInterval": "1m"
+        }
+      }

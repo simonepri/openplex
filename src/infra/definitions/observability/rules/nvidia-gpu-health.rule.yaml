@@ -1,0 +1,67 @@
+# Defines the NVIDIA GPU device-health alert reconciled into SigNoz. The DCGM exporter emits no series on CPU-only cells, and absent data never fires it.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: nvidia-gpu-health
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: NVIDIA GPU health failure
+      alertType: METRIC_BASED_ALERT
+      labels: {severity: critical}
+      condition:
+        alertOnAbsent: false
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - metricName: DCGM_EXP_GPU_HEALTH_STATUS
+                    spaceAggregation: max
+                    timeAggregation: max
+                groupBy:
+                  - name: k8s.cluster.name
+                    fieldContext: resource
+                    fieldDataType: string
+                  - name: k8s.node.name
+                    fieldContext: resource
+                    fieldDataType: string
+                  - name: UUID
+                    fieldContext: attribute
+                    fieldDataType: string
+                  - name: health_watch
+                    fieldContext: attribute
+                    fieldDataType: string
+                signal: metrics
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: all_the_times
+              op: above
+              target: 0
+      description: DCGM reported a non-passing health result for the named GPU subsystem continuously for three minutes; node repair is automatic and this alert is for follow-up inspection of DCGM diagnostics.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 3m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 4h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

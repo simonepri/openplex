@@ -1,0 +1,41 @@
+# Defines the security incidents saved view in SigNoz.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: SavedView
+metadata:
+  name: security-incidents
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: saved-view
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    jsonSpec: |-
+      {
+        "name": "security-incidents",
+        "source": "logs",
+        "schemaVersion": "v2",
+        "spec": {
+          "displayName": "Security Incidents",
+          "panelType": "list",
+          "requestType": "raw",
+          "queries": [
+            {
+              "type": "builder_query",
+              "spec": {
+                "name": "A",
+                "signal": "logs",
+                "filter": {
+                  "expression": "k8s_container_name IN ('falco', 'kyverno', 'envoy')"
+                }
+              }
+            }
+          ]
+        }
+      }

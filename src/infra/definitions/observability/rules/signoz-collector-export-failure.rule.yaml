@@ -1,0 +1,58 @@
+# Alerts when the SigNoz OpenTelemetry Collector gateway continuously fails or refuses to export log records for 5 minutes.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: signoz-collector-export-failure
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: SigNoz collector export failure
+      alertType: METRIC_BASED_ALERT
+      labels:
+        severity: critical
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: promql
+              spec:
+                name: A
+                query: >-
+                  sum by (cluster, namespace, pod, exporter) (label_replace(rate({__name__=~"otelcol_(exporter_(send|enqueue)_failed|processor_refused)_log_records_total",namespace="signoz"}[5m]),"cluster","$1","k8s.cluster.name","(.*)"))
+                disabled: false
+                step: 60
+                legend: "{{cluster}} / {{pod}} / {{exporter}}"
+          queryType: promql
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: all_the_times
+              op: above
+              target: 0
+      description: The SigNoz collector gateway in the signoz namespace has experienced continuous record export failures (send failures, enqueue overflows, or processor memory/buffer refusals) for 5 minutes.
+      evaluation:
+        kind: rolling
+        spec:
+          evalWindow: 5m
+          frequency: 1m
+      notificationSettings:
+        usePolicy: true
+        renotify:
+          alertStates: [firing]
+          enabled: true
+          interval: 1h
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

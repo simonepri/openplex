@@ -1,0 +1,65 @@
+# Defines workspace-container restart alert reconciled into SigNoz. Operators inspect the Pod status to distinguish OOM kills from exits.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: workspace-container-restart
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Workspace container restarted
+      alertType: METRIC_BASED_ALERT
+      labels: {severity: warning}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - metricName: k8s.container.restarts
+                    spaceAggregation: max
+                    timeAggregation: rate
+                filter:
+                  expression: "service.name = 'coder-workspace' AND k8s.container.name = 'workspace'"
+                groupBy:
+                  - name: k8s.cluster.name
+                    fieldContext: resource
+                    fieldDataType: string
+                  - name: k8s.namespace.name
+                    fieldContext: resource
+                    fieldDataType: string
+                  - name: k8s.pod.name
+                    fieldContext: resource
+                    fieldDataType: string
+                signal: metrics
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: all_the_times
+              op: above
+              target: 0
+      description: A Coder workspace restart counter increased in the last minute; inspect its last termination reason and node memory metrics to identify an OOM kill.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 1m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 4h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

@@ -1,0 +1,52 @@
+# Alerts when a cell's Velero schedule has no successful backup within the daily cadence plus a two-hour completion margin.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: velero-backup-stale
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Velero backup is stale
+      alertType: METRIC_BASED_ALERT
+      labels: {severity: critical}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: promql
+              spec:
+                name: A
+                query: >-
+                  time() - (max by (cluster, schedule) (kube_velero_backup_completion_timestamp{phase="Completed",schedule!=""}) or on (cluster, schedule) (0 * max by (cluster, schedule) (kube_velero_schedule_created)))
+                disabled: false
+                step: 60
+                legend: "{{cluster}} / {{schedule}}"
+          queryType: promql
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: all_the_times
+              op: above
+              target: 93600
+      description: A cell's Velero schedule has not completed successfully within 26 hours.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 15m, frequency: 5m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 4h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

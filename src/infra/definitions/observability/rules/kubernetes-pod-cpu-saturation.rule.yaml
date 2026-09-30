@@ -1,0 +1,58 @@
+# Alerts when container throttled CPU periods exceed acceptable saturation thresholds.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: kubernetes-pod-cpu-saturation
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Kubernetes pod CPU saturation
+      alertType: METRIC_BASED_ALERT
+      labels:
+        severity: warning
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: promql
+              spec:
+                name: A
+                query: >-
+                  sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) / sum by (cluster, namespace, pod, container) (kube_pod_container_resource_limits{resource="cpu"})
+                disabled: false
+                step: 60
+                legend: "{{cluster}} / {{namespace}} / {{pod}} / {{container}}"
+          queryType: promql
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: all_the_times
+              op: above
+              target: 0.9
+      description: A container exceeded 90% of its CPU limit throughout the last five minutes.
+      evaluation:
+        kind: rolling
+        spec:
+          evalWindow: 5m
+          frequency: 1m
+      notificationSettings:
+        usePolicy: true
+        renotify:
+          alertStates: [firing]
+          enabled: true
+          interval: 4h
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

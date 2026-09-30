@@ -1,0 +1,66 @@
+# Defines the Kubernetes container readiness alert reconciled into SigNoz.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: kubernetes-container-not-ready
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Kubernetes container not ready
+      alertType: METRIC_BASED_ALERT
+      labels: {severity: critical}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - metricName: k8s.container.ready
+                    spaceAggregation: min
+                    timeAggregation: min
+                groupBy:
+                  - name: k8s.cluster.name
+                    fieldContext: resource
+                    fieldDataType: string
+                  - name: k8s.namespace.name
+                    fieldContext: resource
+                    fieldDataType: string
+                  - name: k8s.pod.name
+                    fieldContext: resource
+                    fieldDataType: string
+                  - name: k8s.container.name
+                    fieldContext: resource
+                    fieldDataType: string
+                signal: metrics
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: all_the_times
+              op: below
+              target: 1
+      description: A container has failed readiness probes continuously for three minutes; inspect container logs and probe configuration.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 3m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 4h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

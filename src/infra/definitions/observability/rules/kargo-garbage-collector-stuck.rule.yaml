@@ -1,0 +1,52 @@
+# Alerts when an active Kargo garbage-collector Job runs beyond its expected completion window, before the hourly schedule can create another run.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: kargo-garbage-collector-stuck
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Kargo garbage collector is running too long
+      alertType: METRIC_BASED_ALERT
+      labels: {severity: warning}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: promql
+              spec:
+                name: A
+                query: >-
+                  (time() - kube_job_status_start_time{namespace="kargo",job_name=~"kargo-garbage-collector-.+"}) and on (cluster, namespace, job_name) (kube_job_status_active{namespace="kargo",job_name=~"kargo-garbage-collector-.+"} > 0)
+                disabled: false
+                step: 60
+                legend: "{{cluster}} / {{namespace}} / {{job_name}}"
+          queryType: promql
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: all_the_times
+              op: above
+              target: 2700
+      description: An active Kargo garbage-collector Job has run for more than 45 minutes; inspect the Job before the hourly schedule is blocked.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 5m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 4h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1
