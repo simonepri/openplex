@@ -1,0 +1,101 @@
+"""Builds local cluster mesh access and isolated browser proxy tooling."""
+
+# gazelle:resolve py infra.terraform.lifecycle.cluster_common //src/infra/terraform/lifecycle:cluster_common
+# gazelle:resolve_regexp py ^infra\.tools\.cloud_emulator\.access\.([^.]+)(\..*)?$ //src/infra/tools/cloud_emulator/access:$1
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+py_binary(
+    name = "tls_bridge",
+    srcs = ["tls_bridge.py"],
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "tls_bridge_test",
+    srcs = ["tls_bridge_test.py"],
+    data = [":tls_bridge"],
+    tags = ["no-sandbox"],
+)
+
+py_binary(
+    name = "browser_proxy",
+    srcs = ["browser_proxy.py"],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "cluster_tailnet",
+    srcs = ["cluster_tailnet.py"],
+    data = [":tls_bridge"],
+    imports = ["../../../.."],  # keep
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/infra/terraform/lifecycle:cluster_common",
+        "//src/infra/tools/cloud_emulator/access:kubeconfig",
+        "//src/infra/tools/cloud_emulator/access:workspace_ssh_proxy",
+    ],
+)
+
+py_binary(
+    name = "cluster_browser",
+    srcs = ["cluster_browser.py"],
+    data = [":browser_proxy"],
+    imports = ["../../../.."],  # keep
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/infra/terraform/lifecycle:cluster_common",
+        "//src/infra/tools/cloud_emulator/access:cluster_tailnet",
+    ],
+)
+
+alias(
+    name = "browser",
+    actual = ":cluster_browser",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "tailnet",
+    actual = ":cluster_tailnet",
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "access_test",
+    srcs = ["access_test.py"],
+    imports = ["../../../.."],  # keep
+    tags = ["no-sandbox"],
+    deps = [
+        "//src/infra/tools/cloud_emulator/access:browser_proxy",
+        "//src/infra/tools/cloud_emulator/access:cluster_browser",
+        "//src/infra/tools/cloud_emulator/access:cluster_tailnet",
+        "//src/infra/tools/cloud_emulator/access:kubeconfig",
+        "//src/infra/tools/cloud_emulator/access:workspace_ssh_proxy",
+    ],
+)
+
+package_sources()
+
+py_binary(
+    name = "workspace_ssh_proxy",
+    srcs = ["workspace_ssh_proxy.py"],
+    visibility = [
+        "//src/infra/terraform/lifecycle:__pkg__",
+        "//src/infra/tools/cloud_emulator/access:__pkg__",
+    ],
+)
+
+py_library(
+    name = "kubeconfig",
+    srcs = ["kubeconfig.py"],
+    visibility = [
+        "//src/infra/terraform/lifecycle:__pkg__",
+        "//src/infra/tools/cloud_emulator/access:__pkg__",
+    ],
+    deps = [
+        "//src/infra/tools/cloud_emulator:runtime",
+        "@dev_python_deps//pyyaml",
+    ],
+)
