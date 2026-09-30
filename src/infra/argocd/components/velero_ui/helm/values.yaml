@@ -1,0 +1,105 @@
+# Configures base Helm values for the OTWLD Velero UI chart, applied on every cell where Velero is enabled; the fleet child Application patches the fullname, ServiceAccount to per-registration names.
+
+image:
+  repository: docker.io/otwld/velero-ui
+  tag: 0.10.3@sha256:1c228d9ef71b86f56fc2562a7039ec0dfe06231feb9f42a18f69ceff485f8cff
+podAnnotations:
+  ignore-check.kube-linter.io/read-secret-from-env-var: >-
+    Velero UI requires authentication passphrase via environment variable.
+replicaCount: 2
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            # LINT.IfChange(velero-ui-affinity-selector)
+            matchLabels:
+              app.kubernetes.io/instance: velero-ui
+              app.kubernetes.io/name: velero-ui
+              # LINT.ThenChange(//src/infra/argocd/components/velero_ui/kustomize/pdb.yaml:velero-ui-pdb-selector)
+          topologyKey: kubernetes.io/hostname
+autoscaling: {enabled: false}
+configuration:
+  logLevel: info
+  general:
+    secretPassPhrase:
+      useSecret: true
+      existingSecret: velero-ui-passphrase
+      key: pass_phrase
+    veleroNamespace: velero-system
+  policies:
+    # The outer Dex gate admits operators, while OTWLD's own authorization
+    # hides every mutating action. Kubernetes RBAC below remains the final
+    # enforcement boundary.
+    enabled: true
+    useConfigMap: true
+    value: |
+      g,*,read,all
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+rbac:
+  # The upstream chart otherwise grants wildcard writes and, by default,
+  # cluster-admin. The companion chart grants explicit read-only access.
+  create: false
+  clusterAdministrator: false
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  seccompProfile: {type: RuntimeDefault}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities: {drop: [ALL]}
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+# Upstream /health checks live Kubernetes and Velero state. A downstream
+# failure must not restart the UI process, so kubelet probes use the SPA shell.
+livenessProbe:
+  enabled: true
+  path: /
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+readinessProbe:
+  enabled: true
+  path: /
+  initialDelaySeconds: 15
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+env:
+  # The only browser path is the Dex-authenticated control-side proxy. Native
+  # basic or federated login surfaces are disabled inside the private service.
+  # Chart 0.15.0 uses existingSecret only to suppress its static Secret; it
+  # does not inject the value into the Deployment, so wire the generated value
+  # to the application's documented runtime variable explicitly.
+  - name: AUTH_SECRET_PASSPHRASE
+    valueFrom:
+      secretKeyRef: {name: velero-ui-passphrase, key: pass_phrase}
+  - {name: BASIC_AUTH_ENABLED, value: "false"}
+  - {name: GOOGLE_AUTH_ENABLED, value: "false"}
+  - {name: GITHUB_AUTH_ENABLED, value: "false"}
+  - {name: GITLAB_AUTH_ENABLED, value: "false"}
+  - {name: MICROSOFT_AUTH_ENABLED, value: "false"}
+  - {name: OAUTH_AUTH_ENABLED, value: "false"}
+  - {name: LDAP_ENABLED, value: "false"}
+volumes:
+  # OTWLD needs writable runtime scratch with a read-only root filesystem.
+  # Backup metadata and objects remain authoritative in Kubernetes/object
+  # storage; this memory-backed handoff is disposable and tightly bounded.
+  - name: tmp
+    emptyDir: {medium: Memory, sizeLimit: 32Mi}
+volumeMounts:
+  - {name: tmp, mountPath: /tmp}
+service:
+  type: ClusterIP
+  port: 3000
+ingress:
+  enabled: false

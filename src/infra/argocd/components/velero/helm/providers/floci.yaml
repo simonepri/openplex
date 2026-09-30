@@ -1,0 +1,49 @@
+# Supplies persistent runtime-generated signing credentials for Floci's local S3 adapter.
+
+# floci-divergence: Floci accepts local SigV4 identities instead of cloud workload identity.
+credentials:
+  useSecret: true
+  existingSecret: velero-floci-s3
+extraObjects:
+  - apiVersion: generators.external-secrets.io/v1alpha1
+    kind: Password
+    metadata:
+      name: velero-floci-s3
+      annotations:
+        argocd.argoproj.io/ignore-healthcheck: "true"
+        argocd.argoproj.io/sync-wave: "-2"
+    spec:
+      length: 32
+      digits: 8
+      symbols: 0
+      noUpper: false
+      allowRepeat: true
+      secretKeys: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]
+  - apiVersion: external-secrets.io/v1
+    kind: ExternalSecret
+    metadata:
+      name: velero-floci-s3
+      annotations: {argocd.argoproj.io/sync-wave: "-1"}
+    spec:
+      refreshPolicy: CreatedOnce
+      target:
+        name: velero-floci-s3
+        creationPolicy: Owner
+        deletionPolicy: Retain
+        template:
+          engineVersion: v2
+          metadata:
+            annotations:
+              argocd.argoproj.io/compare-options: IgnoreExtraneous
+              argocd.argoproj.io/sync-options: Prune=false
+          data:
+            cloud: |
+              [default]
+              aws_access_key_id = {{ "{{ .AWS_ACCESS_KEY_ID }}" }}
+              aws_secret_access_key = {{ "{{ .AWS_SECRET_ACCESS_KEY }}" }}
+      dataFrom:
+        - sourceRef:
+            generatorRef:
+              apiVersion: generators.external-secrets.io/v1alpha1
+              kind: Password
+              name: velero-floci-s3

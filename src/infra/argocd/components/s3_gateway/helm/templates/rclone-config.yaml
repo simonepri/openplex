@@ -1,0 +1,99 @@
+{{- /* Renders every non-secret rclone mapping consumed by one cell gateway. */ -}}
+
+{{- include "s3-gateway.validate" . -}}
+{{- $topology := include "s3-gateway.activeTopology" . | fromJson -}}
+{{- $target := dict -}}
+{{- range $cell := $topology.cells -}}
+  {{- if eq $cell.name $.Values.targetCell -}}{{- $target = $cell -}}{{- end -}}
+{{- end -}}
+{{- $remoteCells := list -}}
+{{- range $cell := $topology.cells -}}
+  {{- if ne $cell.name $.Values.targetCell -}}{{- $remoteCells = append $remoteCells $cell -}}{{- end -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: s3-gateway-rclone-config
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: runtime-configuration
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+data:
+  global-replicator-rclone.conf: |
+{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.home "cell" $target "flociS3Endpoint" $.Values.flociS3Endpoint "localAccessKeyId" "local-dataset-writer" "noHeadObject" true "remote" "local_home_provider") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.home "providerRemote" "local_home_provider" "remote" "local-home" "suffix" "") | nindent 4 }}
+
+    [cross-region]
+    type = combine
+    upstreams = global=local-home:global
+  org-workspace-backups-rclone.conf: |
+{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.backups "cell" $target "flociS3Endpoint" $.Values.flociS3Endpoint "localAccessKeyId" "local-org-workspace-backups" "noHeadObject" true "remote" "local_backups_provider") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.backups "providerRemote" "local_backups_provider" "remote" "local-users-dev" "suffix" "/backups/dev") | nindent 4 }}
+
+    [local-users-backups]
+    type = combine
+    upstreams = dev=local-users-dev:
+
+    [local-users]
+    type = combine
+    upstreams = backups=local-users-backups:
+
+    [org-workspace-backups]
+    type = combine
+    upstreams = {{ $target.virtualName }}=local-users:{{ range $cell := $remoteCells }} {{ $cell.virtualName }}={{ $cell.virtualName }}:{{ end }}
+{{- range $cell := $remoteCells }}
+
+{{ include "s3-gateway.rcloneRemoteGateway" (dict "accessKeyId" $target.callers.orgWorkspaceBackups.accessKeyId "cell" $cell "target" $target) | nindent 4 }}
+{{- end }}
+  storage-stats-rclone.conf: |
+{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.meta "cell" $target "flociS3Endpoint" $.Values.flociS3Endpoint "localAccessKeyId" "local-storage-stats-reader" "noHeadObject" true "remote" "local_meta_provider") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.meta "providerRemote" "local_meta_provider" "remote" "storage-stats-manifest-objects" "suffix" "/meta/manifests/stats") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.meta "providerRemote" "local_meta_provider" "remote" "storage-stats-shards" "suffix" "/meta/stats") | nindent 4 }}
+
+    [storage-stats-manifests]
+    type = combine
+    upstreams = stats=storage-stats-manifest-objects:
+
+    [storage-stats]
+    type = combine
+    upstreams = manifests=storage-stats-manifests: stats=storage-stats-shards:
+{{- range $team := keys $target.callers.teams | sortAlpha }}
+  {{ $team }}-rclone.conf: |
+{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.home "cell" $target "flociS3Endpoint" $.Values.flociS3Endpoint "localAccessKeyId" "local-dataset-writer" "noHeadObject" true "remote" "local_home_provider") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.home "providerRemote" "local_home_provider" "remote" "local-home" "suffix" "") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.scratch "cell" $target "flociS3Endpoint" $.Values.flociS3Endpoint "localAccessKeyId" "local-dataset-writer" "noHeadObject" true "remote" "local_scratch_provider") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.scratch "providerRemote" "local_scratch_provider" "remote" "local-scratch" "suffix" "") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.meta "cell" $target "flociS3Endpoint" $.Values.flociS3Endpoint "localAccessKeyId" "local-storage-stats-reader" "noHeadObject" true "remote" "local_meta_provider") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.meta "providerRemote" "local_meta_provider" "remote" "local-meta" "suffix" "") | nindent 4 }}
+
+    [local-cell]
+    type = combine
+    upstreams = home=local-home:home scratch=local-scratch:scratch meta=local-meta:meta
+
+    [global-cell]
+    type = combine
+    upstreams = home=local-home:global scratch=local-scratch:global meta=local-meta:global
+
+    [local]
+    type = combine
+    upstreams = {{ $target.virtualName }}=local-cell: global=global-cell:
+
+    [cross-region]
+    type = combine
+    upstreams = {{ $target.virtualName }}=local-cell: global=global-cell:{{ range $cell := $remoteCells }} {{ $cell.virtualName }}={{ $cell.virtualName }}:{{ end }}
+{{- range $cell := $remoteCells }}
+
+{{ include "s3-gateway.rcloneRemoteGateway" (dict "accessKeyId" (index $cell.callers.teams $team).accessKeyId "cell" $cell "target" $target) | nindent 4 }}
+{{- end }}
+{{- end }}

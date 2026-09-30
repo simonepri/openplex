@@ -1,0 +1,16 @@
+# Composes per-cell S3 gateway backends, routing, and access services.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - backend-network-policy.yaml
+  - backend-service-accounts.yaml
+  - backend-vpa.yaml
+  - backends.yaml
+  - client-policy.yaml
+  - external-secrets.yaml
+  - namespace.yaml
+  - resolver.yaml
+  - services.yaml
+  # keep-sorted end

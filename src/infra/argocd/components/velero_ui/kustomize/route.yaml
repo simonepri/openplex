@@ -1,0 +1,165 @@
+# Configures private HTTPS route for a cell's Velero UI. Fleet sends Floci traffic through its Dex proxy and managed-cell traffic directly to the read-only UI Service.
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: velero-ui
+  namespace: envoy-gateway-system
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: private-access
+      sectionName: https
+  hostnames: [velero-ui.invalid]
+  rules:
+    - matches: [{path: {type: PathPrefix, value: /}}]
+      backendRefs:
+        - {group: "", kind: Service, name: velero-ui, namespace: velero-system, port: 3000, weight: 1}
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: velero-ui
+  namespace: velero-system
+spec:
+  from:
+    - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: envoy-gateway-system}
+  to:
+    - {group: "", kind: Service, name: velero-ui}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: velero-ui-oidc
+  namespace: envoy-gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/component: authentication
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: runtime-secrets
+  target:
+    name: velero-ui-oidc
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: client-id
+      remoteRef:
+        key: application-oidc
+        property: velero_ui_client_id
+    - secretKey: client-secret
+      remoteRef:
+        key: application-oidc
+        property: velero_ui_client_secret
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: velero-ui-dex
+  namespace: envoy-gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/component: authentication
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+spec:
+  endpoints:
+    - fqdn:
+        hostname: dex.invalid
+        port: 443
+  tls:
+    autoSNIFromEndpointHostname: true
+    caCertificateRefs:
+      - group: ""
+        kind: ConfigMap
+        name: velero-ui-control-ca
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: velero-ui-oidc
+  namespace: envoy-gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: authentication
+    app.kubernetes.io/name: velero-ui
+    app.kubernetes.io/part-of: velero
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: velero-ui
+  oidc:
+    provider:
+      issuer: https://dex.invalid
+      authorizationEndpoint: https://dex.invalid/auth
+      tokenEndpoint: https://dex.invalid/token
+      endSessionEndpoint: https://dex.invalid/logout
+      backendRefs:
+        - group: gateway.envoyproxy.io
+          kind: Backend
+          name: velero-ui-dex
+          port: 443
+          weight: 1
+    clientIDRef:
+      group: ""
+      kind: Secret
+      name: velero-ui-oidc
+    clientSecret:
+      group: ""
+      kind: Secret
+      name: velero-ui-oidc
+    cookieNames:
+      accessToken: AccessToken-velero-ui
+      idToken: IdToken-velero-ui
+    disableTokenEncryption: true
+    forwardAccessToken: false
+    passThroughAuthHeader: false
+    refreshToken: true
+    redirectURL: https://velero-ui.invalid/oauth2/callback
+    scopes:
+      # keep-sorted start
+      - email
+      - groups
+      - openid
+      - profile
+      # keep-sorted end
+  jwt:
+    providers:
+      - name: velero-ui
+        issuer: https://dex.invalid
+        audiences: [velero-ui]
+        remoteJWKS:
+          cacheDuration: 300s
+          uri: https://dex.invalid/keys
+          backendRefs:
+            - group: gateway.envoyproxy.io
+              kind: Backend
+              name: velero-ui-dex
+              port: 443
+              weight: 1
+        extractFrom:
+          cookies: [IdToken-velero-ui]
+  authorization:
+    defaultAction: Deny
+    rules:
+      - name: oidc-callback
+        action: Allow
+        cel: request.url_path == '/oauth2/callback'
+      - name: operator-group
+        action: Allow
+        principal:
+          jwt:
+            provider: velero-ui
+            claims:
+              - name: groups
+                valueType: StringArray
+                values: ["operators"]
