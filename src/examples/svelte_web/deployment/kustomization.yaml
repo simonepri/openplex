@@ -1,0 +1,10 @@
+# Configures Kustomize resources for continuous reconciliation of the Svelte web frontend and backing services.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - database.yaml
+  - scaled-object.k8s.yaml
+  - svelte-web.k8s.yaml
+  # keep-sorted end

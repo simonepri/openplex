@@ -1,0 +1,26 @@
+# Defines the KEDA ScaledObject resource autoscaling the Svelte web server Deployment based on HTTP traffic.
+
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: svelte-web
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: svelte-web
+    app.kubernetes.io/part-of: svelte-web
+    team: examples
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: svelte-web
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  cooldownPeriod: 30
+  triggers:
+    - type: external-push
+      metadata:
+        scalerAddress: keda-add-ons-http-external-scaler.keda-system:9090
+        interceptorRoute: svelte-web

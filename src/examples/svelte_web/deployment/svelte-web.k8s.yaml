@@ -1,0 +1,111 @@
+# Defines Kubernetes Deployment and Service manifests running the scale-from-zero SvelteKit SSR web application.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: svelte-web
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: svelte-web
+    team: examples
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svelte-web
+  annotations:
+    ignore-check.kube-linter.io/read-secret-from-env-var: |
+      Application expects DATABASE_URL database connection string via environment.
+  labels:
+    app.kubernetes.io/component: svelte-web
+    app.kubernetes.io/name: svelte-web
+    cost-center: examples
+    environment: production
+    availability-class: be
+    latency-class: ls
+    team: examples
+spec:
+  strategy: {type: RollingUpdate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: svelte-web
+  template:
+    metadata:
+      annotations:
+        ignore-check.kube-linter.io/read-secret-from-env-var: |
+          Application expects DATABASE_URL database connection string via environment.
+      labels:
+        app.kubernetes.io/component: svelte-web
+        app.kubernetes.io/name: svelte-web
+        cost-center: examples
+        environment: production
+        team: examples
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: svelte-web
+          image: registry.invalid/workloads/svelte-web@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  key: uri
+                  name: svelte-web-postgres-app
+                  optional: true
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://$(HOST_IP):4318"
+            - name: OTEL_SERVICE_NAME
+              value: "svelte-web"
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            timeoutSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svelte-web
+  labels:
+    app.kubernetes.io/component: svelte-web
+    app.kubernetes.io/name: svelte-web
+    cost-center: examples
+    environment: production
+    team: examples
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: svelte-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

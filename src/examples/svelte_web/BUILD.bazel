@@ -1,0 +1,112 @@
+"""Builds the SvelteKit web application into a self-contained Node.js SSR server container image."""
+
+load("@aspect_rules_js//js:defs.bzl", "js_run_devserver")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//src/examples/svelte_web:vite/package_json.bzl", vite = "bin")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "DATA", "WEB_SOURCE", "source_set")
+load("//src/bazel/rules/json_schema:defs.bzl", "json_schema")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "workload_manifests")
+load("//src/bazel/rules/oci:defs.bzl", "oci_multiarch_image", "oci_workload_publish")
+
+npm_link_all_packages(name = "node_modules")
+
+_APP_SRCS = [
+    "app.html",
+    "hooks.client.ts",
+    "hooks.server.ts",
+    "package.json",
+    "svelte.config.js",
+    "tsconfig.json",
+    "vite.config.ts",
+    ":node_modules",
+] + glob(["routes/**"])
+
+# Production build and container release pipeline.
+vite.vite(
+    name = "app",
+    srcs = _APP_SRCS,
+    args = ["build"],
+    chdir = package_name(),
+    out_dirs = ["build"],
+)
+
+pkg_files(
+    name = "app_files",
+    srcs = [":app"],
+    prefix = "/app",
+    strip_prefix = strip_prefix.from_pkg("build"),
+)
+
+oci_multiarch_image(
+    name = "image",
+    base = "node_base",
+    entrypoint = [
+        "/nodejs/bin/node",
+        "index.js",
+    ],
+    env = {"PORT": "8080"},
+    files = ":app_files",
+    workdir = "/app",
+)
+
+workload_manifests(
+    name = "manifest",
+    srcs = [
+        "deployment/database.yaml",
+        "deployment/kustomization.yaml",
+        "deployment/project.yaml",
+        "deployment/scaled-object.k8s.yaml",
+        "deployment/svelte-web.k8s.yaml",
+    ],
+)
+
+oci_workload_publish(
+    name = "publish",
+    image = ":image",
+)
+
+# Local interactive development server.
+vite.vite_binary(name = "vite_dev")
+
+js_run_devserver(
+    name = "dev",
+    args = ["dev"],
+    chdir = package_name(),
+    data = _APP_SRCS,
+    tool = ":vite_dev",
+)
+
+# Graph coverage and formatting source sets.
+source_set(
+    name = "web_sources",
+    srcs = glob(
+        [
+            "**/*.ts",
+            "**/*.tsx",
+            "**/*.js",
+            "**/*.jsx",
+            "**/*.mjs",
+        ],
+        allow_empty = True,
+    ),
+    kind = WEB_SOURCE,
+)
+
+source_set(
+    name = "config",
+    srcs = ["mise.toml"],
+    kind = DATA,
+)
+
+json_schema(
+    name = "package_schema",
+    srcs = ["package.json"],
+    schema = "@package_json_schema//file:package.schema.json",
+)
+
+json_schema(
+    name = "tsconfig_schema",
+    srcs = ["tsconfig.json"],
+    schema = "@tsconfig_schema//file:tsconfig.schema.json",
+)
