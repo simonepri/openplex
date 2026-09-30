@@ -1,3 +1,16 @@
+# Dedicated ServiceAccount for template reconciliation jobs.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: coder-template-reconciler
+  namespace: coder
+  labels:
+    app.kubernetes.io/component: template-publication
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder
+automountServiceAccountToken: false
+---
 # PostSync Job reconciling Coder workspace templates from the version-controlled repository.
 
 apiVersion: batch/v1
@@ -27,7 +40,7 @@ spec:
         app.kubernetes.io/component: template-publication
         app.kubernetes.io/part-of: coder
     spec:
-      serviceAccountName: coder-oauth-bootstrap
+      serviceAccountName: coder-template-reconciler
       automountServiceAccountToken: false
       restartPolicy: Never
       securityContext:
@@ -93,6 +106,7 @@ spec:
           env:
             - {name: CODER_URL, value: 'http://coder.coder.svc.cluster.local'}
             - {name: CODER_SESSION_TOKEN_FILE, value: /var/run/coder/automation-token/token}
+            - {name: PRESERVE_CODER_SESSION_TOKEN, value: "true"}
             - {name: CODER_TEMPLATE_ACCESS_ALIAS_DOMAIN, value: configured-by-applicationset.invalid}
             - {name: CODER_TEMPLATE_DEPLOYMENT_DOMAIN, value: configured-by-applicationset.invalid}
             - {name: CODER_TEMPLATE_HEADSCALE_URL, value: 'https://headscale.configured-by-applicationset.invalid'}
@@ -142,16 +156,6 @@ spec:
           secret:
             secretName: coder-automation-token
             optional: true
-        - name: oauth-bootstrap
-          projected:
-            defaultMode: 288
-            sources:
-              - serviceAccountToken:
-                  path: token
-                  expirationSeconds: 600
-              - configMap:
-                  name: kube-root-ca.crt
-                  items: [{key: ca.crt, path: ca.crt}]
         - name: program
           configMap: {name: coder-template-reconciler, defaultMode: 365}
         - name: source

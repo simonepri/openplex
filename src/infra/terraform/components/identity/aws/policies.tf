@@ -430,9 +430,7 @@ locals {
             "ecr:BatchGetImage",
           ]
           Resource = [
-            "arn:aws:ecr:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:repository/*workspace*",
-            "arn:aws:ecr:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:repository/*/workspace",
-            "arn:aws:ecr:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:repository/src/*",
+            "arn:aws:ecr:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:repository/src/infra/definitions/workspaces/templates/*",
           ]
         }
       ]

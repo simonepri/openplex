@@ -1,0 +1,412 @@
+"""Builds multi-architecture developer workspace container images and defines template verification test suites."""
+
+load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/json_schema:defs.bzl", "json_schema")
+load("//src/bazel/rules/oci:defs.bzl", "oci_multiarch_image", "oci_workload_publish")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "accelerators.tf",
+    "agent.tf",
+    "apps.tf",
+    "deployment.tf",
+    "identity.tf",
+    "kubernetes_config.tf",
+    "locals.tf",
+    "parameters.tf",
+    "storage.tf",
+    "variables.tf",
+    "workspace-images.json",
+])
+
+pkg_files(
+    name = "mise_binary_linux_amd64",
+    srcs = ["@mise_linux_amd64//file"],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/usr/local/bin",
+    renames = {"@mise_linux_amd64//file": "mise"},
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "mise_layer_linux_amd64",
+    srcs = [":mise_binary_linux_amd64"],
+)
+
+pkg_files(
+    name = "mise_binary_linux_arm64",
+    srcs = ["@mise_linux_arm64//file"],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/usr/local/bin",
+    renames = {"@mise_linux_arm64//file": "mise"},
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "mise_layer_linux_arm64",
+    srcs = [":mise_binary_linux_arm64"],
+)
+
+pkg_files(
+    name = "workspace_passwd_file",
+    srcs = ["workspace.passwd"],
+    attributes = pkg_attributes(mode = "0444"),
+    prefix = "/etc",
+    renames = {"workspace.passwd": "passwd"},
+)
+
+pkg_tar(
+    name = "workspace_passwd_layer",
+    srcs = [":workspace_passwd_file"],
+)
+
+platform_transition_filegroup(
+    name = "ssh_layer_linux_amd64",
+    srcs = ["@workspace_ssh_packages//:flat"],
+    target_platform = "//src/infra/tools/headscale_workspace_enrollment:linux_amd64",
+)
+
+platform_transition_filegroup(
+    name = "ssh_layer_linux_arm64",
+    srcs = ["@workspace_ssh_packages//:flat"],
+    target_platform = "//src/infra/tools/headscale_workspace_enrollment:linux_arm64",
+)
+
+oci_multiarch_image(
+    name = "image",
+    arch_tars = {
+        "amd64": [
+            ":mise_layer_linux_amd64",
+            ":ssh_layer_linux_amd64",
+            ":workspace_passwd_layer",
+        ],
+        "arm64": [
+            ":mise_layer_linux_arm64",
+            ":ssh_layer_linux_arm64",
+            ":workspace_passwd_layer",
+        ],
+    },
+    base = "workspace_dev_base",
+    env = {
+        "HOME": "/home/coder",
+        "PATH": "/home/coder/.local/share/mise/shims:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin",
+    },
+    staging_tag = "dev:bazel-load",
+    tars = [],
+    user = "1000:1000",
+    workdir = "/home/coder",
+)
+
+oci_workload_publish(
+    name = "publish",
+    image = ":image",
+    publication_mode = "stream",
+    repository_path = "src/infra/definitions/workspaces/templates/dev",
+    workload_name = "dev",
+)
+
+sh_binary(
+    name = "seed",
+    srcs = ["seed.sh"],
+    args = [
+        "$(rootpath :image_push)",
+        "$(rootpath workspace-images.json)",
+        "$(rootpath //src/bazel/tools:jq)",
+    ],
+    data = [
+        "workspace-images.json",
+        ":image_push",
+        "//src/bazel/tools:jq",
+    ],
+    tags = ["manual"],
+)
+
+package_sources(exclude = ["container/apps/*.py"])
+
+py_test(
+    name = "workspace_image_structure_test",
+    srcs = ["workspace_image_structure_test.py"],
+    args = [
+        "$(rootpath :image_linux_amd64)",
+        "$(rootpath :image_linux_arm64)",
+        "$(rootpath workspace-ssh-packages.lock.json)",
+    ],
+    data = [
+        "workspace-ssh-packages.lock.json",
+        ":image_linux_amd64",
+        ":image_linux_arm64",
+    ],
+)
+
+py_library(
+    name = "paseo_instructions",
+    srcs = ["container/apps/paseo_instructions.py"],
+)
+
+py_library(
+    name = "paseo_coder_proxy",
+    srcs = ["container/apps/paseo_coder_proxy.py"],
+)
+
+py_test(
+    name = "paseo_app_test",
+    srcs = ["container/apps/paseo_app_test.py"],
+    data = glob([
+        "*.tf",
+        "container/apps/*.py",
+        "container/apps/*.sh",
+        "container/config/*.toml",
+    ]),
+)
+
+py_test(
+    name = "paseo_instructions_test",
+    srcs = ["container/apps/paseo_instructions_test.py"],
+    data = ["container/apps/paseo_instructions.py"],
+)
+
+py_test(
+    name = "paseo_coder_proxy_test",
+    srcs = ["container/apps/paseo_coder_proxy_test.py"],
+    deps = [":paseo_coder_proxy"],
+)
+
+py_library(
+    name = "workspace_nohang",
+    srcs = ["container/apps/workspace_nohang.py"],
+)
+
+py_test(
+    name = "workspace_nohang_test",
+    srcs = ["container/apps/workspace_nohang_test.py"],
+    deps = [":workspace_nohang"],
+)
+
+py_test(
+    name = "workspace_environment_test",
+    srcs = ["workspace_environment_test.py"],
+    data = glob([
+        "*.tf",
+        "container/init/*.sh",
+    ]),
+)
+
+sh_library(
+    name = "shell",
+    srcs = glob(["**/*.sh"]),
+)
+
+sh_test(
+    name = "attest_owner_test",
+    srcs = ["hooks/attest-owner_test.sh"],
+    args = ["$(location hooks/attest-owner.sh)"],
+    data = ["hooks/attest-owner.sh"],
+)
+
+sh_test(
+    name = "code_server_test",
+    srcs = ["container/apps/code-server_test.sh"],
+    args = [
+        "$(location container/apps/code-server.sh)",
+        "$(location //src/bazel/tools:jq)",
+    ],
+    data = [
+        "container/apps/code-server.sh",
+        "//src/bazel/tools:jq",
+    ],
+)
+
+sh_test(
+    name = "s3i_cli_test",
+    srcs = ["container/apps/s3i-cli_test.sh"],
+    args = ["$(location container/apps/s3i-cli.sh)"],
+    data = ["container/apps/s3i-cli.sh"],
+)
+
+sh_test(
+    name = "workspace_identity_test",
+    srcs = ["container/init/workspace-identity_test.sh"],
+    args = ["$(location container/init/workspace-identity.sh)"],
+    data = ["container/init/workspace-identity.sh"],
+)
+
+sh_test(
+    name = "workspace_agent_registration_test",
+    srcs = ["hooks/register-workspace-agent_test.sh"],
+    args = [
+        "$(location hooks/register-workspace-agent.sh)",
+        "$(location hooks/workspace-build-context.sh)",
+        "$(location //src/bazel/tools:jq)",
+    ],
+    data = [
+        "hooks/register-workspace-agent.sh",
+        "hooks/workspace-build-context.sh",
+        "//src/bazel/tools:jq",
+    ],
+)
+
+sh_test(
+    name = "workspace_zasper_test",
+    srcs = ["container/apps/workspace-zasper_test.sh"],
+    args = ["$(location container/apps/workspace-zasper.sh)"],
+    data = ["container/apps/workspace-zasper.sh"],
+)
+
+sh_test(
+    name = "workspace_nohang_sh_test",
+    srcs = ["container/apps/workspace-nohang_test.sh"],
+    args = ["$(location container/apps/workspace-nohang.sh)"],
+    data = [
+        "container/apps/workspace-nohang.sh",
+        "container/apps/workspace_nohang.py",
+    ],
+)
+
+sh_test(
+    name = "workspace_paseo_test",
+    srcs = ["container/apps/workspace-paseo_test.sh"],
+    args = [
+        "$(location container/apps/workspace-paseo.sh)",
+        "$(location //src/bazel/tools:jq)",
+    ],
+    data = [
+        "container/apps/workspace-paseo.sh",
+        "//src/bazel/tools:jq",
+    ],
+)
+
+sh_test(
+    name = "workspace_ssh_test",
+    srcs = ["container/sidecars/workspace-ssh_test.sh"],
+    args = ["$(location container/sidecars/workspace-ssh.sh)"],
+    data = ["container/sidecars/workspace-ssh.sh"],
+)
+
+sh_test(
+    name = "workspace_mounts_test",
+    srcs = ["container/init/workspace-mounts_test.sh"],
+    args = ["$(location container/init/workspace-mounts.sh)"],
+    data = ["container/init/workspace-mounts.sh"],
+)
+
+sh_test(
+    name = "workspace_snapshots_test",
+    srcs = ["container/init/workspace-snapshots_test.sh"],
+    args = ["$(location container/init/workspace-snapshots.sh)"],
+    data = ["container/init/workspace-snapshots.sh"],
+)
+
+sh_test(
+    name = "workspace_start_test",
+    srcs = ["container/init/workspace-start_test.sh"],
+    args = [
+        "$(location container/init/workspace-start.sh)",
+        "$(location container/init/workspace-shell.sh)",
+        "$(location //src/bazel/tools:jq)",
+    ],
+    data = [
+        "container/init/workspace-shell.sh",
+        "container/init/workspace-start.sh",
+        "//src/bazel/tools:jq",
+    ],
+)
+
+sh_test(
+    name = "workspace_coder_cli_test",
+    srcs = ["container/apps/coder-cli_test.sh"],
+    args = ["$(location container/apps/coder-cli.sh)"],
+    data = ["container/apps/coder-cli.sh"],
+)
+
+sh_test(
+    name = "workspace_filebrowser_test",
+    srcs = ["container/apps/filebrowser_test.sh"],
+    args = ["$(location container/apps/filebrowser.sh)"],
+    data = ["container/apps/filebrowser.sh"],
+)
+
+sh_test(
+    name = "workspace_reboot_test",
+    srcs = ["container/apps/reboot_test.sh"],
+    args = ["$(location container/apps/reboot.sh)"],
+    data = ["container/apps/reboot.sh"],
+)
+
+sh_test(
+    name = "workspace_tailnet_test",
+    srcs = ["container/sidecars/workspace-tailnet_test.sh"],
+    args = ["$(location container/sidecars/workspace-tailnet.sh)"],
+    data = ["container/sidecars/workspace-tailnet.sh"],
+)
+
+sh_test(
+    name = "workspace_writer_inventory_test",
+    srcs = ["hooks/workspace-writer-inventory_test.sh"],
+    args = [
+        "$(location hooks/workspace-writer-inventory.sh)",
+        "$(location //src/bazel/tools:jq)",
+    ],
+    data = [
+        "hooks/workspace-writer-inventory.sh",
+        "//src/bazel/tools:jq",
+    ],
+)
+
+sh_test(
+    name = "wait_for_admission_test",
+    srcs = ["hooks/wait-for-admission_test.sh"],
+    args = ["$(location hooks/wait-for-admission.sh)"],
+    data = ["hooks/wait-for-admission.sh"],
+)
+
+sh_test(
+    name = "publish_test",
+    srcs = ["publish_test.sh"],
+    args = [
+        "$(location publish.sh)",
+        "$(location variables.tf)",
+    ],
+    data = [
+        ".terraform.lock.hcl",
+        "//src/infra/definitions/workspaces/modules/coder_snapshots:sources",
+    ] + glob([
+        "*.sh",
+        "*.tf",
+        "container/**",
+        "hooks/**",
+    ]),
+)
+
+sh_test(
+    name = "tofu_test",
+    srcs = ["tofu_test.sh"],
+    args = [
+        "$(location //src/bazel/tools:terraform)",
+        "$(location //src/bazel/tools:jq)",
+    ],
+    data = [
+        ".terraform.lock.hcl",
+        "//src/bazel/tools:jq",
+        "//src/bazel/tools:terraform",
+        "//src/infra/definitions/workspaces/modules/coder_snapshots:sources",
+    ] + glob([
+        "*.tf",
+        "*.tftest.hcl",
+        "container/**",
+        "hooks/**",
+    ]),
+)
+
+json_schema(
+    name = "workspace_images_schema",
+    srcs = ["workspace-images.json"],
+    schema = "//src/infra/definitions/workspaces/templates/dev:workspace-images.schema.json",
+)
