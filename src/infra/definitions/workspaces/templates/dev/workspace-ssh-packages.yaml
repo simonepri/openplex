@@ -1,0 +1,18 @@
+# Declares pinned APT package repositories and system package lists installed into developer workspace images.
+
+version: 1
+sources:
+  - channel: resolute main universe
+    url: https://snapshot.ubuntu.com/ubuntu/20260801T000000Z
+  - channel: resolute-security main universe
+    url: https://snapshot.ubuntu.com/ubuntu/20260801T000000Z
+  - channel: resolute-updates main universe
+    url: https://snapshot.ubuntu.com/ubuntu/20260801T000000Z
+archs: [amd64, arm64]
+packages:
+  - amazon-ecr-credential-helper
+  - build-essential
+  - libnss-wrapper
+  - openssh-server
+  - python3
+  - zsh
