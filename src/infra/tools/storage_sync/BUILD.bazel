@@ -1,0 +1,39 @@
+"""Builds targets and CLI binaries for cell-local and cross-cell storage synchronization."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# gazelle:python_generation_mode package
+
+py_library(
+    name = "storage_sync",
+    srcs = [
+        "__init__.py",
+        "cli.py",
+        "manifest.py",
+        "topology.py",
+    ],
+    data = [
+        "job.yaml.tmpl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@python_deps//pyyaml",
+    ],
+)
+
+py_binary(
+    name = "cli",
+    srcs = ["cli.py"],
+    main = "cli.py",
+    visibility = ["//visibility:public"],
+    deps = [":storage_sync"],
+)
+
+py_test(
+    name = "storage_sync_test",
+    srcs = ["storage_sync_test.py"],
+    deps = [":storage_sync"],
+)
+
+package_sources()
