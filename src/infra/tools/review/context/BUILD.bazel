@@ -1,0 +1,42 @@
+"""Builds library targets extracting repository context, Git diffs, Bazel graphs, and RuleSync policies."""
+
+# gazelle:resolve py src.bazel.tools.diff //src/bazel/tools/diff:cli_lib
+# gazelle:resolve py src.bazel.tools.diff.bazel_diff //src/bazel/tools/diff:bazel_diff
+# gazelle:resolve py src.bazel.tools.diff.git_diff //src/bazel/tools/diff:git_diff
+# gazelle:resolve py src.bazel.tools.diff.gate_diff //src/bazel/tools/diff:gate_diff
+# gazelle:resolve py src.bazel.tools.diff.cli //src/bazel/tools/diff:cli_lib
+
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+)
+
+py_library(
+    name = "bazel_diff",
+    srcs = ["bazel_diff.py"],
+    deps = [
+        "//src/bazel/tools/diff:bazel_diff",
+    ],
+)
+
+py_library(
+    name = "codegraph",
+    srcs = ["codegraph.py"],
+)
+
+py_library(
+    name = "git_diff",
+    srcs = ["git_diff.py"],
+    deps = [
+        "//src/bazel/tools/diff:git_diff",
+    ],
+)
+
+py_library(
+    name = "rules_index",
+    srcs = ["rules_index.py"],
+)

@@ -1,0 +1,5 @@
+"""Packages platform infrastructure operational tools and libraries."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
