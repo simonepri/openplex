@@ -1,0 +1,37 @@
+"""Define the binary that answers the Bazel graph questions of the check gates with one query."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "graph",
+    # keep
+    srcs = ["graph_facts.py"],
+    imports = ["."],
+)
+
+py_binary(
+    name = "graph_facts",
+    # keep
+    srcs = ["graph_facts.py"],
+    main = "graph_facts.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "graph_facts_test",
+    size = "small",
+    # keep
+    srcs = ["graph_facts_test.py"],
+    imports = ["."],
+    main = "graph_facts_test.py",
+    precompile = "disabled",
+    # keep
+    deps = [":graph"],
+)

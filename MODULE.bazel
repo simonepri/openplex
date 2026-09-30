@@ -1,0 +1,625 @@
+"""Bzlmod root module configuring monorepo dependencies, toolchains, package registries, and language rules."""
+
+module(
+    name = "workloads",
+    version = "0.1.0",
+)
+
+# Bazel builds first-party projects under //src while indexing infrastructure sources
+# for per-component checks. It never provisions or deploys infrastructure:
+# OpenTofu and Argo CD own those flows directly.
+# keep-sorted start
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
+bazel_dep(name = "aspect_rules_js", version = "3.5.0")
+bazel_dep(name = "gazelle", version = "0.54.0")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_distroless", version = "0.9.4")
+bazel_dep(name = "rules_gitops", version = "1.0.0-rc.2")
+bazel_dep(name = "rules_go", version = "0.63.0")
+bazel_dep(name = "rules_helm", version = "0.31.0")
+bazel_dep(name = "rules_kustomize", version = "0.5.3")
+bazel_dep(name = "rules_multirun", version = "0.14.0")
+bazel_dep(name = "rules_multitool", version = "1.11.1")
+bazel_dep(name = "rules_oci", version = "2.3.0")
+bazel_dep(name = "rules_pkg", version = "1.3.0")
+bazel_dep(name = "rules_python", version = "2.3.4")
+bazel_dep(name = "rules_python_gazelle_plugin", version = "2.3.4")
+bazel_dep(name = "rules_shell", version = "0.8.0")
+bazel_dep(name = "rules_tf", version = "0.0.10")
+# keep-sorted end
+
+# Linter and hook binaries are Bazel-owned: build actions run under
+# --incompatible_strict_action_env, so a host PATH lookup cannot resolve them.
+multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")
+multitool.hub(lockfile = "//:multitool.lock.json")
+use_repo(multitool, "multitool")
+
+single_version_override(
+    module_name = "rules_gitops",
+    patch_strip = 1,
+    patches = ["//src/bazel/patches:rules_gitops_linux_arm64.patch"],
+    version = "1.0.0-rc.2",
+)
+
+single_version_override(
+    module_name = "rules_helm",
+    patch_strip = 1,
+    patches = ["//src/bazel/patches:rules_helm_chart_relative_files.patch"],
+    version = "0.31.0",
+)
+
+single_version_override(
+    module_name = "rules_tf",
+    patch_strip = 1,
+    patches = ["//src/bazel/patches:rules_tf_provider_plugins_and_mirror.patch"],
+    version = "0.0.10",
+)
+
+include("//src/bazel/module_deps:vendor_helm_charts.MODULE.bazel")
+
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(version = "1.27.1")
+
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//src/infra/tools/headscale_workspace_enrollment:go.mod")
+go_deps.module(
+    path = "github.com/bazelbuild/buildtools",
+    sum = "h1:njQAmjTv/YHRm/0Lfv9DXHFZ4MdT2IA/RKHTnqZkgDw=",
+    version = "v0.0.0-20250930140053-2eb4fccefb52",
+)
+go_deps.module(
+    path = "github.com/coder/websocket",
+    sum = "h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=",
+    version = "v1.8.15",
+)
+go_deps.module(
+    path = "github.com/fzipp/gocyclo",
+    sum = "h1:lsblElZG7d3ALtGMx9fmxeTKZaLLpU8mET09yN4BBLo=",
+    version = "v0.6.0",
+)
+use_repo(
+    go_deps,
+    "com_github_bazelbuild_buildtools",
+    "com_github_coder_websocket",
+    "com_github_fzipp_gocyclo",
+)
+
+tf = use_extension("@rules_tf//tf:extensions.bzl", "tf_repositories", dev_dependency = True)
+tf.download(
+    mirror = {
+        "archive": "hashicorp/archive:2.8.0",
+        "aws": "hashicorp/aws:6.66.0",
+        "cloudflare": "cloudflare/cloudflare:5.24.0",
+        "docker": "kreuzwerker/docker:4.5.0",
+        "google": "hashicorp/google:8.4.0",
+        "google-beta": "hashicorp/google-beta:7.45.0",
+        "helm": "hashicorp/helm:3.3.0",
+        "kubernetes": "hashicorp/kubernetes:3.2.1",
+        "local": "hashicorp/local:2.9.0",
+        "tailscale": "tailscale/tailscale:0.29.2",
+        "tls": "hashicorp/tls:4.4.1",
+    },
+    provider_lock = "//src/bazel/module_deps:tofu_providers.lock.hcl",
+    tflint_version = "0.64.0",
+    use_tofu = True,
+    version = "1.12.6",
+)
+use_repo(tf, "tf_toolchains")
+
+register_toolchains(
+    "@tf_toolchains//:all",
+    dev_dependency = True,
+)
+
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+
+# Dragonfly's first-party SSO bridge adds only audited stdlib Python source.
+oci.pull(
+    name = "dragonfly_sso_base_linux_amd64",
+    digest = "sha256:4677924bcc0e94505a3270e87cb1601c2af54cd92d021b8dc306618a14333bbe",
+    image = "index.docker.io/library/python",
+)
+oci.pull(
+    name = "dragonfly_sso_base_linux_arm64_v8",
+    digest = "sha256:067d97da25897fa5342cdbef0eeb6a50a527faa965696c7bfa0a3b576ce65c8a",
+    image = "index.docker.io/library/python",
+)
+
+# Upstream Dragonfly client supplies the base runtime layers for the reviewed derivative.
+# LINT.IfChange(dragonfly-client-base-images)
+oci.pull(
+    name = "dragonfly_client_base_linux_amd64",
+    digest = "sha256:b8d3462aebd425cd9b99d37894bca24613abf2e52a9be0574e40433e3f17b63b",
+    image = "index.docker.io/dragonflyoss/client",
+)
+oci.pull(
+    name = "dragonfly_client_base_linux_arm64",
+    digest = "sha256:b545bc84116e9543a23bcf316558c67c1a6a108d43acfebe1014d08c209c898b",
+    image = "index.docker.io/dragonflyoss/client",
+)
+# LINT.ThenChange(//src/third_party/dragonflyoss/client/BUILD.bazel:dragonfly-client-base-images)
+
+# LINT.IfChange(rawfile-localpv-base-images)
+oci.pull(
+    name = "rawfile_localpv_base_linux_amd64",
+    digest = "sha256:3f5e3bd60011fe29f1581a8661cfc384bf542ea3b86d25703a6e801cb553b06f",
+    image = "index.docker.io/openebs/rawfile-localpv",
+)
+oci.pull(
+    name = "rawfile_localpv_base_linux_arm64",
+    digest = "sha256:47bd4005573f813da1b7c9adc0e4b1f557c931e365ae9540db06ae0a936f6906",
+    image = "index.docker.io/openebs/rawfile-localpv",
+)
+# LINT.ThenChange(//src/third_party/openebs/rawfile-localpv/BUILD.bazel:rawfile-localpv-base-images)
+
+# The snapshot catalog is a static Go binary and needs no runtime utilities.
+oci.pull(
+    name = "workspace_snapshot_catalog_base_linux_amd64",
+    digest = "sha256:a8a6666cb7b13df7d18fd65b4264c2edafbce92acc0f32c423b5470d7d717665",
+    image = "gcr.io/distroless/static-debian13",
+)
+oci.pull(
+    name = "workspace_snapshot_catalog_base_linux_arm64_v8",
+    digest = "sha256:63c8322db7adc53a501d276c2c3285e41fb9a9628d01809dfa60e1c925b3cf38",
+    image = "gcr.io/distroless/static-debian13",
+)
+
+# The workspace backup proxy retains the pinned rclone runtime while adding
+# only the repository-owned lineage lease supervisor.
+# LINT.IfChange(workspace-backup-proxy-base-images)
+oci.pull(
+    name = "workspace_backup_proxy_base_linux_amd64",
+    digest = "sha256:4055fb65b7a975caf3cb54a94bf12713e81947d6f3d0bb221907a05b0f6ab390",
+    image = "index.docker.io/rclone/rclone",
+)
+oci.pull(
+    name = "workspace_backup_proxy_base_linux_arm64_v8",
+    digest = "sha256:91a77202e418409fa20be95def08e438c107d81046a2ebb5a1da1fdfeb212b3a",
+    image = "index.docker.io/rclone/rclone",
+)
+# LINT.ThenChange(//src/infra/tools/workspace_backup_proxy/BUILD.bazel:workspace-backup-proxy-base-images,//src/infra/tools/workspace_backup_proxy/workspace-backup-proxy_boundary_test.sh:workspace-backup-proxy-pinned-rclone)
+
+apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
+apt.sources_list(
+    architectures = [
+        "amd64",
+        "arm64",
+    ],
+    components = [
+        "main",
+        "universe",
+    ],
+    suites = [
+        "resolute",
+        "resolute-security",
+        "resolute-updates",
+    ],
+    types = ["deb"],
+    uris = ["https://snapshot.ubuntu.com/ubuntu/20260801T000000Z"],
+)
+apt.install(
+    dependency_set = "workspace_ssh_packages",
+    packages = [
+        "amazon-ecr-credential-helper",
+        "build-essential",
+        "libnss-wrapper",
+        "nohang",
+        "openssh-server",
+        "python3",
+        "zsh",
+    ],
+    suites = [
+        "resolute",
+        "resolute-security",
+        "resolute-updates",
+    ],
+)
+use_repo(apt, "workspace_ssh_packages")
+
+# The Headscale key producer retains the exact upstream CLI while adding only
+# the static Kubernetes record reconciler built below.
+oci.pull(
+    name = "headscale_base_linux_amd64",
+    digest = "sha256:9a4d883997cbe9de8ff58e8e11c37c204a25bd76d4c0920d16e0d944bbe05fb8",
+    image = "ghcr.io/juanfont/headscale",
+)
+oci.pull(
+    name = "headscale_base_linux_arm64_v8",
+    digest = "sha256:7816f7cdc37b17fda48307a2c956a10c4abae471f776a43505f51ee1f0ad5ac9",
+    image = "ghcr.io/juanfont/headscale",
+)
+
+# The local Floci control plane extends the exact upstream k3s filesystem with
+# repository-owned startup and air-gap image contracts.
+# LINT.IfChange(floci-k3s-version)
+# Runtime7 keeps the v1.36.1 base and assigns asymmetric shared CPU capacity.
+oci.pull(
+    name = "k3s_base_linux_amd64",
+    digest = "sha256:97ee2717a5421dd314fe96825fd7b64b59cce6271f0ddce01466e8778bc223bd",
+    image = "index.docker.io/rancher/k3s",
+)
+oci.pull(
+    name = "k3s_base_linux_arm64_v8",
+    digest = "sha256:5ce2a98f009b4b6bc668dd894df232aff45b2068b7756aab899d3023c34c78c6",
+    image = "index.docker.io/rancher/k3s",
+)
+# LINT.ThenChange(//src/third_party/k3s-io/k3s/images.toml:floci-k3s-version)
+
+# The deployed Svelte server needs only the Node runtime; keep package-manager
+# tooling out of its production image.
+oci.pull(
+    name = "node_base_linux_amd64",
+    digest = "sha256:979dc379a2fb11d76d9ae0257ea4559e36b533088b062ff2f93d771b11a76f76",
+    image = "gcr.io/distroless/nodejs24-debian13",
+)
+oci.pull(
+    name = "node_base_linux_arm64_v8",
+    digest = "sha256:595acbac29c7b4a64fe66616414f4e9c6f8bcf9f7dc06e5170e12a408c6d9eab",
+    image = "gcr.io/distroless/nodejs24-debian13",
+)
+
+# LINT.IfChange(ray-version)
+# Both digests pin rayproject/ray 2.58.0; the workspace lock pins the same
+# version so the hermetic binary and the image runtime cannot drift apart.
+oci.pull(
+    name = "ray_base_linux_amd64",
+    digest = "sha256:b833e75525ad8cce5222fde91a17478af826b789a7a5b80422473f07b5d8447c",
+    image = "index.docker.io/rayproject/ray",
+)
+oci.pull(
+    name = "ray_base_linux_arm64_v8",
+    digest = "sha256:2d543193c6cbefd40d0a17b681f66be2fa85a4beada86bc84ef9c1fb7d94d3eb",
+    image = "index.docker.io/rayproject/ray",
+)
+
+# Coder's minimal image supplies the non-root user, Git, curl, and the shell
+# needed to bootstrap an agent. Mise owns every development tool above it.
+oci.pull(
+    name = "workspace_dev_base_linux_amd64",
+    digest = "sha256:00c4753ef9c993214d8f22550566db54126c2f37d982191b72fae6508bce3f80",
+    image = "index.docker.io/codercom/example-minimal",
+)
+oci.pull(
+    name = "workspace_dev_base_linux_arm64_v8",
+    digest = "sha256:c7b1dc99298e9fb34145f65f5365220b696b28c12d3858a54e0232b3a71a44c2",
+    image = "index.docker.io/codercom/example-minimal",
+)
+
+# LINT.ThenChange(//pyproject.toml:ray-version)
+use_repo(
+    oci,
+    "dragonfly_client_base_linux_amd64",
+    "dragonfly_client_base_linux_arm64",
+    "dragonfly_sso_base_linux_amd64",
+    "dragonfly_sso_base_linux_arm64_v8",
+    "headscale_base_linux_amd64",
+    "headscale_base_linux_arm64_v8",
+    "k3s_base_linux_amd64",
+    "k3s_base_linux_arm64_v8",
+    "node_base_linux_amd64",
+    "node_base_linux_arm64_v8",
+    "rawfile_localpv_base_linux_amd64",
+    "rawfile_localpv_base_linux_arm64",
+    "ray_base_linux_amd64",
+    "ray_base_linux_arm64_v8",
+    "workspace_backup_proxy_base_linux_amd64",
+    "workspace_backup_proxy_base_linux_arm64_v8",
+    "workspace_dev_base_linux_amd64",
+    "workspace_dev_base_linux_arm64_v8",
+    "workspace_snapshot_catalog_base_linux_amd64",
+    "workspace_snapshot_catalog_base_linux_arm64_v8",
+)
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(python_version = "3.13")
+
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "python_deps",
+    python_version = "3.13",
+    requirements_lock = "//:requirements_lock.txt",
+)
+use_repo(pip, "python_deps")
+
+# Repository tooling: the validators still in .config import these, and the
+# lint aspects need them resolvable through the graph rather than a host venv.
+pip.parse(
+    hub_name = "dev_python_deps",
+    python_version = "3.13",
+    requirements_lock = "//:requirements_dev_lock.txt",
+)
+use_repo(pip, "dev_python_deps")
+
+kubernetes_schemas = use_repo_rule("//src/bazel/rules/kubernetes_schemas:defs.bzl", "kubernetes_schemas")
+
+# LINT.IfChange(kubernetes-version)
+kubernetes_schemas(
+    name = "kubernetes_json_schema",
+    commit = "14355cdd490a43d21e05985668815a36a6f97da6",
+    kubernetes_version = "1.36.0",
+)
+# LINT.ThenChange(//src/bazel/rules/kubernetes_manifests/defs.bzl:kubernetes-version)
+
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "dragonfly_client_source",
+    build_file_content = "filegroup(name = \"all_files\", srcs = glob([\"**\"]), visibility = [\"//visibility:public\"])",
+    patch_args = ["-p1"],
+    patches = ["//src/third_party/dragonflyoss/client:source-date-epoch-v1.5.2.patch"],
+    sha256 = "09e65ef3ac7837890c0d4ed964fc447586a30b55bc1a78101dcd957362606ca0",
+    strip_prefix = "client-8212ee1a04483eddf2b25c7039b58ea11b01a97e",
+    urls = ["https://github.com/dragonflyoss/client/archive/8212ee1a04483eddf2b25c7039b58ea11b01a97e.tar.gz"],
+)
+
+http_archive(
+    name = "rawfile_localpv_source",
+    build_file_content = "exports_files([\"rawfile/bd2fs.py\"], visibility = [\"//visibility:public\"])",
+    patch_args = ["-p1"],
+    patches = ["//src/third_party/openebs/rawfile-localpv:publish-identity-v0.15.3.patch"],
+    sha256 = "098f5ba2cd81619e59da7cad8283c95ca0da17dcb266199f51b9f77fa5c20a73",
+    strip_prefix = "rawfile-localpv-0.15.3",
+    urls = ["https://github.com/openebs/rawfile-localpv/archive/refs/tags/v0.15.3.tar.gz"],
+)
+
+# LINT.IfChange(ray-torch-runtime-wheels)
+# Ray's Python 3.10 images already contain Serve, Starlette, NumPy, Jinja2,
+# filelock, fsspec, typing-extensions, and async-timeout. These wheels add
+# PyTorch, its absent transitive packages, and the Redis compile-cache client.
+http_archive(
+    name = "ray_torch_linux_amd64",
+    build_file_content = "filegroup(name = \"files\", srcs = glob([\"**\"]), visibility = [\"//visibility:public\"])",
+    sha256 = "1f04a373a3f643821f721da9898ef77dce73b5b6bfc64486f0976f7fb5f90e83",
+    type = "zip",
+    urls = ["https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp310-cp310-manylinux_2_28_x86_64.whl"],
+)
+
+http_archive(
+    name = "ray_torch_linux_arm64",
+    build_file_content = "filegroup(name = \"files\", srcs = glob([\"**\"]), visibility = [\"//visibility:public\"])",
+    sha256 = "a103b5d782af5bd119b81dbcc7ffc6fa09904c423ff8db397a1e6ea8fd71508f",
+    type = "zip",
+    urls = ["https://files.pythonhosted.org/packages/6a/27/2e06cb52adf89fe6e020963529d17ed51532fc73c1e6d1b18420ef03338c/torch-2.7.1-cp310-cp310-manylinux_2_28_aarch64.whl"],
+)
+
+http_archive(
+    name = "ray_torch_networkx",
+    build_file_content = "filegroup(name = \"files\", srcs = glob([\"**\"]), visibility = [\"//visibility:public\"])",
+    sha256 = "df5d4365b724cf81b8c6a7312509d0c22386097011ad1abe274afd5e9d3bbc5f",
+    type = "zip",
+    urls = ["https://files.pythonhosted.org/packages/b9/54/dd730b32ea14ea797530a4479b2ed46a6fb250f682a9cfb997e968bf0261/networkx-3.4.2-py3-none-any.whl"],
+)
+
+http_archive(
+    name = "ray_torch_redis",
+    build_file_content = "filegroup(name = \"files\", srcs = glob([\"**\"]), visibility = [\"//visibility:public\"])",
+    sha256 = "ee7e1056b9aea0f04c6c2ed59452947f34c4940ee025f5dd83e6a6418b6989e4",
+    type = "zip",
+    urls = ["https://files.pythonhosted.org/packages/3c/5f/fa26b9b2672cbe30e07d9a5bdf39cf16e3b80b42916757c5f92bca88e4ba/redis-5.2.1-py3-none-any.whl"],
+)
+
+http_archive(
+    name = "ray_torch_sympy",
+    build_file_content = "filegroup(name = \"files\", srcs = glob([\"**\"]), visibility = [\"//visibility:public\"])",
+    sha256 = "e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5",
+    type = "zip",
+    urls = ["https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl"],
+)
+
+http_archive(
+    name = "ray_torch_mpmath",
+    build_file_content = "filegroup(name = \"files\", srcs = glob([\"**\"]), visibility = [\"//visibility:public\"])",
+    sha256 = "a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c",
+    type = "zip",
+    urls = ["https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl"],
+)
+# LINT.ThenChange(//src/bazel/rules/oci/BUILD.bazel:ray-torch-runtime-wheels)
+
+# Ray's runtime image is Ubuntu Jammy. Each explicit 34-package set restores
+# only the compiler closure removed from the pinned base.
+apt.sources_list(
+    architectures = [
+        "amd64",
+        "arm64",
+    ],
+    components = ["main"],
+    suites = [
+        "jammy",
+        "jammy-security",
+        "jammy-updates",
+    ],
+    types = ["deb"],
+    uris = ["https://snapshot.ubuntu.com/ubuntu/20260801T000000Z"],
+)
+apt.install(
+    dependency_set = "ray_torch_compiler_linux_amd64",
+    include_transitive = False,
+    packages = [
+        "binutils (= 2.38-4ubuntu2.12):amd64",
+        "binutils-common (= 2.38-4ubuntu2.12):amd64",
+        "binutils-x86-64-linux-gnu (= 2.38-4ubuntu2.12):amd64",
+        "cpp (= 4:11.2.0-1ubuntu1):amd64",
+        "cpp-11 (= 11.4.0-1ubuntu1~22.04.3):amd64",
+        "g++ (= 4:11.2.0-1ubuntu1):amd64",
+        "g++-11 (= 11.4.0-1ubuntu1~22.04.3):amd64",
+        "gcc (= 4:11.2.0-1ubuntu1):amd64",
+        "gcc-11 (= 11.4.0-1ubuntu1~22.04.3):amd64",
+        "gcc-11-base (= 11.4.0-1ubuntu1~22.04.3):amd64",
+        "libasan6 (= 11.4.0-1ubuntu1~22.04.3):amd64",
+        "libatomic1 (= 12.3.0-1ubuntu1~22.04.3):amd64",
+        "libbinutils (= 2.38-4ubuntu2.12):amd64",
+        "libc-dev-bin (= 2.35-0ubuntu3.14):amd64",
+        "libc6-dev (= 2.35-0ubuntu3.14):amd64",
+        "libcc1-0 (= 12.3.0-1ubuntu1~22.04.3):amd64",
+        "libcrypt-dev (= 1:4.4.27-1):amd64",
+        "libctf-nobfd0 (= 2.38-4ubuntu2.12):amd64",
+        "libctf0 (= 2.38-4ubuntu2.12):amd64",
+        "libgcc-11-dev (= 11.4.0-1ubuntu1~22.04.3):amd64",
+        "libgomp1 (= 12.3.0-1ubuntu1~22.04.3):amd64",
+        "libisl23 (= 0.24-2build1):amd64",
+        "libitm1 (= 12.3.0-1ubuntu1~22.04.3):amd64",
+        "liblsan0 (= 12.3.0-1ubuntu1~22.04.3):amd64",
+        "libmpc3 (= 1.2.1-2build1):amd64",
+        "libmpfr6 (= 4.1.0-3build3):amd64",
+        "libnsl-dev (= 1.3.0-2build2):amd64",
+        "libquadmath0 (= 12.3.0-1ubuntu1~22.04.3):amd64",
+        "libstdc++-11-dev (= 11.4.0-1ubuntu1~22.04.3):amd64",
+        "libtirpc-dev (= 1.3.2-2ubuntu0.1):amd64",
+        "libtsan0 (= 11.4.0-1ubuntu1~22.04.3):amd64",
+        "libubsan1 (= 12.3.0-1ubuntu1~22.04.3):amd64",
+        "linux-libc-dev (= 5.15.0-186.196):amd64",
+        "rpcsvc-proto (= 1.4.2-0ubuntu6):amd64",
+    ],
+    suites = [
+        "jammy",
+        "jammy-security",
+        "jammy-updates",
+    ],
+)
+apt.install(
+    dependency_set = "ray_torch_compiler_linux_arm64",
+    include_transitive = False,
+    packages = [
+        "binutils (= 2.38-4ubuntu2.12):arm64",
+        "binutils-aarch64-linux-gnu (= 2.38-4ubuntu2.12):arm64",
+        "binutils-common (= 2.38-4ubuntu2.12):arm64",
+        "cpp (= 4:11.2.0-1ubuntu1):arm64",
+        "cpp-11 (= 11.4.0-1ubuntu1~22.04.3):arm64",
+        "g++ (= 4:11.2.0-1ubuntu1):arm64",
+        "g++-11 (= 11.4.0-1ubuntu1~22.04.3):arm64",
+        "gcc (= 4:11.2.0-1ubuntu1):arm64",
+        "gcc-11 (= 11.4.0-1ubuntu1~22.04.3):arm64",
+        "gcc-11-base (= 11.4.0-1ubuntu1~22.04.3):arm64",
+        "libasan6 (= 11.4.0-1ubuntu1~22.04.3):arm64",
+        "libatomic1 (= 12.3.0-1ubuntu1~22.04.3):arm64",
+        "libbinutils (= 2.38-4ubuntu2.12):arm64",
+        "libc-dev-bin (= 2.35-0ubuntu3.14):arm64",
+        "libc6-dev (= 2.35-0ubuntu3.14):arm64",
+        "libcc1-0 (= 12.3.0-1ubuntu1~22.04.3):arm64",
+        "libcrypt-dev (= 1:4.4.27-1):arm64",
+        "libctf-nobfd0 (= 2.38-4ubuntu2.12):arm64",
+        "libctf0 (= 2.38-4ubuntu2.12):arm64",
+        "libgcc-11-dev (= 11.4.0-1ubuntu1~22.04.3):arm64",
+        "libgomp1 (= 12.3.0-1ubuntu1~22.04.3):arm64",
+        "libhwasan0 (= 12.3.0-1ubuntu1~22.04.3):arm64",
+        "libisl23 (= 0.24-2build1):arm64",
+        "libitm1 (= 12.3.0-1ubuntu1~22.04.3):arm64",
+        "liblsan0 (= 12.3.0-1ubuntu1~22.04.3):arm64",
+        "libmpc3 (= 1.2.1-2build1):arm64",
+        "libmpfr6 (= 4.1.0-3build3):arm64",
+        "libnsl-dev (= 1.3.0-2build2):arm64",
+        "libstdc++-11-dev (= 11.4.0-1ubuntu1~22.04.3):arm64",
+        "libtirpc-dev (= 1.3.2-2ubuntu0.1):arm64",
+        "libtsan0 (= 11.4.0-1ubuntu1~22.04.3):arm64",
+        "libubsan1 (= 12.3.0-1ubuntu1~22.04.3):arm64",
+        "linux-libc-dev (= 5.15.0-186.196):arm64",
+        "rpcsvc-proto (= 1.4.2-0ubuntu6):arm64",
+    ],
+    suites = [
+        "jammy",
+        "jammy-security",
+        "jammy-updates",
+    ],
+)
+use_repo(
+    apt,
+    "ray_torch_compiler_linux_amd64",
+    "ray_torch_compiler_linux_arm64",
+)
+
+http_file(
+    name = "mise_linux_amd64",
+    downloaded_file_path = "mise",
+    executable = True,
+    sha256 = "8658a006b6e80206cd4a1f6fb2d02bcaa3210e2d06a95c5b4c3123f2501a9044",
+    urls = ["https://github.com/jdx/mise/releases/download/v2026.9.11/mise-v2026.9.11-linux-x64-musl"],
+)
+
+http_file(
+    name = "mise_linux_arm64",
+    downloaded_file_path = "mise",
+    executable = True,
+    sha256 = "b49ffaf99c0ae6db36a599ef98ffb312d4dc6d6dfc7a2e4e14ae21229919f6b7",
+    urls = ["https://github.com/jdx/mise/releases/download/v2026.9.11/mise-v2026.9.11-linux-arm64-musl"],
+)
+
+pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm", dev_dependency = True)
+pnpm.pnpm(pnpm_version = "10.34.5")
+use_repo(pnpm, "pnpm")
+
+npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
+npm.npm_translate_lock(
+    name = "npm",
+    # rules_js package extraction silently drops files whose names contain
+    # "$"; SvelteKit's sync step reads five such markdown doc snippets, so
+    # recreate them with stub content.
+    custom_postinstalls = {
+        "@sveltejs/kit": "node -e 'const fs=require(\"fs\");const d=\"src/types/synthetic\";fs.mkdirSync(d,{recursive:true});for(const n of [\"$env+static+private\",\"$env+static+public\",\"$env+dynamic+private\",\"$env+dynamic+public\",\"$lib\"]){fs.writeFileSync(d+\"/\"+n+\".md\",\"See https://svelte.dev/docs/kit/\"+n.replace(/\\+/g,\"-\").replace(\"$\",\"\")+\" for details.\\n\")}'",
+    },
+    pnpm_lock = "//:pnpm-lock.yaml",
+    verify_node_modules_ignored = "//:.bazelignore",
+)
+use_repo(npm, "npm")
+
+kustomize = use_extension("@rules_kustomize//kustomize:extensions.bzl", "kustomize")
+kustomize.download(version = "v5.8.0")
+
+# taplo ships a bare gzip of one binary rather than a tarball, which
+# rules_multitool extracts without the executable bit. http_file plus a
+# select() in //src/bazel/tools restores it.
+http_file(
+    name = "taplo_macos_arm64",
+    downloaded_file_path = "taplo.gz",
+    sha256 = "713734314c3e71894b9e77513c5349835eefbd52908445a0d73b0c7dc469347d",
+    urls = ["https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-darwin-aarch64.gz"],
+)
+
+http_file(
+    name = "taplo_macos_x86_64",
+    downloaded_file_path = "taplo.gz",
+    sha256 = "898122cde3a0b1cd1cbc2d52d3624f23338218c91b5ddb71518236a4c2c10ef2",
+    urls = ["https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-darwin-x86_64.gz"],
+)
+
+http_file(
+    name = "taplo_linux_arm64",
+    downloaded_file_path = "taplo.gz",
+    sha256 = "033681d01eec8376c3fd38fa3703c79316f5e14bb013d859943b60a07bccdcc3",
+    urls = ["https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-aarch64.gz"],
+)
+
+http_file(
+    name = "taplo_linux_x86_64",
+    downloaded_file_path = "taplo.gz",
+    sha256 = "8fe196b894ccf9072f98d4e1013a180306e17d244830b03986ee5e8eabeb6156",
+    urls = ["https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-x86_64.gz"],
+)
+
+http_file(
+    name = "package_json_schema",
+    downloaded_file_path = "package.schema.json",
+    sha256 = "def9733cbd5d135a325b96d148f5cdd797c187e9dbe8d864202765ff37184345",
+    urls = [
+        "https://raw.githubusercontent.com/SchemaStore/schemastore/a83ce6f194e77d36174527f18820f170c2e58033/src/schemas/json/package.json",
+    ],
+)
+
+http_file(
+    name = "tsconfig_schema",
+    downloaded_file_path = "tsconfig.schema.json",
+    sha256 = "4323b790e65e979876bd48c7387a5150520e0c4cf1e36c221252a7234c2bd70a",
+    urls = [
+        "https://raw.githubusercontent.com/SchemaStore/schemastore/a83ce6f194e77d36174527f18820f170c2e58033/src/schemas/json/tsconfig.json",
+    ],
+)
+
+http_file(
+    name = "oxlint_schema",
+    downloaded_file_path = "oxlintrc.schema.json",
+    sha256 = "04603aebd37dd967a3cba05d3b4b147a7a272325c5b39a7ceef31d34cbb9038d",
+    urls = [
+        "https://raw.githubusercontent.com/oxc-project/oxc/apps_v1.80.0/npm/oxlint/configuration_schema.json",
+    ],
+)

@@ -1,0 +1,24 @@
+# Specifies directory trees and transient build artifacts ignored during Bazel package discovery.
+
+.tmp
+.local
+.venv
+.plans
+.agents
+.claude
+bazel-bin
+bazel-openplex
+bazel-out
+bazel-testlogs
+src/examples/svelte_web/node_modules
+src/examples/svelte_web/.svelte-kit
+src/infra/docs/node_modules
+node_modules
+src/infra/terraform/live/.terragrunt-cache
+src/infra/terraform/live/local/.terragrunt-cache
+src/infra/terraform/live/local/floci_runtime/.terragrunt-cache
+src/infra/terraform/live/local/local_git_server/.terragrunt-cache
+src/infra/terraform/live/local/local_pki/.terragrunt-cache
+src/infra/terraform/live/global_aws/.terragrunt-cache
+src/infra/terraform/live/local/gateway_bridge/.terragrunt-cache
+src/infra/terraform/live/local/origin_registry/.terragrunt-cache
