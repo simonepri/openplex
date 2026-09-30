@@ -1,0 +1,21 @@
+# Provides lint values exercising the private-Gateway OIDC proxy.
+
+mode: single
+application: {partOf: integration-test, serviceAccountName: integration-test-auth-proxy}
+identity:
+  clientIDProperty: test_client_id
+  clientSecretProperty: test_client_secret
+  cookieSecretProperty: test_cookie_secret
+  secretName: test-oidc
+localCA: {enabled: true}
+oidcEgressCIDR: 172.31.0.11/32
+podDisruptionBudget: {enabled: false}
+proxy:
+  cookieName: _cluster_test
+  name: test-auth-proxy
+  redirectURL: https://test.cell-eaws-lh1.c.corp.local.internal/oauth2/callback
+  tls: {enabled: false}
+  upstream:
+    podSelector: {app.kubernetes.io/instance: test, app.kubernetes.io/name: test}
+    port: 3000
+    url: http://test.test.svc.cluster.local:3000

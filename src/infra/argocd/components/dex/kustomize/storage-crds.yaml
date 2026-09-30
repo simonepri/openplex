@@ -1,0 +1,245 @@
+# Dex Kubernetes-storage CRDs consumed by the pinned Dex server. Argo applies them before the chart Deployment, while Dex only checks their availability.
+
+# TODO(simonepri): Upstream these CRDs to dexidp/helm-charts and consume them from the pinned chart.
+# Source: https://github.com/dexidp/dex/blob/ab64ed778070e983cbb10cfc07ea4bb397d14312/storage/kubernetes/types.go
+# LINT.IfChange(dex-kubernetes-storage-crds)
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: authcodes.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: AuthCode
+    plural: authcodes
+    singular: authcode
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: authrequests.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: AuthRequest
+    plural: authrequests
+    singular: authrequest
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: oauth2clients.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: OAuth2Client
+    plural: oauth2clients
+    singular: oauth2client
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: signingkeies.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: SigningKey
+    plural: signingkeies
+    singular: signingkey
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: refreshtokens.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: RefreshToken
+    plural: refreshtokens
+    singular: refreshtoken
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: passwords.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: Password
+    plural: passwords
+    singular: password
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: offlinesessionses.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: OfflineSessions
+    plural: offlinesessionses
+    singular: offlinesessions
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: connectors.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: Connector
+    plural: connectors
+    singular: connector
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: devicerequests.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: DeviceRequest
+    plural: devicerequests
+    singular: devicerequest
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: devicetokens.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: DeviceToken
+    plural: devicetokens
+    singular: devicetoken
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: useridentities.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: UserIdentity
+    plural: useridentities
+    singular: useridentity
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: authsessions.dex.coreos.com
+spec:
+  group: dex.coreos.com
+  names:
+    kind: AuthSession
+    plural: authsessions
+    singular: authsession
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+# LINT.ThenChange(//src/infra/argocd/components/dex/helm/values.yaml:dex-kubernetes-storage-crds)
