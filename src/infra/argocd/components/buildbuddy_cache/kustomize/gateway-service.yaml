@@ -1,0 +1,20 @@
+# Service resolving the Envoy Gateway proxy for BuildBuddy cache clients across namespaces.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildbuddy-cache-gateway
+  namespace: envoy-gateway-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-cache
+    app.kubernetes.io/part-of: buildbuddy-cache
+spec:
+  type: ExternalName
+  externalName: gateway.envoy-gateway-system.svc.cluster.local
+  ports:
+    - name: grpc
+      appProtocol: kubernetes.io/h2c
+      port: 80
+      protocol: TCP
+      targetPort: 80

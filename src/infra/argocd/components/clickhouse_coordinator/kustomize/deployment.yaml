@@ -1,0 +1,157 @@
+# Deployment running stateless ClickHouse query coordinators with in-memory result caching.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickhouse-coordinator
+  namespace: signoz
+  annotations:
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      ClickHouse coordinator requires admin password from secret to authenticate incoming client queries.
+  labels:
+    app.kubernetes.io/name: clickhouse-coordinator
+    app.kubernetes.io/instance: clickhouse-coordinator
+    app.kubernetes.io/component: coordinator
+    app.kubernetes.io/part-of: signoz
+    app.kubernetes.io/managed-by: argocd
+spec:
+  revisionHistoryLimit: 2
+  strategy: {type: RollingUpdate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clickhouse-coordinator
+      app.kubernetes.io/instance: clickhouse-coordinator
+      app.kubernetes.io/component: coordinator
+  template:
+    metadata:
+      annotations:
+        automount-service-account-token: "false"
+        ignore-check.kube-linter.io/read-secret-from-env-var: >-
+          ClickHouse coordinator requires admin password from secret to authenticate incoming client queries.
+        signoz.io/path: /ping
+        signoz.io/port: "8123"
+        signoz.io/scrape: "false"
+      labels:
+        app.kubernetes.io/name: clickhouse-coordinator
+        app.kubernetes.io/instance: clickhouse-coordinator
+        app.kubernetes.io/component: coordinator
+        app.kubernetes.io/part-of: signoz
+        app.kubernetes.io/managed-by: argocd
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: cluster-operators
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 101
+        runAsNonRoot: true
+        runAsUser: 101
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: clickhouse-coordinator
+                    app.kubernetes.io/instance: clickhouse-coordinator
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: clickhouse-coordinator
+              app.kubernetes.io/instance: clickhouse-coordinator
+              app.kubernetes.io/component: coordinator
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: clickhouse-coordinator
+              app.kubernetes.io/instance: clickhouse-coordinator
+              app.kubernetes.io/component: coordinator
+      containers:
+        - name: clickhouse
+          # yamllint disable-line rule:line-length
+          image: docker.io/clickhouse/clickhouse-server:26.9.10@sha256:b01d1d45df540e487396838dd1397550215a07a8998aa6ac3b50b39802d62701
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - /usr/bin/clickhouse-server --config-file=/etc/clickhouse-server/config.xml
+          env:
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: signoz-clickhouse
+                  key: password
+          ports:
+            - name: http
+              containerPort: 8123
+              protocol: TCP
+            - name: tcp
+              containerPort: 9000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 101
+            runAsNonRoot: true
+            runAsUser: 101
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: tmp
+              mountPath: /tmp
+            - name: logs
+              mountPath: /var/log/clickhouse-server
+            - name: config
+              mountPath: /etc/clickhouse-server/config.d/coordinator.xml
+              subPath: coordinator.xml
+            - name: config
+              mountPath: /etc/clickhouse-server/users.d/users.xml
+              subPath: users.xml
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: clickhouse-coordinator

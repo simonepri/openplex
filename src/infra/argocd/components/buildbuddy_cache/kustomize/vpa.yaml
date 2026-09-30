@@ -1,0 +1,29 @@
+# VerticalPodAutoscaler sizing BuildBuddy cache requests at startup without stream evictions.
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: buildbuddy-cache
+  namespace: buildbuddy
+  labels:
+    app.kubernetes.io/component: remote-cache
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-cache
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: buildbuddy-cache
+  updatePolicy:
+    updateMode: "Initial"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: buildbuddy
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+        minAllowed:
+          cpu: 250m
+          memory: 512Mi
+        maxAllowed:
+          cpu: "4"
+          memory: 8Gi

@@ -1,0 +1,60 @@
+# Helm values for Altinity ClickHouse Operator managing ClickHouse installations.
+
+namespaceOverride: clickhouse-system
+fullnameOverride: clickhouse-operator
+commonLabels: {}
+
+# Helm still installs the pinned CRDs from the chart's crds/ directory on a
+# greenfield cluster. Disable the update hook because its default kubectl image
+# is intentionally unpinned and CRD upgrades require an explicit review.
+crdHook:
+  enabled: false
+
+operator:
+  image:
+    repository: altinity/clickhouse-operator
+    tag: 0.28.0@sha256:a99588dfdb1fce0fc12322bf2462251155e51f0f99d8c1addb836927b24e682c
+  priorityClassName: cluster-operators
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 512Mi}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    runAsNonRoot: true
+    # Both pinned upstream images declare USER nobody. Kubernetes cannot prove
+    # that a named user is non-root, so pin its actual passwd UID/GID.
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile: {type: RuntimeDefault}
+
+metrics:
+  enabled: true
+  image:
+    repository: altinity/metrics-exporter
+    tag: 0.28.0@sha256:19207172ee38bac6d724e75514bfe885be54c983813a1c513ffa46d418134dd3
+  resources:
+    requests: {cpu: 25m, memory: 32Mi}
+    limits: {cpu: 100m, memory: 128Mi}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile: {type: RuntimeDefault}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile: {type: RuntimeDefault}
+podAnnotations:
+  automount-service-account-token: "true"
+  signoz.io/port: "8888"
+  signoz.io/scrape: "true"
+podLabels:
+  app.kubernetes.io/component: operator
+watchNamespaces: [signoz]
+serviceMonitor:
+  enabled: false
+secret:
+  create: false

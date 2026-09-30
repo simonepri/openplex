@@ -1,0 +1,24 @@
+"""Check targets for the buildbuddy Argo CD component."""
+
+load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+kustomization(
+    name = "base",
+    srcs = glob(["kustomize/**"]),
+    file = "kustomize/kustomization.yaml",
+)
+
+kustomized_resources(
+    name = "base_render",
+    kustomization = ":base",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "base_manifest",
+    rendered = ":base_render",
+)
+
+package_sources()

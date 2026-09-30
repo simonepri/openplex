@@ -1,0 +1,37 @@
+"""Check targets for the clickhouse Argo CD component."""
+
+load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+kustomization(
+    name = "base",
+    srcs = glob(["kustomize/**"]),
+    file = "kustomize/kustomization.yaml",
+)
+
+kustomized_resources(
+    name = "base_render",
+    kustomization = ":base",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "base_manifest",
+    rendered = ":base_render",
+)
+
+sh_library(
+    name = "shell",
+    srcs = [
+        "kustomize/scripts/clickhouse-backup.sh",
+        "kustomize/scripts/clickhouse-backup-retention.sh",
+        "kustomize/scripts/histogram-quantile-install.sh",
+        "kustomize/scripts/signoz-databases-schema-apply.sh",
+        "kustomize/scripts/storage-stats-rollup.sh",
+        "kustomize/scripts/storage-stats-schema-apply.sh",
+    ],
+)
+
+package_sources(exclude = ["**/*.sh"])

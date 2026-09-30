@@ -1,0 +1,23 @@
+# ConfigMap providing cloud storage inventory coordinates and manifest URLs for stats rollups.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signoz-clickhouse-storage-stats-provider
+  namespace: signoz
+  labels:
+    app.kubernetes.io/name: storage-stats
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: storage-stats-rollup
+    app.kubernetes.io/part-of: signoz
+data:
+  INVENTORY_ENABLED: "true"
+  INVENTORY_TABLE_FUNCTION: s3
+  INVENTORY_MANIFEST_SOURCES: ""
+  INVENTORY_MANIFEST_NAME: manifest.json
+  INVENTORY_MANIFEST_CHECKSUM_NAME: manifest.checksum
+  INVENTORY_MANIFEST_FILE_KEY: key
+  INVENTORY_MANIFEST_FILTER: "JSONExtractString(json, 'fileFormat') = 'Parquet'"
+  INVENTORY_ROW_FILTER: "1"
+  INVENTORY_SOURCES: ""
+  INVENTORY_STRUCTURE: key String, size Int64, last_modified_date DateTime64(3)

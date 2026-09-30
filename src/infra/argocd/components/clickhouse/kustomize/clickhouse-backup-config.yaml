@@ -1,0 +1,25 @@
+# ConfigMap defining native ClickHouse telemetry backup database targets and retention switches.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signoz-clickhouse-backup-common
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: clickhouse-backup
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: database-backup
+    app.kubernetes.io/part-of: signoz
+data:
+  BACKUP_CLUSTER: cluster
+  BACKUP_KEEP_CHAINS: "8"
+  BACKUP_LOGS: "true"
+  BACKUP_MANIFEST_PREFIX: backups/manifests/clickhouse
+  BACKUP_METRICS: "true"
+  BACKUP_ROOT: backups/telemetry/clickhouse
+  BACKUP_TRACES: "true"
+  CLICKHOUSE_HOST: chi-signoz-clickhouse-cluster-0-0
+  CLICKHOUSE_PORT: "9000"
+  CLICKHOUSE_USERNAME: admin

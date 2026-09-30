@@ -1,0 +1,27 @@
+# ConfigMap supplying provider-agnostic runtime settings for the storage-stats rollup CronJob.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signoz-clickhouse-storage-stats-common
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: storage-stats
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: storage-stats-rollup
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+data:
+  CLICKHOUSE_HOST: signoz-clickhouse
+  CLICKHOUSE_PORT: "9000"
+  CLICKHOUSE_USERNAME: admin
+  INVENTORY_DATE_EXPR: yesterday
+  INVENTORY_PREFIX_DEPTH: "2"
+  INVENTORY_TABLE_FUNCTION: s3
+  INVENTORY_MANIFEST_SOURCES: ""
+  INVENTORY_MANIFEST_NAME: manifest.json
+  INVENTORY_MANIFEST_CHECKSUM_NAME: manifest.checksum
+  INVENTORY_MANIFEST_FILE_KEY: key
+  INVENTORY_MANIFEST_FILTER: "JSONExtractString(json, 'fileFormat') = 'Parquet'"

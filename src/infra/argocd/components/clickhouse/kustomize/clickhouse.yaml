@@ -1,0 +1,617 @@
+# ClickHouseInstallation defining the SigNoz sharded ClickHouse cluster topology and storage.
+
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: signoz-clickhouse
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    argocd.argoproj.io/sync-wave: "0"
+    resize.topolvm.io/enabled: "true"
+    resize.topolvm.io/increase: 20%
+    resize.topolvm.io/storage_limit: 500Gi
+    resize.topolvm.io/threshold: 20%
+    vpa.autoscaling.k8s.io/enabled: "custom"
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: clickhouse
+    app.kubernetes.io/part-of: signoz
+    app.kubernetes.io/managed-by: clickhouse-operator
+spec:
+  defaults:
+    storageManagement:
+      provisioner: Operator
+      reclaimPolicy: Retain
+    templates:
+      dataVolumeClaimTemplate: data-volumeclaim-template
+      podTemplate: pod-template
+      replicaServiceTemplate: replica-service-template
+      serviceTemplate: service-template
+  configuration:
+    users:
+      admin/password:
+        valueFrom:
+          secretKeyRef:
+            name: signoz-clickhouse
+            key: password
+      admin/networks/ip:
+        - fc00::/7
+        - 10.0.0.0/8
+        - 100.64.0.0/10
+        - 172.16.0.0/12
+        - 192.0.0.0/24
+        - 198.18.0.0/15
+        - 192.168.0.0/16
+      admin/named_collection_control: 1
+      admin/profile: admin
+      admin/quota: default
+      signoz_query/password:
+        valueFrom:
+          secretKeyRef:
+            name: signoz-clickhouse
+            key: password
+      signoz_query/networks/ip:
+        - fc00::/7
+        - 10.0.0.0/8
+        - 100.64.0.0/10
+        - 172.16.0.0/12
+        - 192.0.0.0/24
+        - 198.18.0.0/15
+        - 192.168.0.0/16
+      signoz_query/profile: signoz_query
+      signoz_query/quota: default
+    profiles:
+      admin/async_insert: "1"
+      admin/async_insert_busy_timeout_ms: "500"
+      admin/async_insert_max_data_size: "10485760"
+      admin/log_processors_profiles: "0"
+      admin/max_bytes_before_external_group_by: "1073741824"
+      admin/max_bytes_before_external_sort: "1073741824"
+      admin/max_concurrent_queries_for_user: "256"
+      admin/max_execution_time: "60"
+      admin/max_insert_threads: "2"
+      admin/max_query_size: "10485760"
+      admin/max_threads: "4"
+      admin/memory_profiler_step: "0"
+      admin/query_plan_max_limit_for_lazy_materialization: "0"
+      admin/query_profiler_cpu_time_period_ns: "0"
+      admin/query_profiler_real_time_period_ns: "0"
+      admin/s3_allow_server_credentials_in_user_queries: "1"
+      admin/secondary_indices_enable_bulk_filtering: "0"
+      admin/use_hedged_requests: "0"
+      admin/wait_for_async_insert: "1"
+      default/allow_experimental_window_functions: "1"
+      default/allow_nondeterministic_mutations: "1"
+      default/async_insert: "1"
+      default/async_insert_busy_timeout_ms: "500"
+      default/async_insert_max_data_size: "10485760"
+      default/log_processors_profiles: "0"
+      default/max_bytes_before_external_group_by: "1073741824"
+      default/max_bytes_before_external_sort: "1073741824"
+      default/max_concurrent_queries_for_user: "256"
+      default/max_execution_time: "60"
+      default/max_insert_threads: "2"
+      default/max_query_size: "10485760"
+      default/max_threads: "4"
+      default/memory_profiler_step: "0"
+      default/query_plan_max_limit_for_lazy_materialization: "0"
+      default/query_profiler_cpu_time_period_ns: "0"
+      default/query_profiler_real_time_period_ns: "0"
+      default/s3_allow_server_credentials_in_user_queries: "1"
+      default/secondary_indices_enable_bulk_filtering: "0"
+      default/use_hedged_requests: "0"
+      default/wait_for_async_insert: "1"
+      signoz_query/async_insert: "1"
+      signoz_query/async_insert_busy_timeout_ms: "500"
+      signoz_query/async_insert_max_data_size: "10485760"
+      signoz_query/log_processors_profiles: "0"
+      signoz_query/max_bytes_before_external_group_by: "1073741824"
+      signoz_query/max_bytes_before_external_sort: "1073741824"
+      signoz_query/max_concurrent_queries_for_user: "256"
+      signoz_query/max_execution_time: "60"
+      signoz_query/max_insert_threads: "2"
+      signoz_query/max_memory_usage: "1073741824"
+      signoz_query/max_memory_usage_for_user: "2147483648"
+      signoz_query/max_query_size: "10485760"
+      signoz_query/max_threads: "4"
+      signoz_query/memory_profiler_step: "0"
+      signoz_query/query_plan_max_limit_for_lazy_materialization: "0"
+      signoz_query/query_profiler_cpu_time_period_ns: "0"
+      signoz_query/query_profiler_real_time_period_ns: "0"
+      signoz_query/s3_allow_server_credentials_in_user_queries: "1"
+      signoz_query/secondary_indices_enable_bulk_filtering: "0"
+      signoz_query/use_hedged_requests: "0"
+      signoz_query/wait_for_async_insert: "1"
+    settings:
+      asynchronous_metrics_update_period_s: "60"
+      background_buffer_flush_schedule_pool_size: "4"
+      background_common_pool_size: "4"
+      background_distributed_schedule_pool_size: "4"
+      background_fetches_pool_size: "4"
+      background_merges_mutations_concurrency_ratio: "2"
+      background_message_broker_schedule_pool_size: "4"
+      background_move_pool_size: "4"
+      background_pool_size: "16"
+      background_schedule_pool_size: "16"
+      concurrent_threads_soft_limit_num: "16"
+      format_schema_path: /etc/clickhouse-server/config.d/
+      global_profiler_cpu_time_period_ns: "0"
+      global_profiler_real_time_period_ns: "0"
+      mark_cache_size: "268435456"
+      max_concurrent_queries: "256"
+      max_server_memory_usage: "3435973836"
+      max_server_memory_usage_to_ram_ratio: "0.8"
+      max_thread_pool_size: "1024"
+      merge_tree/allow_dimensions_outside_sorting_key: "1"
+      merge_tree/fsync_after_insert: "1"
+      merge_tree/fsync_part_directory: "1"
+      merge_tree/max_bytes_to_merge_at_max_space_in_pool: "10737418240"
+      merge_tree/max_bytes_to_merge_at_min_space_in_pool: "1048576"
+      merge_tree/max_delay_to_insert: "2"
+      merge_tree/merge_max_block_size: "4096"
+      merge_tree/min_compressed_bytes_to_fsync_after_fetch: "1"
+      merge_tree/min_rows_to_fsync_after_merge: "1"
+      merge_tree/number_of_free_entries_in_pool_to_execute_mutation: "4"
+      merge_tree/number_of_free_entries_in_pool_to_execute_optimize_entire_partition: "4"
+      merge_tree/number_of_free_entries_in_pool_to_lower_max_size_of_merge: "2"
+      merge_tree/vertical_merge_algorithm_min_bytes_to_activate: "1"
+      merge_tree/vertical_merge_algorithm_min_columns_to_activate: "10"
+      merge_tree/vertical_merge_algorithm_min_rows_to_activate: "1"
+      prepare_system_log_tables_on_startup: "true"
+      prometheus/endpoint: /metrics
+      prometheus/port: "9363"
+      total_memory_profiler_step: "0"
+      uncompressed_cache_size: "268435456"
+      user_defined_executable_functions_config: /etc/clickhouse-server/functions/custom-functions.xml
+      user_scripts_path: /var/lib/clickhouse/user_scripts/
+    files:
+      events.proto: |
+        syntax = "proto3";
+        message Event {
+          string uuid = 1;
+          string event = 2;
+          string properties = 3;
+          string timestamp = 4;
+          uint64 team_id = 5;
+          string distinct_id = 6;
+          string created_at = 7;
+          string elements_chain = 8;
+        }
+      config.d/crash.xml: |
+        <clickhouse>
+          <send_crash_reports replace="replace">
+            <enabled>false</enabled>
+          </send_crash_reports>
+        </clickhouse>
+      config.d/formatting.xml: |
+        <clickhouse>
+          <logger>
+            <level replace="replace">warning</level>
+            <formatting replace="replace">
+              <type>json</type>
+              <names>
+                <date_time>date_time</date_time>
+                <thread_name>thread_name</thread_name>
+                <thread_id>thread_id</thread_id>
+                <level>level</level>
+                <query_id>query_id</query_id>
+                <logger_name>logger_name</logger_name>
+                <message>message</message>
+                <source_file>source_file</source_file>
+                <source_line>source_line</source_line>
+              </names>
+            </formatting>
+          </logger>
+        </clickhouse>
+      config.d/load.xml: |
+        <clickhouse>
+          <async_load_databases replace="replace">false</async_load_databases>
+        </clickhouse>
+      config.d/native-backup.xml: |
+        <clickhouse>
+          <named_collections>
+            <clickhouse_backup>
+              <url from_env="CLICKHOUSE_BACKUP_URL"/>
+              <use_environment_credentials>true</use_environment_credentials>
+            </clickhouse_backup>
+          </named_collections>
+        </clickhouse>
+      config.d/storage.xml: |
+        <clickhouse>
+          <storage_configuration>
+            <disks>
+              <default>
+                <type>local</type>
+              </default>
+              <s3_cold>
+                <type from_env="CLICKHOUSE_COLD_STORAGE_TYPE"/>
+                <path>/var/lib/clickhouse/disks/s3_cold/</path>
+                <endpoint from_env="CLICKHOUSE_COLD_STORAGE_URL" default_value_when_env_not_set="http://127.0.0.1:9000/telemetry/clickhouse/"/>
+                <use_environment_credentials>true</use_environment_credentials>
+                <skip_access_check>true</skip_access_check>
+                <support_path_style_address>true</support_path_style_address>
+              </s3_cold>
+            </disks>
+            <policies>
+              <hot_to_cold_policy>
+                <volumes>
+                  <default>
+                    <disk>default</disk>
+                  </default>
+                  <cold>
+                    <disk>s3_cold</disk>
+                  </cold>
+                </volumes>
+                <move_factor>0.15</move_factor>
+              </hot_to_cold_policy>
+            </policies>
+          </storage_configuration>
+        </clickhouse>
+      # LINT.IfChange(clickhouse-system-log-retention)
+      config.d/system-logs.xml: |
+        <clickhouse>
+          <!-- TTL materialization repairs metadata while preserving rows. -->
+          <metric_log replace="replace">
+            <database>system</database>
+            <table>metric_log</table>
+            <flush_interval_milliseconds>30000</flush_interval_milliseconds>
+            <collect_interval_milliseconds>30000</collect_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 3 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1,
+                enable_vertical_merge_algorithm = 1,
+                vertical_merge_algorithm_min_rows_to_activate = 1,
+                vertical_merge_algorithm_min_bytes_to_activate = 1,
+                vertical_merge_algorithm_min_columns_to_activate = 10
+            </engine>
+          </metric_log>
+          <asynchronous_metric_log replace="replace">
+            <database>system</database>
+            <table>asynchronous_metric_log</table>
+            <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 3 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1,
+                enable_vertical_merge_algorithm = 1,
+                vertical_merge_algorithm_min_rows_to_activate = 1,
+                vertical_merge_algorithm_min_bytes_to_activate = 1,
+                vertical_merge_algorithm_min_columns_to_activate = 10
+            </engine>
+          </asynchronous_metric_log>
+          <query_log replace="replace">
+            <database>system</database>
+            <table>query_log</table>
+            <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 7 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1,
+                enable_vertical_merge_algorithm = 1,
+                vertical_merge_algorithm_min_rows_to_activate = 10000,
+                vertical_merge_algorithm_min_bytes_to_activate = 1,
+                vertical_merge_algorithm_min_columns_to_activate = 10
+            </engine>
+          </query_log>
+          <text_log replace="replace">
+            <database>system</database>
+            <table>text_log</table>
+            <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 3 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1
+            </engine>
+          </text_log>
+          <error_log replace="replace">
+            <database>system</database>
+            <table>error_log</table>
+            <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 7 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1
+            </engine>
+          </error_log>
+          <trace_log replace="replace">
+            <database>system</database>
+            <table>trace_log</table>
+            <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 3 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1
+            </engine>
+          </trace_log>
+          <processors_profile_log replace="replace">
+            <database>system</database>
+            <table>processors_profile_log</table>
+            <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 3 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1
+            </engine>
+          </processors_profile_log>
+          <query_metric_log replace="replace">
+            <database>system</database>
+            <table>query_metric_log</table>
+            <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 3 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1
+            </engine>
+          </query_metric_log>
+          <background_schedule_pool_log replace="replace">
+            <database>system</database>
+            <table>background_schedule_pool_log</table>
+            <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 3 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1
+            </engine>
+          </background_schedule_pool_log>
+          <query_views_log replace="replace">
+            <database>system</database>
+            <table>query_views_log</table>
+            <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+            <engine>
+              ENGINE = MergeTree
+              PARTITION BY event_date
+              ORDER BY (event_date, event_time)
+              TTL event_date + INTERVAL 7 DAY DELETE
+              SETTINGS
+                ttl_only_drop_parts = 1,
+                materialize_ttl_recalculate_only = 1
+            </engine>
+          </query_views_log>
+        </clickhouse>
+      # LINT.ThenChange(//src/infra/argocd/components/clickhouse/kustomize/scripts/signoz-databases-schema-apply.sh:clickhouse-system-log-retention)
+    zookeeper:
+      keeper:
+        name: signoz-keeper
+        serviceType: replicas
+      session_timeout_ms: 30000
+      operation_timeout_ms: 10000
+    clusters:
+      - name: cluster
+        layout:
+          shardsCount: 2
+          replicasCount: 2
+  templates:
+    podTemplates:
+      - name: pod-template
+        podDistribution:
+          - type: ShardAntiAffinity
+            topologyKey: kubernetes.io/hostname
+        metadata:
+          annotations:
+            automount-service-account-token: "true"
+            signoz.io/path: /metrics
+            signoz.io/port: "9363"
+            signoz.io/scrape: "true"
+          labels:
+            app.kubernetes.io/name: clickhouse
+            app.kubernetes.io/instance: signoz
+            app.kubernetes.io/component: clickhouse
+            app.kubernetes.io/part-of: signoz
+            app.kubernetes.io/managed-by: clickhouse-operator
+        spec:
+          serviceAccountName: signoz-clickhouse
+          priorityClassName: cluster-operators
+          terminationGracePeriodSeconds: 120
+          securityContext:
+            fsGroup: 101
+            fsGroupChangePolicy: OnRootMismatch
+            runAsGroup: 101
+            runAsNonRoot: true
+            runAsUser: 101
+            seccompProfile: {type: RuntimeDefault}
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: clickhouse
+                  app.kubernetes.io/instance: signoz
+                  app.kubernetes.io/component: clickhouse
+          volumes:
+            - name: shared-binary-volume
+              emptyDir: {sizeLimit: 32Mi}
+            - name: custom-functions-volume
+              configMap:
+                name: signoz-clickhouse-custom-functions
+            - name: preloaded-udf
+              secret:
+                secretName: signoz-clickhouse-histogram-quantile
+                optional: true
+            - name: udf-install-volume
+              configMap:
+                name: signoz-clickhouse-udf-install
+                defaultMode: 493
+            - name: temporary
+              emptyDir: {sizeLimit: 1Gi}
+          initContainers:
+            - name: signoz-clickhouse-udf-init
+              image: docker.io/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+              imagePullPolicy: IfNotPresent
+              command:
+                - /scripts/histogram-quantile-install.sh
+              resources:
+                requests: {cpu: 10m, memory: 16Mi}
+                limits: {cpu: 100m, memory: 64Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                runAsGroup: 101
+                runAsNonRoot: true
+                runAsUser: 101
+                seccompProfile: {type: RuntimeDefault}
+              volumeMounts:
+                - name: udf-install-volume
+                  mountPath: /scripts
+                - name: shared-binary-volume
+                  mountPath: /var/lib/clickhouse/user_scripts
+                - name: preloaded-udf
+                  mountPath: /preloaded
+                  readOnly: true
+                - name: temporary
+                  mountPath: /tmp
+          containers:
+            - name: clickhouse
+              image: docker.io/clickhouse/clickhouse-server:26.9.10@sha256:b01d1d45df540e487396838dd1397550215a07a8998aa6ac3b50b39802d62701
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - configMapRef: {name: signoz-clickhouse-backup-provider}
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: signoz-postgres-backup-s3
+                      key: access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: signoz-postgres-backup-s3
+                      key: secret-access-key
+              command:
+                - /bin/bash
+                - -c
+                - /usr/bin/clickhouse-server --config-file=/etc/clickhouse-server/config.xml
+              ports:
+                - {name: http, containerPort: 8123}
+                - {name: client, containerPort: 9000}
+                - {name: interserver, containerPort: 9009}
+                - {name: metrics, containerPort: 9363}
+              startupProbe:
+                httpGet: {port: http, path: /ping}
+                initialDelaySeconds: 30
+                periodSeconds: 10
+                timeoutSeconds: 5
+                failureThreshold: 30
+              livenessProbe:
+                httpGet: {port: http, path: /ping}
+                initialDelaySeconds: 60
+                periodSeconds: 10
+                timeoutSeconds: 5
+                failureThreshold: 10
+              readinessProbe:
+                httpGet: {port: http, path: /ping}
+                initialDelaySeconds: 10
+                periodSeconds: 5
+                timeoutSeconds: 5
+                failureThreshold: 3
+              resources:
+                requests: {cpu: "2", memory: 4Gi}
+                limits: {cpu: "2", memory: 4Gi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                runAsGroup: 101
+                runAsNonRoot: true
+                runAsUser: 101
+                seccompProfile: {type: RuntimeDefault}
+              volumeMounts:
+                - name: shared-binary-volume
+                  mountPath: /var/lib/clickhouse/user_scripts
+                - name: custom-functions-volume
+                  mountPath: /etc/clickhouse-server/functions
+                - name: data-volumeclaim-template
+                  mountPath: /var/lib/clickhouse
+                - name: temporary
+                  mountPath: /tmp
+    serviceTemplates:
+      - name: service-template
+        generateName: signoz-clickhouse
+        metadata:
+          labels:
+            app.kubernetes.io/name: clickhouse
+            app.kubernetes.io/instance: signoz
+            app.kubernetes.io/component: clickhouse
+            app.kubernetes.io/part-of: signoz
+            app.kubernetes.io/managed-by: clickhouse-operator
+        spec:
+          type: ClusterIP
+          ports:
+            - {name: http, port: 8123}
+            - {name: tcp, port: 9000}
+      # Altinity 0.27.3 does not normalize an omitted Service type before
+      # comparing generated replica Services with the API-server-defaulted
+      # live object. Make the headless contract explicit to prevent an
+      # endless empty-to-ClusterIP recreation loop.
+      - name: replica-service-template
+        generateName: chi-{chi}-{cluster}-{shard}-{replica}
+        metadata:
+          labels:
+            app.kubernetes.io/managed-by: clickhouse-operator
+        spec:
+          clusterIP: None
+          # ClickHouse replicas must remain discoverable while a rolling host
+          # is starting; otherwise peer DNS disappears behind readiness and
+          # the operator cannot complete its own reconciliation.
+          publishNotReadyAddresses: true
+          type: ClusterIP
+          ports:
+            - {name: http, port: 8123}
+            - {name: tcp, port: 9000}
+            - {name: interserver, port: 9009}
+    volumeClaimTemplates:
+      - name: data-volumeclaim-template
+        provisioner: Operator
+        reclaimPolicy: Retain
+        metadata:
+          annotations:
+            resize.topolvm.io/enabled: "true"
+            resize.topolvm.io/increase: 20%
+            resize.topolvm.io/storage_limit: 500Gi
+            resize.topolvm.io/threshold: 20%
+          labels:
+            velero.io/exclude-from-backup: "true"
+        spec:
+          accessModes: [ReadWriteOnce]
+          storageClassName: general-expandable
+          resources:
+            requests:
+              storage: 5Gi

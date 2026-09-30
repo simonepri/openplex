@@ -1,0 +1,80 @@
+# Kustomize base assembling SigNoz ClickHouse, Keeper, backup jobs, and access policies.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - clickhouse-backup-config.yaml
+  - clickhouse-backup-provider.yaml
+  - clickhouse-backup-schedule.yaml
+  - clickhouse-custom-functions.yaml
+  - clickhouse.yaml
+  - credentials.yaml
+  - drain-policy.yaml
+  - external-secrets.yaml
+  - keeper.yaml
+  - network-policies.yaml
+  - service-account.yaml
+  - signoz-databases-schema-apply.yaml
+  - storage-stats-config.yaml
+  - storage-stats-provider.yaml
+  - storage-stats-rollup-schedule.yaml
+  - storage-stats-schema-apply.yaml
+  - vpa.yaml
+  # keep-sorted end
+configMapGenerator:
+  - name: signoz-clickhouse-backup-programs
+    namespace: signoz
+    files:
+      - scripts/clickhouse-backup-retention.sh
+      - scripts/clickhouse-backup.sh
+    options:
+      disableNameSuffixHash: true
+  - name: signoz-clickhouse-databases-schema
+    namespace: signoz
+    files:
+      - schema.sql=scripts/signoz-databases-schema.sql
+    options:
+      annotations:
+        argocd.argoproj.io/sync-wave: "-2"
+      disableNameSuffixHash: true
+      labels:
+        app.kubernetes.io/component: clickhouse-schema
+        app.kubernetes.io/instance: signoz
+        app.kubernetes.io/managed-by: argocd
+        app.kubernetes.io/name: signoz
+        app.kubernetes.io/part-of: signoz
+  - name: signoz-clickhouse-schema-apply-programs
+    namespace: signoz
+    files:
+      - scripts/signoz-databases-schema-apply.sh
+      - scripts/storage-stats-schema-apply.sh
+    options:
+      disableNameSuffixHash: true
+  - name: signoz-clickhouse-storage-stats-rollup-program
+    namespace: signoz
+    files:
+      - scripts/storage-stats-rollup.sh
+    options:
+      disableNameSuffixHash: true
+  - name: signoz-clickhouse-storage-stats-schema
+    namespace: signoz
+    files:
+      - schema.sql=scripts/storage-stats-schema.sql
+    options:
+      annotations:
+        argocd.argoproj.io/sync-wave: "-2"
+      disableNameSuffixHash: true
+      labels:
+        app.kubernetes.io/component: storage-stats-rollup
+        app.kubernetes.io/instance: signoz
+        app.kubernetes.io/managed-by: argocd
+        app.kubernetes.io/name: storage-stats
+        app.kubernetes.io/part-of: signoz
+  - name: signoz-clickhouse-udf-install
+    namespace: signoz
+    files:
+      - scripts/histogram-quantile-install.sh
+    options:
+      disableNameSuffixHash: true
+

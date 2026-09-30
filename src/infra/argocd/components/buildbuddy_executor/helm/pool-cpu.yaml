@@ -1,0 +1,22 @@
+# Helm values configuring CPU executor pool resources and node affinities.
+
+poolName: cpu-pool
+
+extraPodLabels:
+  availability-class: ma
+  latency-class: ls
+  kueue.x-k8s.io/managed: "true"
+  kueue.x-k8s.io/queue-name: ma
+
+extraPodAnnotations:
+  kueue.x-k8s.io/pod-suspending-parent: deployment
+
+priorityClassName: ma-ls
+
+resources:
+  requests:
+    cpu: "4"
+    memory: 16Gi
+  limits:
+    cpu: "4"
+    memory: 16Gi

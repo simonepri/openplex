@@ -1,0 +1,76 @@
+# Installs official Valkey lifecycle controller and CRD API on every fleet cluster. The fleet Application layers availability and provider values.
+
+fullnameOverride: valkey-operator
+commonLabels: {}
+image:
+  registry: ghcr.io
+  repository: valkey-io/valkey-operator
+  # yamllint disable-line rule:line-length
+  tag: v0.7.1@sha256:bfa3be0b1173b64c94ad0ffd26282d9b5c392c4548a4bec379d715c7085ce120
+  pullPolicy: IfNotPresent
+manager:
+  leaderElection:
+    enabled: true
+  # Team namespaces are fleet-generated, so the controller must discover
+  # approved ValkeyCluster resources across the whole destination cluster.
+  watchNamespaces: []
+metrics:
+  enabled: false
+networkPolicy:
+  # The cluster network-isolation Application owns the namespace ingress
+  # baseline. No ValkeyCluster is admitted until its exact data-plane policy
+  # ships with that workload.
+  enabled: false
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+podSecurityContext:
+  fsGroup: 65532
+  runAsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+priorityClassName: cluster-operators
+rbac:
+  create: true
+replicaCount: 2
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: valkey-operator
+              app.kubernetes.io/name: valkey-operator
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+topologySpreadConstraints:
+  - labelSelector:
+      matchLabels:
+        app.kubernetes.io/instance: valkey-operator
+        app.kubernetes.io/name: valkey-operator
+    maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsGroup: 65532
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+serviceAccount:
+  automount: true
+  create: true
+terminationGracePeriodSeconds: 30

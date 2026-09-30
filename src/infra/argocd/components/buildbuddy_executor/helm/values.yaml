@@ -1,0 +1,29 @@
+# Shared Helm values for BuildBuddy remote executor daemon and container runner.
+
+image:
+  repository: buildbuddy.bbcr.io/public/buildbuddy-executor-enterprise
+  tag: enterprise-v2.307.0
+  imagePullPolicy: IfNotPresent
+
+service:
+  internalHTTPPort: 8080
+  internalGRPCPort: 1985
+  internalMetricsPort: 9090
+
+replicas: 1
+enable_oci: true
+
+extraEnvVars:
+  - name: EXECUTOR_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: buildbuddy-executor-secret
+        key: api_key
+
+config:
+  executor:
+    app_target: grpcs://remote.buildbuddy.io:443
+    default_isolation_type: oci
+    local_cache_directory: /buildbuddy/filecache/
+    local_cache_size_bytes: 50000000000
+    root_directory: /buildbuddy/remotebuilds/

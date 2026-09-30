@@ -1,0 +1,16 @@
+# PodDisruptionBudget ensuring high availability for the ClickHouse operator deployment.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: clickhouse-operator
+  namespace: clickhouse-system
+  labels:
+    app.kubernetes.io/name: clickhouse-operator
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: clickhouse-operator
+      app.kubernetes.io/name: altinity-clickhouse-operator
