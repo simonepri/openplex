@@ -1,0 +1,29 @@
+# Configures base Helm values for the upstream Karpenter controller across AWS cell clusters.
+
+serviceAccount:
+  create: true
+  name: karpenter
+controller:
+  resources:
+    requests: {cpu: 500m, memory: 512Mi}
+    limits: {memory: 1Gi}
+podAnnotations:
+  signoz.io/path: /metrics
+  signoz.io/port: "8080"
+  signoz.io/scrape: "true"
+settings:
+  clusterName: configured-by-applicationset
+  interruptionQueue: configured-by-applicationset
+  disableDryRun: false
+  eksControlPlane: true
+  ignoreDRARequests: true
+  isolatedVPC: true
+  minValuesPolicy: Strict
+  preferencePolicy: Respect
+  featureGates:
+    capacityBuffer: false
+    nodeOverlay: false
+    nodeRepair: true
+    reservedCapacity: true
+    spotToSpotConsolidation: false
+    staticCapacity: true

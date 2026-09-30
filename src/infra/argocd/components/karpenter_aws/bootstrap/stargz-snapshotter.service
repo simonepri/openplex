@@ -1,0 +1,19 @@
+# Defines systemd service unit to start AWS eStargz snapshotter before containerd during node bootstrap.
+
+[Unit]
+Description=Containerd eStargz snapshotter
+Wants=network-online.target
+After=network-online.target
+Before=containerd.service
+
+[Service]
+Type=notify
+Environment=HOME=/root
+ExecStart=/usr/local/bin/containerd-stargz-grpc --config=/etc/containerd-stargz-grpc/config.toml
+Restart=always
+RestartSec=1
+RuntimeDirectory=containerd-stargz-grpc
+StateDirectory=containerd-stargz-grpc
+
+[Install]
+WantedBy=multi-user.target

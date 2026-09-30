@@ -1,0 +1,15 @@
+# GKE enforces a quota for pods using system priority classes in new namespaces.
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: gpu-operator-critical-pods
+  namespace: gpu-system
+spec:
+  hard:
+    pods: "100"
+  scopeSelector:
+    matchExpressions:
+      - operator: In
+        scopeName: PriorityClass
+        values: [system-cluster-critical, system-node-critical]
