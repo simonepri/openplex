@@ -1,0 +1,58 @@
+"""Define the remote execution platforms that route actions to self-hosted BuildBuddy executor pools."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load(":bool_flag.bzl", "bool_flag")
+
+package(default_visibility = ["//visibility:public"])
+
+package_sources()
+
+constraint_setting(name = "accelerator")
+
+# GPU tests opt in with:
+#   exec_compatible_with = ["//src/bazel/runners:gpu"],
+#   target_compatible_with = select({
+#       "//src/bazel/runners:gpu_runners_enabled": [],
+#       "//conditions:default": ["@platforms//:incompatible"],
+#   }),
+constraint_value(
+    name = "gpu",
+    constraint_setting = ":accelerator",
+)
+
+# https://www.buildbuddy.io/docs/rbe-platforms/ documents
+# use-self-hosted-executors; without it the organization default decides.
+platform(
+    name = "sh_cpu",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    exec_properties = {
+        "Pool": "cpu-pool",
+        "use-self-hosted-executors": "true",
+    },
+)
+
+platform(
+    name = "sh_gpu",
+    constraint_values = [
+        ":gpu",
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    exec_properties = {
+        "Pool": "gpu",
+        "use-self-hosted-executors": "true",
+    },
+)
+
+bool_flag(
+    name = "gpu_runners",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "gpu_runners_enabled",
+    flag_values = {":gpu_runners": "true"},
+)

@@ -1,0 +1,41 @@
+"""Define the test that resolves the Bazel --config profiles and validates every selection that CI and Coder make."""
+
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "profiles",
+    # keep
+    srcs = ["profiles.py"],
+    imports = ["."],
+)
+
+py_test(
+    name = "profiles_test",
+    size = "small",
+    # keep
+    srcs = ["profiles_test.py"],
+    args = ["$(locations @rules_helm//helm:current_toolchain)"],
+    data = [
+        "profiles.bazelrc",
+        "//:.bazelrc",
+        "//:buildbuddy.yaml",
+        "//src/infra/argocd/components/team_lane:chart",
+        "//src/infra/argocd/components/team_namespace:chart",
+        "//src/infra/terraform:sources",
+        "@rules_helm//helm:current_toolchain",
+    ],
+    imports = ["."],
+    main = "profiles_test.py",
+    precompile = "disabled",
+    # keep
+    deps = [
+        ":profiles",
+        "@dev_python_deps//pyyaml",
+    ],
+)
