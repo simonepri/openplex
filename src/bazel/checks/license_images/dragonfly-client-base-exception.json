@@ -1,0 +1,1639 @@
+{
+  "description": "Exact reviewed Debian license findings for the pinned official Dragonfly client base images.",
+  "version": 1,
+  "exceptionId": "dragonfly-client-base-licenses",
+  "artifactRepository": "index.docker.io/dragonflyoss/client",
+  "artifacts": [
+    "index.docker.io/dragonflyoss/client@sha256:b545bc84116e9543a23bcf316558c67c1a6a108d43acfebe1014d08c209c898b",
+    "index.docker.io/dragonflyoss/client@sha256:b8d3462aebd425cd9b99d37894bca24613abf2e52a9be0574e40433e3f17b63b"
+  ],
+  "findingCount": 402,
+  "findings": [
+    {
+      "license": "BSD-2-Clause-Darwin",
+      "package": "apache2-utils"
+    },
+    {
+      "license": "BSD-3-clause-Cambridge",
+      "package": "apache2-utils"
+    },
+    {
+      "license": "BSD-3-clause-Smrgrav",
+      "package": "apache2-utils"
+    },
+    {
+      "license": "Cisco",
+      "package": "apache2-utils"
+    },
+    {
+      "license": "Custom",
+      "package": "apache2-utils"
+    },
+    {
+      "license": "Haines",
+      "package": "apache2-utils"
+    },
+    {
+      "license": "MD5",
+      "package": "apache2-utils"
+    },
+    {
+      "license": "Zeus",
+      "package": "apache2-utils"
+    },
+    {
+      "license": "BSD-4-Clause-UC",
+      "package": "bash"
+    },
+    {
+      "license": "GFDL-1.3-no-invariants-only",
+      "package": "bash"
+    },
+    {
+      "license": "GPL-3+ with Bison exception",
+      "package": "bash"
+    },
+    {
+      "license": "Latex2e",
+      "package": "bash"
+    },
+    {
+      "license": "permissive",
+      "package": "bash"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "bsdutils"
+    },
+    {
+      "license": "BSLA",
+      "package": "bsdutils"
+    },
+    {
+      "license": "BSD-4-Clause-UC",
+      "package": "coreutils"
+    },
+    {
+      "license": "FSFULLR",
+      "package": "coreutils"
+    },
+    {
+      "license": "GFDL-1.3-no-invariants-only",
+      "package": "coreutils"
+    },
+    {
+      "license": "BSD-4-Clause-UC",
+      "package": "curl"
+    },
+    {
+      "license": "FSFULLR",
+      "package": "curl"
+    },
+    {
+      "license": "GPL-2+ with Autoconf-data exception",
+      "package": "curl"
+    },
+    {
+      "license": "GPL-2+ with Libtool exception",
+      "package": "curl"
+    },
+    {
+      "license": "GPL-3+ with Autoconf-data exception",
+      "package": "curl"
+    },
+    {
+      "license": "OLDAP-2.8",
+      "package": "curl"
+    },
+    {
+      "license": "X11",
+      "package": "curl"
+    },
+    {
+      "license": "curl",
+      "package": "curl"
+    },
+    {
+      "license": "SMAIL-GPL",
+      "package": "debianutils"
+    },
+    {
+      "license": "FSFULLR",
+      "package": "diffutils"
+    },
+    {
+      "license": "GFDL-1.3-no-invariants-only",
+      "package": "diffutils"
+    },
+    {
+      "license": "GPL-3+ with texinfo exception",
+      "package": "diffutils"
+    },
+    {
+      "license": "GPL-3.0-with-autoconf-exception+",
+      "package": "diffutils"
+    },
+    {
+      "license": "X11",
+      "package": "diffutils"
+    },
+    {
+      "license": "public-domain-s-s-d",
+      "package": "dpkg"
+    },
+    {
+      "license": "GPL-2+ with Texinfo exception",
+      "package": "e2fsprogs"
+    },
+    {
+      "license": "Kazlib",
+      "package": "e2fsprogs"
+    },
+    {
+      "license": "Latex2e",
+      "package": "e2fsprogs"
+    },
+    {
+      "license": "MIT-US-export",
+      "package": "e2fsprogs"
+    },
+    {
+      "license": "BSD-3-clause and/or GPL-3+",
+      "package": "findutils"
+    },
+    {
+      "license": "FSFULLR",
+      "package": "findutils"
+    },
+    {
+      "license": "GFDL-1.3-no-invariants-or-later",
+      "package": "findutils"
+    },
+    {
+      "license": "GPL with automake exception",
+      "package": "findutils"
+    },
+    {
+      "license": "GPL-2+ with Autoconf-data exception",
+      "package": "findutils"
+    },
+    {
+      "license": "GPL-3+ with Autoconf-data exception",
+      "package": "findutils"
+    },
+    {
+      "license": "GPL-3+ with Bison-2.2 exception",
+      "package": "findutils"
+    },
+    {
+      "license": "ISC and/or LGPL-2.1+",
+      "package": "findutils"
+    },
+    {
+      "license": "X11",
+      "package": "findutils"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "github.com/go-jose/go-jose/v4"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "github.com/grpc-ecosystem/grpc-health-probe"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "github.com/spiffe/go-spiffe/v2"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "golang.org/x/net"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "golang.org/x/sync"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "golang.org/x/sys"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "golang.org/x/text"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "google.golang.org/genproto/googleapis/rpc"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "google.golang.org/grpc"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "google.golang.org/protobuf"
+    },
+    {
+      "license": "RFC-Reference",
+      "package": "gpgv"
+    },
+    {
+      "license": "TinySCHEME",
+      "package": "gpgv"
+    },
+    {
+      "license": "permissive",
+      "package": "gpgv"
+    },
+    {
+      "license": "FSF-manpages",
+      "package": "gzip"
+    },
+    {
+      "license": "GFDL-1.3+-no-invariant",
+      "package": "gzip"
+    },
+    {
+      "license": "GFDL-3",
+      "package": "gzip"
+    },
+    {
+      "license": "FSF-something",
+      "package": "iperf"
+    },
+    {
+      "license": "GPL-2-WithACException",
+      "package": "iperf"
+    },
+    {
+      "license": "GPL-3-WithACException",
+      "package": "iperf"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libblkid1"
+    },
+    {
+      "license": "BSLA",
+      "package": "libblkid1"
+    },
+    {
+      "license": "BSD3_DEShaw",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "BSD3_Google",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "Caramel",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "CrystalClear",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "HP",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "Jam",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "Kempf",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "NIST",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "OldBoost1",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "OldBoost2",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "OldBoost3",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "SGI",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "Spencer",
+      "package": "libboost-iostreams1.74.0"
+    },
+    {
+      "license": "BSD3_DEShaw",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "BSD3_Google",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "Caramel",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "CrystalClear",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "HP",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "Jam",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "Kempf",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "NIST",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "OldBoost1",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "OldBoost2",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "OldBoost3",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "SGI",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "Spencer",
+      "package": "libboost-thread1.74.0"
+    },
+    {
+      "license": "BSD-2-Clause-NetBSD",
+      "package": "libbsd0"
+    },
+    {
+      "license": "BSD-2-clause-author",
+      "package": "libbsd0"
+    },
+    {
+      "license": "BSD-2-clause-verbatim",
+      "package": "libbsd0"
+    },
+    {
+      "license": "BSD-3-clause-John-Birrell",
+      "package": "libbsd0"
+    },
+    {
+      "license": "BSD-3-clause-Regents",
+      "package": "libbsd0"
+    },
+    {
+      "license": "BSD-3-clause-author",
+      "package": "libbsd0"
+    },
+    {
+      "license": "BSD-4-clause-Niels-Provos",
+      "package": "libbsd0"
+    },
+    {
+      "license": "Beerware",
+      "package": "libbsd0"
+    },
+    {
+      "license": "ISC-Original",
+      "package": "libbsd0"
+    },
+    {
+      "license": "libutil-David-Nugent",
+      "package": "libbsd0"
+    },
+    {
+      "license": "GPL-2+ with Texinfo exception",
+      "package": "libcom-err2"
+    },
+    {
+      "license": "Kazlib",
+      "package": "libcom-err2"
+    },
+    {
+      "license": "Latex2e",
+      "package": "libcom-err2"
+    },
+    {
+      "license": "MIT-US-export",
+      "package": "libcom-err2"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "libcrypt1"
+    },
+    {
+      "license": "GPL-2+ with OpenSSL exception",
+      "package": "libcryptsetup12"
+    },
+    {
+      "license": "LGPL-2.1+ with OpenSSL exception",
+      "package": "libcryptsetup12"
+    },
+    {
+      "license": "BSD-4-Clause-UC",
+      "package": "libcurl4"
+    },
+    {
+      "license": "FSFULLR",
+      "package": "libcurl4"
+    },
+    {
+      "license": "GPL-2+ with Autoconf-data exception",
+      "package": "libcurl4"
+    },
+    {
+      "license": "GPL-2+ with Libtool exception",
+      "package": "libcurl4"
+    },
+    {
+      "license": "GPL-3+ with Autoconf-data exception",
+      "package": "libcurl4"
+    },
+    {
+      "license": "OLDAP-2.8",
+      "package": "libcurl4"
+    },
+    {
+      "license": "X11",
+      "package": "libcurl4"
+    },
+    {
+      "license": "curl",
+      "package": "libcurl4"
+    },
+    {
+      "license": "BSD-3-clause-fjord",
+      "package": "libdb5.3"
+    },
+    {
+      "license": "MIT-old",
+      "package": "libdb5.3"
+    },
+    {
+      "license": "MS-PL",
+      "package": "libdb5.3"
+    },
+    {
+      "license": "Sleepycat",
+      "package": "libdb5.3"
+    },
+    {
+      "license": "TCL-like",
+      "package": "libdb5.3"
+    },
+    {
+      "license": "X11",
+      "package": "libdb5.3"
+    },
+    {
+      "license": "GPL-2+ with Texinfo exception",
+      "package": "libext2fs2"
+    },
+    {
+      "license": "Kazlib",
+      "package": "libext2fs2"
+    },
+    {
+      "license": "Latex2e",
+      "package": "libext2fs2"
+    },
+    {
+      "license": "MIT-US-export",
+      "package": "libext2fs2"
+    },
+    {
+      "license": "MPL-1.1",
+      "package": "libffi8"
+    },
+    {
+      "license": "X11",
+      "package": "libffi8"
+    },
+    {
+      "license": "Expat with embedded exception",
+      "package": "libfmt9"
+    },
+    {
+      "license": "Gray-Watson",
+      "package": "libfstrm0"
+    },
+    {
+      "license": "GFDL-1.3-no-invariants-or-later",
+      "package": "libgdbm6"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libgfapi0"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libgfrpc0"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libgfxdr0"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libglusterfs0"
+    },
+    {
+      "license": "GPL-3+ with Bison exception",
+      "package": "libgmp10"
+    },
+    {
+      "license": "g10-permissive",
+      "package": "libgpg-error0"
+    },
+    {
+      "license": "GAP",
+      "package": "libhogweed6"
+    },
+    {
+      "license": "GPL-3.0-with-autoconf-exception+",
+      "package": "libhogweed6"
+    },
+    {
+      "license": "BSD-MIT",
+      "package": "libibverbs1"
+    },
+    {
+      "license": "CPL-1.0",
+      "package": "libibverbs1"
+    },
+    {
+      "license": "Unicode",
+      "package": "libidn2-0"
+    },
+    {
+      "license": "BSD-2-Clause-Chemeris",
+      "package": "libjemalloc2"
+    },
+    {
+      "license": "BSD-3-Clause-Google",
+      "package": "libjemalloc2"
+    },
+    {
+      "license": "BSD-3-Clause-Hiroshima-University",
+      "package": "libjemalloc2"
+    },
+    {
+      "license": "BSD-3-clause-California",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "BSD-3-clause-variant",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "BSD-4-clause-California",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "Beerware",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "Expat-ISC",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "Expat-UNM",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "F5",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "FSF-unlimited",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "GPL-2+ with Libtool exception",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "GPL-2.0-with-autoconf-exception+",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "GPL-3+ with Libtool exception",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "GPL-3.0-with-autoconf-exception+",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "JCG",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "MIT-XC",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "NeoSoft-permissive",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "OpenLDAP-2.8",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "UMich",
+      "package": "libldap-2.5-0"
+    },
+    {
+      "license": "OpenLDAP-2.8",
+      "package": "liblmdb0"
+    },
+    {
+      "license": "Autoconf",
+      "package": "liblzma5"
+    },
+    {
+      "license": "PD",
+      "package": "liblzma5"
+    },
+    {
+      "license": "PD-debian",
+      "package": "liblzma5"
+    },
+    {
+      "license": "config-h",
+      "package": "liblzma5"
+    },
+    {
+      "license": "noderivs",
+      "package": "liblzma5"
+    },
+    {
+      "license": "none",
+      "package": "liblzma5"
+    },
+    {
+      "license": "permissive-fsf",
+      "package": "liblzma5"
+    },
+    {
+      "license": "permissive-nowarranty",
+      "package": "liblzma5"
+    },
+    {
+      "license": "probably-PD",
+      "package": "liblzma5"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libmaxminddb0"
+    },
+    {
+      "license": "CC-BY-SA-3.0",
+      "package": "libmaxminddb0"
+    },
+    {
+      "license": "BSD-2-Clause-NetBSD",
+      "package": "libmd0"
+    },
+    {
+      "license": "BSD-3-clause-Aaron-D-Gifford",
+      "package": "libmd0"
+    },
+    {
+      "license": "Beerware",
+      "package": "libmd0"
+    },
+    {
+      "license": "public-domain-md4",
+      "package": "libmd0"
+    },
+    {
+      "license": "public-domain-md5",
+      "package": "libmd0"
+    },
+    {
+      "license": "public-domain-sha1",
+      "package": "libmd0"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libmount1"
+    },
+    {
+      "license": "BSLA",
+      "package": "libmount1"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "libncursesw6"
+    },
+    {
+      "license": "GAP",
+      "package": "libnettle8"
+    },
+    {
+      "license": "GPL-3.0-with-autoconf-exception+",
+      "package": "libnettle8"
+    },
+    {
+      "license": "GPL-3.0-with-autoconf-exception+",
+      "package": "libnghttp2-14"
+    },
+    {
+      "license": "all-permissive",
+      "package": "libnghttp2-14"
+    },
+    {
+      "license": "GPL-2+-autoconf-exception",
+      "package": "libnsl2"
+    },
+    {
+      "license": "GPL-2+-libtool-exception",
+      "package": "libnsl2"
+    },
+    {
+      "license": "GPL-3+-autoconf-exception",
+      "package": "libnsl2"
+    },
+    {
+      "license": "permissive-autoconf-m4",
+      "package": "libnsl2"
+    },
+    {
+      "license": "permissive-autoconf-m4-no-warranty",
+      "package": "libnsl2"
+    },
+    {
+      "license": "permissive-configure",
+      "package": "libnsl2"
+    },
+    {
+      "license": "permissive-fsf",
+      "package": "libnsl2"
+    },
+    {
+      "license": "permissive-makefile-in",
+      "package": "libnsl2"
+    },
+    {
+      "license": "ISC+IBM",
+      "package": "libp11-kit0"
+    },
+    {
+      "license": "permissive-like-automake-output",
+      "package": "libp11-kit0"
+    },
+    {
+      "license": "same-as-rest-of-p11kit",
+      "package": "libp11-kit0"
+    },
+    {
+      "license": "BSD-tcp_wrappers",
+      "package": "libpam-modules"
+    },
+    {
+      "license": "Beerware",
+      "package": "libpam-modules"
+    },
+    {
+      "license": "GPL-3+ with Bison exception",
+      "package": "libpam-modules"
+    },
+    {
+      "license": "BSD-tcp_wrappers",
+      "package": "libpam-modules-bin"
+    },
+    {
+      "license": "Beerware",
+      "package": "libpam-modules-bin"
+    },
+    {
+      "license": "GPL-3+ with Bison exception",
+      "package": "libpam-modules-bin"
+    },
+    {
+      "license": "BSD-tcp_wrappers",
+      "package": "libpam-runtime"
+    },
+    {
+      "license": "Beerware",
+      "package": "libpam-runtime"
+    },
+    {
+      "license": "GPL-3+ with Bison exception",
+      "package": "libpam-runtime"
+    },
+    {
+      "license": "BSD-tcp_wrappers",
+      "package": "libpam0g"
+    },
+    {
+      "license": "Beerware",
+      "package": "libpam0g"
+    },
+    {
+      "license": "GPL-3+ with Bison exception",
+      "package": "libpam0g"
+    },
+    {
+      "license": "BSD-3-clause-Cambridge with BINARY LIBRARY-LIKE PACKAGES exception",
+      "package": "libpcre2-8-0"
+    },
+    {
+      "license": "X11",
+      "package": "libpcre2-8-0"
+    },
+    {
+      "license": "CDDL-1.0",
+      "package": "libpmem1"
+    },
+    {
+      "license": "CDDL-1.0",
+      "package": "libpmemblk1"
+    },
+    {
+      "license": "permissive",
+      "package": "libprotobuf-c1"
+    },
+    {
+      "license": "Chromium",
+      "package": "libpsl5"
+    },
+    {
+      "license": "gnulib",
+      "package": "libpsl5"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "libpython3-stdlib"
+    },
+    {
+      "license": "CUSTOM License: * Permission to...",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: By obtaining, using,...",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: Permission  is...",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: Permission is hereby...",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: Permission to use,...",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: Redistribution and use...",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: This software is...",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://* Permission to use this software in any way is granted without",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://By obtaining, using, and/or copying this software and/or its",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://Permission  is  hereby granted,  free  of charge,  to  any person",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://Permission is hereby granted, free of charge, to any person obtaining",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://Permission to use, copy, modify, and distribute this software and",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://Permission to use, copy, modify, and distribute this software and its",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://Permission to use, copy, modify, and distribute this software for any",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://Redistribution and use in source and binary forms, with or without",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://This software is provided 'as-is', without any express or implied",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "text://This software is provided as-is, without express or implied",
+      "package": "libpython3.11-minimal"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "libpython3.11-stdlib"
+    },
+    {
+      "license": "APSL-2.0",
+      "package": "librados2"
+    },
+    {
+      "license": "CC-BY-SA-3.0",
+      "package": "librados2"
+    },
+    {
+      "license": "Creative Commons Attribution Share Alike 3.0",
+      "package": "librados2"
+    },
+    {
+      "license": "GPL-3/OpenSSL",
+      "package": "librados2"
+    },
+    {
+      "license": "Public domain",
+      "package": "librados2"
+    },
+    {
+      "license": "APSL-2.0",
+      "package": "librbd1"
+    },
+    {
+      "license": "CC-BY-SA-3.0",
+      "package": "librbd1"
+    },
+    {
+      "license": "Creative Commons Attribution Share Alike 3.0",
+      "package": "librbd1"
+    },
+    {
+      "license": "GPL-3/OpenSSL",
+      "package": "librbd1"
+    },
+    {
+      "license": "Public domain",
+      "package": "librbd1"
+    },
+    {
+      "license": "BSD-MIT",
+      "package": "librdmacm1"
+    },
+    {
+      "license": "CPL-1.0",
+      "package": "librdmacm1"
+    },
+    {
+      "license": "GFDL-1.3-no-invariants-or-later",
+      "package": "libreadline8"
+    },
+    {
+      "license": "ISC-no-attribution",
+      "package": "libreadline8"
+    },
+    {
+      "license": "BSD-2.2-clause",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "BSD-3-clause-JANET",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "BSD-3-clause-PADL",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "BSD-4-Clause-UC",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "BSD-4-clause-KTH",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "CUSTOM License: BSD-4-clause and IBM-as-is...",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "CUSTOM License: IBM-as-is...",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "FSFULLR",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "MIT-CMU",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "MIT-Export",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "MIT-OpenVision",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "OpenLDAP",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "OpenSSL",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "RSA-MD",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "SSLeay",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "text://BSD-4-clause and IBM-as-is",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "text://IBM-as-is",
+      "package": "libsasl2-2"
+    },
+    {
+      "license": "BSD-2.2-clause",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "BSD-3-clause-JANET",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "BSD-3-clause-PADL",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "BSD-4-Clause-UC",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "BSD-4-clause-KTH",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "CUSTOM License: BSD-4-clause and IBM-as-is...",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "CUSTOM License: IBM-as-is...",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "FSFULLR",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "MIT-CMU",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "MIT-Export",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "MIT-OpenVision",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "OpenLDAP",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "OpenSSL",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "RSA-MD",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "SSLeay",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "text://BSD-4-clause and IBM-as-is",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "text://IBM-as-is",
+      "package": "libsasl2-modules-db"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libsmartcols1"
+    },
+    {
+      "license": "BSLA",
+      "package": "libsmartcols1"
+    },
+    {
+      "license": "GPL-2+ with Texinfo exception",
+      "package": "libss2"
+    },
+    {
+      "license": "Kazlib",
+      "package": "libss2"
+    },
+    {
+      "license": "Latex2e",
+      "package": "libss2"
+    },
+    {
+      "license": "MIT-US-export",
+      "package": "libss2"
+    },
+    {
+      "license": "GPL-2 with Linux-syscall-note exception",
+      "package": "libsystemd0"
+    },
+    {
+      "license": "MIT/X11",
+      "package": "libtinfo6"
+    },
+    {
+      "license": "X11",
+      "package": "libtinfo6"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libtirpc-common"
+    },
+    {
+      "license": "PERMISSIVE",
+      "package": "libtirpc-common"
+    },
+    {
+      "license": "__AUTO_PERMISSIVE__",
+      "package": "libtirpc-common"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libtirpc3"
+    },
+    {
+      "license": "PERMISSIVE",
+      "package": "libtirpc3"
+    },
+    {
+      "license": "__AUTO_PERMISSIVE__",
+      "package": "libtirpc3"
+    },
+    {
+      "license": "GPL-2 with Linux-syscall-note exception",
+      "package": "libudev1"
+    },
+    {
+      "license": "FreeSoftware",
+      "package": "libunistring2"
+    },
+    {
+      "license": "GPL-2+ with distribution exception",
+      "package": "libunistring2"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "libuuid1"
+    },
+    {
+      "license": "BSLA",
+      "package": "libuuid1"
+    },
+    {
+      "license": "CC-BY-4.0",
+      "package": "libuv1"
+    },
+    {
+      "license": "GPL3+ with autoconf exception",
+      "package": "libuv1"
+    },
+    {
+      "license": "MIT-1",
+      "package": "libxml2"
+    },
+    {
+      "license": "GPL-2+ with Texinfo exception",
+      "package": "logsave"
+    },
+    {
+      "license": "Kazlib",
+      "package": "logsave"
+    },
+    {
+      "license": "Latex2e",
+      "package": "logsave"
+    },
+    {
+      "license": "MIT-US-export",
+      "package": "logsave"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "lsof"
+    },
+    {
+      "license": "Purdue",
+      "package": "lsof"
+    },
+    {
+      "license": "Sendmail",
+      "package": "lsof"
+    },
+    {
+      "license": "CC-BY-3.0",
+      "package": "mawk"
+    },
+    {
+      "license": "X11",
+      "package": "mawk"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "mount"
+    },
+    {
+      "license": "BSLA",
+      "package": "mount"
+    },
+    {
+      "license": "MIT/X11",
+      "package": "ncurses-base"
+    },
+    {
+      "license": "X11",
+      "package": "ncurses-base"
+    },
+    {
+      "license": "MIT/X11",
+      "package": "ncurses-bin"
+    },
+    {
+      "license": "X11",
+      "package": "ncurses-bin"
+    },
+    {
+      "license": "Artistic-2",
+      "package": "perl-base"
+    },
+    {
+      "license": "Artistic-dist",
+      "package": "perl-base"
+    },
+    {
+      "license": "BSD-3-clause-GENERIC",
+      "package": "perl-base"
+    },
+    {
+      "license": "BSD-3-clause-with-weird-numbering",
+      "package": "perl-base"
+    },
+    {
+      "license": "BSD-4-clause-POWERDOG",
+      "package": "perl-base"
+    },
+    {
+      "license": "BZIP",
+      "package": "perl-base"
+    },
+    {
+      "license": "DONT-CHANGE-THE-GPL",
+      "package": "perl-base"
+    },
+    {
+      "license": "GPL-2.0-with-bison-exception+",
+      "package": "perl-base"
+    },
+    {
+      "license": "HSIEH-BSD",
+      "package": "perl-base"
+    },
+    {
+      "license": "HSIEH-DERIVATIVE",
+      "package": "perl-base"
+    },
+    {
+      "license": "REGCOMP",
+      "package": "perl-base"
+    },
+    {
+      "license": "RRA-KEEP-THIS-NOTICE",
+      "package": "perl-base"
+    },
+    {
+      "license": "SDBM-PUBLIC-DOMAIN",
+      "package": "perl-base"
+    },
+    {
+      "license": "TEXT-TABS",
+      "package": "perl-base"
+    },
+    {
+      "license": "Unicode",
+      "package": "perl-base"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "python3"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "python3-minimal"
+    },
+    {
+      "license": "CUSTOM License: * Permission to...",
+      "package": "python3.11"
+    },
+    {
+      "license": "CUSTOM License: By obtaining, using,...",
+      "package": "python3.11"
+    },
+    {
+      "license": "CUSTOM License: Permission  is...",
+      "package": "python3.11"
+    },
+    {
+      "license": "CUSTOM License: Permission is hereby...",
+      "package": "python3.11"
+    },
+    {
+      "license": "CUSTOM License: Permission to use,...",
+      "package": "python3.11"
+    },
+    {
+      "license": "CUSTOM License: Redistribution and use...",
+      "package": "python3.11"
+    },
+    {
+      "license": "CUSTOM License: This software is...",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://* Permission to use this software in any way is granted without",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://By obtaining, using, and/or copying this software and/or its",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://Permission  is  hereby granted,  free  of charge,  to  any person",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://Permission is hereby granted, free of charge, to any person obtaining",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://Permission to use, copy, modify, and distribute this software and",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://Permission to use, copy, modify, and distribute this software and its",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://Permission to use, copy, modify, and distribute this software for any",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://Redistribution and use in source and binary forms, with or without",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://This software is provided 'as-is', without any express or implied",
+      "package": "python3.11"
+    },
+    {
+      "license": "text://This software is provided as-is, without express or implied",
+      "package": "python3.11"
+    },
+    {
+      "license": "CUSTOM License: * Permission to...",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: By obtaining, using,...",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: Permission  is...",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: Permission is hereby...",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: Permission to use,...",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: Redistribution and use...",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "CUSTOM License: This software is...",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://* Permission to use this software in any way is granted without",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://By obtaining, using, and/or copying this software and/or its",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://Permission  is  hereby granted,  free  of charge,  to  any person",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://Permission is hereby granted, free of charge, to any person obtaining",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://Permission to use, copy, modify, and distribute this software and",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://Permission to use, copy, modify, and distribute this software and its",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://Permission to use, copy, modify, and distribute this software for any",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://Redistribution and use in source and binary forms, with or without",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://This software is provided 'as-is', without any express or implied",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "text://This software is provided as-is, without express or implied",
+      "package": "python3.11-minimal"
+    },
+    {
+      "license": "GFDL-1.3-no-invariants-or-later",
+      "package": "readline-common"
+    },
+    {
+      "license": "ISC-no-attribution",
+      "package": "readline-common"
+    },
+    {
+      "license": "BSD-4-Clause-UC",
+      "package": "sed"
+    },
+    {
+      "license": "BSL-1",
+      "package": "sed"
+    },
+    {
+      "license": "GFDL-1.3-no-invariants-or-later",
+      "package": "sed"
+    },
+    {
+      "license": "X11",
+      "package": "sed"
+    },
+    {
+      "license": "pcre",
+      "package": "sed"
+    },
+    {
+      "license": "All-permissive",
+      "package": "sensible-utils"
+    },
+    {
+      "license": "configure",
+      "package": "sensible-utils"
+    },
+    {
+      "license": "installsh",
+      "package": "sensible-utils"
+    },
+    {
+      "license": "UNKNOWN",
+      "package": "stdlib"
+    },
+    {
+      "license": "GPL-3+ with Bison exception",
+      "package": "tar"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "util-linux"
+    },
+    {
+      "license": "BSLA",
+      "package": "util-linux"
+    },
+    {
+      "license": "BSD-4-Clause",
+      "package": "util-linux-extra"
+    },
+    {
+      "license": "BSLA",
+      "package": "util-linux-extra"
+    },
+    {
+      "license": "Autoconf",
+      "package": "xz-utils"
+    },
+    {
+      "license": "PD",
+      "package": "xz-utils"
+    },
+    {
+      "license": "PD-debian",
+      "package": "xz-utils"
+    },
+    {
+      "license": "config-h",
+      "package": "xz-utils"
+    },
+    {
+      "license": "noderivs",
+      "package": "xz-utils"
+    },
+    {
+      "license": "none",
+      "package": "xz-utils"
+    },
+    {
+      "license": "permissive-fsf",
+      "package": "xz-utils"
+    },
+    {
+      "license": "permissive-nowarranty",
+      "package": "xz-utils"
+    },
+    {
+      "license": "probably-PD",
+      "package": "xz-utils"
+    }
+  ],
+  "generatedFrom": {
+    "scanner": "Trivy 0.74.0",
+    "reports": [
+      {
+        "artifact": "index.docker.io/dragonflyoss/client@sha256:b545bc84116e9543a23bcf316558c67c1a6a108d43acfebe1014d08c209c898b",
+        "reportId": "index.docker.io/dragonflyoss/client@sha256:b545bc84116e9543a23bcf316558c67c1a6a108d43acfebe1014d08c209c898b"
+      },
+      {
+        "artifact": "index.docker.io/dragonflyoss/client@sha256:b8d3462aebd425cd9b99d37894bca24613abf2e52a9be0574e40433e3f17b63b",
+        "reportId": "index.docker.io/dragonflyoss/client@sha256:b8d3462aebd425cd9b99d37894bca24613abf2e52a9be0574e40433e3f17b63b"
+      }
+    ]
+  },
+  "exitCondition": {
+    "owner": "simone.primarosa@gmail.com",
+    "replacement": "Official Dragonfly client bases publish SPDX-normalized Debian license metadata.",
+    "reviewBy": "2027-03-01"
+  }
+}

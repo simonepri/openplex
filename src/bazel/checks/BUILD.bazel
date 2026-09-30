@@ -1,0 +1,376 @@
+"""Define non-hermetic workspace check binaries, test suites, and policy packages for repository gates."""
+
+load("@rules_python//python:defs.bzl", "py_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/json_schema:defs.bzl", "json_schema")
+
+# These Python files are inputs to workspace-driven shell checks, not Python
+# entry points. The parent package owns and lints them as source data.
+# gazelle:exclude license_images
+# gazelle:exclude kubescape/kubescape_triage.py
+# gazelle:exclude opengrep/fixtures/subprocess_shell_true.py
+# gazelle:exclude trivy_source/trivy_triage.py
+
+exports_files([
+    "license_images/exceptions.yaml",
+    "license_images/normalize-debian.yaml",
+    "license_images/osv-scanner.toml",
+    "license_images/ray-base-exception.json",
+])
+
+sh_library(
+    name = "scripts",
+    srcs = glob(["*/*.sh"]),
+    visibility = ["//visibility:public"],
+)
+
+package_sources()
+
+# Shell checks whose whole interface is the workspace.
+[
+    sh_binary(
+        name = check + "_check",
+        srcs = ["%s/%s.sh" % (check, check)],
+        visibility = ["//visibility:public"],
+    )
+    for check in [
+        # keep-sorted start
+        "coder_templates",
+        "cyclo",
+        "dev_tool_isolation",
+        "dups",
+        "ifttt",
+        "lock_drift",
+        "unclaimed_files",
+        # keep-sorted end
+    ]
+]
+
+[
+    alias(
+        name = check,
+        actual = ":" + check + "_check",
+        visibility = ["//visibility:public"],
+    )
+    for check in [
+        # keep-sorted start
+        "coder_templates",
+        "cyclo",
+        "dev_tool_isolation",
+        "dups",
+        "ifttt",
+        "lock_drift",
+        "unclaimed_files",
+        # keep-sorted end
+    ]
+]
+
+sh_binary(
+    name = "dotenv_check",
+    srcs = ["dotenv/dotenv.sh"],
+    args = ["$(rootpath //src/bazel/tools:dotenv-linter)"],
+    data = ["//src/bazel/tools:dotenv-linter"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "dotenv",
+    actual = ":dotenv_check",
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "dotenv_test",
+    srcs = ["dotenv/dotenv_test.sh"],
+    args = [
+        "$(rootpath :dotenv_check)",
+        "$(rootpath //src/bazel/tools:dotenv-linter)",
+    ],
+    data = [
+        ":dotenv_check",
+        "//src/bazel/tools:dotenv-linter",
+    ],
+)
+
+sh_binary(
+    name = "json_schemas_check",
+    srcs = ["json_schemas/json_schemas.sh"],
+    args = ["$(rootpath //src/bazel/tools:check-jsonschema)"],
+    data = ["//src/bazel/tools:check-jsonschema"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "json_schemas",
+    actual = ":json_schemas_check",
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "json_schemas_test",
+    srcs = ["json_schemas/json_schemas_test.sh"],
+    args = [
+        "$(rootpath :json_schemas_check)",
+        "$(rootpath //src/bazel/tools:check-jsonschema)",
+    ],
+    data = [
+        ":json_schemas_check",
+        "//src/bazel/tools:check-jsonschema",
+    ],
+)
+
+# The image repository of every oci.pull in MODULE.bazel; the gate fails when
+# a pulled image has no entry here.
+LICENSE_IMAGES = {
+    # keep-sorted start
+    "dragonfly_client_base_linux_amd64": "index.docker.io/dragonflyoss/client",
+    "dragonfly_client_base_linux_arm64": "index.docker.io/dragonflyoss/client",
+    "dragonfly_sso_base_linux_amd64": "index.docker.io/library/python",
+    "dragonfly_sso_base_linux_arm64_v8": "index.docker.io/library/python",
+    "headscale_base_linux_amd64": "ghcr.io/juanfont/headscale",
+    "headscale_base_linux_arm64_v8": "ghcr.io/juanfont/headscale",
+    "k3s_base_linux_amd64": "index.docker.io/rancher/k3s",
+    "k3s_base_linux_arm64_v8": "index.docker.io/rancher/k3s",
+    "node_base_linux_amd64": "gcr.io/distroless/nodejs24-debian13",
+    "node_base_linux_arm64_v8": "gcr.io/distroless/nodejs24-debian13",
+    "rawfile_localpv_base_linux_amd64": "index.docker.io/openebs/rawfile-localpv",
+    "rawfile_localpv_base_linux_arm64": "index.docker.io/openebs/rawfile-localpv",
+    "ray_base_linux_amd64": "index.docker.io/rayproject/ray",
+    "ray_base_linux_arm64_v8": "index.docker.io/rayproject/ray",
+    "workspace_backup_proxy_base_linux_amd64": "index.docker.io/rclone/rclone",
+    "workspace_backup_proxy_base_linux_arm64_v8": "index.docker.io/rclone/rclone",
+    "workspace_dev_base_linux_amd64": "index.docker.io/codercom/example-minimal",
+    "workspace_dev_base_linux_arm64_v8": "index.docker.io/codercom/example-minimal",
+    "workspace_snapshot_catalog_base_linux_amd64": "gcr.io/distroless/static-debian13",
+    "workspace_snapshot_catalog_base_linux_arm64_v8": "gcr.io/distroless/static-debian13",
+    # keep-sorted end
+}
+
+# One Trivy license report per pinned image, scanned from the OCI layout Bazel
+# already pulled. The scan is offline, so its cache key is the image content,
+# Trivy, and the scan script, and any runner reuses a remote cache hit.
+[
+    genrule(
+        name = repo + "_license_report",
+        srcs = ["@" + repo],
+        outs = ["license_images/reports/%s.json" % repo],
+        cmd = " ".join([
+            "$(location license_images/scan_image.sh)",
+            "$(location //src/bazel/tools:trivy)",
+            "$(location //src/bazel/tools:jq)",
+            image,
+            "$(location @%s)" % repo,
+            "$@",
+        ]),
+        tags = ["block-network"],
+        tools = [
+            "license_images/scan_image.sh",
+            "//src/bazel/tools:jq",
+            "//src/bazel/tools:trivy",
+        ],
+    )
+    for repo, image in LICENSE_IMAGES.items()
+]
+
+# The gate reads the reports that the //... build of //:check left in bazel-bin,
+# or builds them itself when run alone: as runfiles, every run of //:check would
+# fetch all base images to look the reports up.
+filegroup(
+    name = "license_image_reports",
+    srcs = [":" + repo + "_license_report" for repo in LICENSE_IMAGES],
+)
+
+filegroup(
+    name = "license_policy_data",
+    srcs = [
+        "license_images/exceptions.yaml",
+        "license_images/normalize-debian.yaml",
+        "license_images/policy.json",
+    ] + glob(["license_images/*-exception.json"]),
+)
+
+[
+    py_test(
+        name = repo + "_license_test",
+        size = "small",
+        srcs = ["license_images/check_image_licenses.py"],
+        args = [
+            "--report",
+            "$(rootpath :%s_license_report)" % repo,
+            "--image",
+            image,
+            "--repo",
+            repo,
+        ],
+        data = [
+            ":%s_license_report" % repo,
+            ":license_policy_data",
+        ],
+        main = "license_images/check_image_licenses.py",
+        deps = [
+            "@dev_python_deps//pyyaml",
+        ],
+    )
+    for repo, image in LICENSE_IMAGES.items()
+]
+
+# The scan drives the tool; the verdict is triaged by trivy_triage.py.
+sh_binary(
+    name = "trivy_source_check",
+    srcs = ["trivy_source/trivy_source.sh"],
+    data = [
+        "trivy_source/data/trusted_registries.yaml",
+        "trivy_source/trivy_triage.py",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "trivy_source",
+    actual = ":trivy_source_check",
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "kubescape_check",
+    srcs = ["kubescape/kubescape.sh"],
+    args = ["$(rootpath //src/bazel/tools:kubescape)"],
+    data = [
+        "kubescape/kubescape_triage.py",
+        "kubescape/policy.json",
+        "//src/bazel/tools:kubescape",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "kubescape",
+    actual = ":kubescape_check",
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "license_source_check",
+    srcs = ["license_source/license_source.sh"],
+    args = ["$(rootpath //src/bazel/tools:osv-scanner)"],
+    data = [
+        "//src/bazel/checks:license_images/osv-scanner.toml",
+        "//src/bazel/tools:osv-scanner",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "license_source",
+    actual = ":license_source_check",
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "commit_message_check",
+    srcs = ["commit_message/commit_message.sh"],
+    args = [
+        "$(rootpath //src/bazel/tools:committed)",
+        "$(rootpath commit_message/committed.toml)",
+    ],
+    data = [
+        "commit_message/committed.toml",
+        "//src/bazel/tools:committed",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "commit_message",
+    actual = ":commit_message_check",
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "commit_message_test",
+    srcs = ["commit_message/commit_message_test.sh"],
+    args = [
+        "$(rootpath :commit_message_check)",
+        "$(rootpath //src/bazel/tools:committed)",
+    ],
+    data = [
+        ":commit_message_check",
+        "//src/bazel/tools:committed",
+    ],
+)
+
+sh_binary(
+    name = "opengrep_check",
+    srcs = ["opengrep/opengrep.sh"],
+    args = ["$(rootpath //src/bazel/tools:opengrep)"],
+    data = ["//src/bazel/tools:opengrep"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "opengrep",
+    actual = ":opengrep_check",
+    visibility = ["//visibility:public"],
+)
+
+# Proves a known violation is a hard failure, independent of the clean scan.
+sh_test(
+    name = "opengrep_regression",
+    # The engine's startup and rule loading exceed the small 60s budget.
+    size = "medium",
+    srcs = ["opengrep/regression_test.sh"],
+    args = [
+        "$(rootpath //src/bazel/tools:opengrep)",
+        "$(rootpath :opengrep/rules.yaml)",
+        "$(rootpath //src/bazel/tools:jq)",
+        "$(rootpath :opengrep/fixtures/subprocess_shell_true.py)",
+    ],
+    data = [
+        ":opengrep/fixtures/subprocess_shell_true.py",
+        ":opengrep/rules.yaml",
+        "//src/bazel/tools:jq",
+        "//src/bazel/tools:opengrep",
+    ],
+)
+
+json_schema(
+    name = "license_exceptions_schema",
+    srcs = ["license_images/exceptions.yaml"],
+    schema = "license_images/license-exceptions.schema.json",
+)
+
+json_schema(
+    name = "license_normalize_schema",
+    srcs = ["license_images/normalize-debian.yaml"],
+    schema = "license_images/license-normalize-debian.schema.json",
+)
+
+# Evidence files are named <subject>-exception.json beside the exceptions they
+# support; the glob keeps a newly added one from escaping validation, which a
+# hand-listed set would not.
+json_schema(
+    name = "license_evidence_schema",
+    srcs = glob(["license_images/*-exception.json"]),
+    schema = "license_images/license-evidence.schema.json",
+)
+
+json_schema(
+    name = "kubescape_policy_schema",
+    srcs = ["kubescape/policy.json"],
+    schema = "kubescape/policy.schema.json",
+)
+
+json_schema(
+    name = "trivy_source_policy_schema",
+    srcs = ["trivy_source/policy.json"],
+    schema = "trivy_source/policy.schema.json",
+)
+
+json_schema(
+    name = "license_images_policy_schema",
+    srcs = ["license_images/policy.json"],
+    schema = "license_images/policy.schema.json",
+)

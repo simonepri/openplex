@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Validates the Debian-only license normalization consumed by the base-image gate.",
+  "properties": {
+    "aliases": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "label": { "minLength": 1, "type": "string" },
+          "normalized": { "const": "debian-adhoc-permissive" }
+        },
+        "required": ["label", "normalized"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "baseFamilies": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "osType": { "minLength": 1, "type": "string" },
+          "owner": { "format": "email", "type": "string" },
+          "reviewTrigger": { "const": "new-base-image-family" }
+        },
+        "required": ["osType", "owner", "reviewTrigger"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "packageFacts": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "license": { "minLength": 1, "type": "string" },
+          "package": { "minLength": 1, "type": "string" },
+          "reported": { "minLength": 1, "type": "string" },
+          "source": { "format": "uri", "type": "string" }
+        },
+        "required": ["license", "package", "source"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "version": { "const": 1 }
+  },
+  "required": ["aliases", "baseFamilies", "packageFacts", "version"],
+  "type": "object"
+}

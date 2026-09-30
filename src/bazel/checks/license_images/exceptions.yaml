@@ -1,0 +1,91 @@
+# Define reviewed, time-bounded license exceptions and audit evidence for container base images.
+
+exceptions:
+  - added: 2026-09-10
+    evidence: src/bazel/checks/license_images/atlantis-alpine-base-exception.json
+    evidence_sha256: 78dd03491637a00140cfae8e0dab158445c624376f4b561847fc18aaa3285c7f
+    id: atlantis-alpine-base-licenses
+    license: MULTIPLE
+    owner: simone.primarosa@gmail.com
+    reason: The exact pinned Atlantis Alpine bases contain embedded Go modules without recoverable license metadata and Alpine-specific non-SPDX license labels.
+    review_by: 2027-03-10
+    scope: base-image
+  - added: 2026-08-30
+    id: coder-agpl-3.0
+    license: AGPL-3.0-only
+    owner: simone.primarosa@gmail.com
+    reason: Coder runs as unmodified upstream images in a separate process; no first-party code links to or modifies the AGPL program.
+    review_by: 2027-08-30
+    scope: shipped-service
+  - added: 2026-09-02
+    evidence: src/bazel/checks/license_images/coder-workspace-base-exception.json
+    evidence_sha256: ccee77dd7a87fc0022186168b901063dec583f73adc71f2bbee9b9ed0c940e59
+    id: coder-minimal-workspace-base-licenses
+    license: MULTIPLE
+    owner: simone.primarosa@gmail.com
+    reason: The exact digest- and package/license-bound Ubuntu inventory in the official Coder minimal workspace bases includes non-SPDX short names that must not be normalized globally.
+    review_by: 2027-03-02
+    scope: base-image
+  - added: '2026-09-30'
+    evidence: src/bazel/checks/license_images/dragonfly-client-base-exception.json
+    evidence_sha256: 557ea19b51717b5ffa374c299889f3573c058024e2426e59e949a175b547825b
+    id: dragonfly-client-base-licenses
+    license: MULTIPLE
+    owner: simone.primarosa@gmail.com
+    reason: The exact digest- and package/license-bound Debian inventory in the official Dragonfly client bases includes non-SPDX short names and ad-hoc licenses.
+    review_by: '2027-03-01'
+    scope: base-image
+  - added: 2026-09-05
+    evidence: src/bazel/checks/license_images/dragonfly-sso-python-alpine-base-exception.json
+    evidence_sha256: 2e7f01060905d91e9a192a789a86d7ce5bf82235ab86b57c3a2c212ceeab31c1
+    id: dragonfly-sso-python-alpine-base-licenses
+    license: MULTIPLE
+    owner: simone.primarosa@gmail.com
+    reason: The exact pinned Python Alpine bases contain one metadata-only virtual package and Alpine license labels that must not be normalized for unrelated images.
+    review_by: 2027-03-05
+    scope: base-image
+  - added: 2026-09-01
+    evidence: src/bazel/checks/license_images/headscale-base-exception.json
+    evidence_sha256: c3bac17d94d24992bdf50360b5d1d14a9f1db90cf79b9c956ecf5587b15da47c
+    id: headscale-0.29.3-base-license-metadata
+    license: MULTIPLE
+    owner: simone.primarosa@gmail.com
+    reason: Trivy identifies Go modules in the exact upstream Headscale binaries but cannot recover their license metadata from the stripped binaries.
+    review_by: 2027-03-01
+    scope: base-image
+  - added: 2026-09-01
+    evidence: src/bazel/checks/license_images/k3s-base-exception.json
+    evidence_sha256: 8d5f0226e2398d3fe4c1775b1b5cdc8a31db02770bd3ac4cf9935ac59b0469a1
+    id: k3s-1.36.1-k3s1-base-license-metadata
+    license: MULTIPLE
+    owner: simone.primarosa@gmail.com
+    reason: Trivy identifies Go modules in the exact upstream k3s binaries but cannot recover their license metadata from the stripped binaries.
+    review_by: 2027-03-01
+    scope: base-image
+  - added: '2026-09-30'
+    evidence: src/bazel/checks/license_images/rawfile-localpv-base-exception.json
+    evidence_sha256: 6c4344a140ba0031942208bd4cefb119160903353e54156da561d6ecba21e68d
+    id: rawfile-localpv-base-licenses
+    license: MULTIPLE
+    owner: simone.primarosa@gmail.com
+    reason: The exact digest- and package/license-bound Debian inventory in the official OpenEBS Rawfile LocalPV bases includes non-SPDX short names and ad-hoc licenses.
+    review_by: '2027-03-01'
+    scope: base-image
+  - added: 2026-08-30
+    evidence: src/bazel/checks/license_images/ray-base-exception.json
+    evidence_sha256: 17a79fd8bb9c3fd4d889f5d95e3e9b624114147748521f2526053a5e5b68709e
+    id: ray-2.58-vendor-base-licenses
+    license: MULTIPLE
+    owner: simone.primarosa@gmail.com
+    reason: upstream vendor base pending first-party replacement
+    review_by: 2027-02-28
+    scope: base-image
+  - added: 2026-09-05
+    evidence: src/bazel/checks/license_images/workspace-backup-proxy-rclone-base-exception.json
+    evidence_sha256: 876f76467e8afadf99f2c5fb42cc0d3645a2c75e9582dda6db994317af0cb837
+    id: workspace-backup-proxy-rclone-base-licenses
+    license: MULTIPLE
+    owner: simone.primarosa@gmail.com
+    reason: The exact pinned rclone Alpine bases contain embedded Go modules without recoverable license metadata and one non-SPDX Alpine package label.
+    review_by: 2027-03-05
+    scope: base-image

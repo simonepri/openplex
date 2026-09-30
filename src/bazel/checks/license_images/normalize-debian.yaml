@@ -1,0 +1,45 @@
+# Define normalization mappings from Debian copyright short names to canonical SPDX license identifiers.
+
+version: 1
+baseFamilies:
+  - osType: debian
+    owner: simone.primarosa@gmail.com
+    reviewTrigger: new-base-image-family
+aliases:
+  - {label: BSD-3-clause-Berkeley, normalized: debian-adhoc-permissive}
+  - {label: BSD-3-clause-Carnegie, normalized: debian-adhoc-permissive}
+  - {label: BSD-3-clause-Oracle, normalized: debian-adhoc-permissive}
+  - {label: BSD-3-clause-WIDE, normalized: debian-adhoc-permissive}
+  - {label: BSD-like-Spencer, normalized: debian-adhoc-permissive}
+  - {label: CORE-MATH, normalized: debian-adhoc-permissive}
+  - {label: Carnegie, normalized: debian-adhoc-permissive}
+  - {label: DEC, normalized: debian-adhoc-permissive}
+  - {label: FSFAP, normalized: debian-adhoc-permissive}
+  - {label: IBM, normalized: debian-adhoc-permissive}
+  - {label: Inner-Net, normalized: debian-adhoc-permissive}
+  - {label: MIT-like-Lord, normalized: debian-adhoc-permissive}
+  - {label: PCRE, normalized: debian-adhoc-permissive}
+  - {label: SunPro, normalized: debian-adhoc-permissive}
+  - {label: Unicode-DFS-2016, normalized: debian-adhoc-permissive}
+  - {label: Univ-Coimbra, normalized: debian-adhoc-permissive}
+  - {label: ad-hoc, normalized: debian-adhoc-permissive}
+  - {label: public-domain, normalized: debian-adhoc-permissive}
+  - {label: verbatim, normalized: debian-adhoc-permissive}
+packageFacts:
+  - license: GPL-2.0-or-later
+    package: libc6
+    reported: GPL-2+-with-link-exception
+    source: https://sources.debian.org/copyright/license/glibc/2.41-12%2Bdeb13u4/
+  - license: LGPL-2.1-or-later
+    package: libc6
+    reported: LGPL-2.1+-with-link-exception
+    source: https://sources.debian.org/copyright/license/glibc/2.41-12%2Bdeb13u4/
+  - license: GPL-3.0-or-later WITH GCC-exception-3.1
+    package: libgcc-s1
+    source: https://metadata.ftp-master.debian.org/changelogs/main/g/gcc-14/gcc-14_14.2.0-19_copyright
+  - license: GPL-3.0-or-later WITH GCC-exception-3.1
+    package: libgomp1
+    source: https://metadata.ftp-master.debian.org/changelogs/main/g/gcc-14/gcc-14_14.2.0-19_copyright
+  - license: GPL-3.0-or-later WITH GCC-exception-3.1
+    package: libstdc++6
+    source: https://metadata.ftp-master.debian.org/changelogs/main/g/gcc-14/gcc-14_14.2.0-19_copyright

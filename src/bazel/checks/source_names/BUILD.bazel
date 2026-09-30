@@ -1,0 +1,39 @@
+"""Define test and check targets verifying source directory naming conventions and DNS projection safety."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "validators",
+    # keep
+    srcs = ["check_source_names.py"],
+    imports = ["."],
+    visibility = ["//src/bazel/checks:__subpackages__"],
+)
+
+py_binary(
+    name = "source_names",
+    # keep
+    srcs = ["check_source_names.py"],
+    main = "check_source_names.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+)
+
+# Deny-proofs over validate_directories. Hermetic: no worktree, no toolchain.
+py_test(
+    name = "check_source_names_test",
+    size = "small",
+    # keep
+    srcs = ["check_source_names_test.py"],
+    imports = ["."],
+    main = "check_source_names_test.py",
+    precompile = "disabled",
+    # keep
+    deps = [":validators"],
+)

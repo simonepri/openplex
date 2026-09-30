@@ -1,0 +1,38 @@
+"""Define test and binary targets for checking function and method length limits across the workspace."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "validators",
+    # keep
+    srcs = ["check_function_length.py"],
+    imports = ["."],
+    visibility = ["//src/bazel/checks:__subpackages__"],
+)
+
+py_binary(
+    name = "function_length",
+    # keep
+    srcs = ["check_function_length.py"],
+    main = "check_function_length.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "check_function_length_test",
+    size = "small",
+    # keep
+    srcs = ["check_function_length_test.py"],
+    imports = ["."],
+    main = "check_function_length_test.py",
+    precompile = "disabled",
+    # keep
+    deps = [":validators"],
+)
