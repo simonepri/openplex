@@ -1,0 +1,76 @@
+# Schedules periodic in-cluster Prowler CSPM assessments against CIS benchmarks.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prowler
+  namespace: prowler
+  annotations:
+    ignore-check.kube-linter.io/no-liveness-probe: >-
+      Prowler security scanner CronJob runs to completion and exits.
+    ignore-check.kube-linter.io/no-readiness-probe: >-
+      Prowler security scanner CronJob runs to completion and exits.
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: prowler
+spec:
+  # Scans remain suspended by default in base manifests; production cells enable via Argo CD patches when cloud CSPM IAM roles are bound.
+  suspend: true
+  schedule: "0 3 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 3600
+      backoffLimit: 2
+      template:
+        metadata:
+          annotations:
+            automount-service-account-token: "true"
+          labels:
+            app.kubernetes.io/managed-by: argocd
+            app.kubernetes.io/name: prowler
+        spec:
+          serviceAccountName: prowler
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: prowler
+              image: docker.io/toniblyx/prowler:v4-latest@sha256:c56d3abe529570796ccf20b9fe61d621d0f6821071e9d34b46c96e9d5792a63a
+              command:
+                - prowler
+                - aws
+                - --compliance
+                - cis_aws_foundations_v3.0
+                - -M
+                - json
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+                - name: output
+                  mountPath: /home/prowler/output
+          volumes:
+            - name: tmp
+              emptyDir: {sizeLimit: 256Mi}
+            - name: output
+              emptyDir: {sizeLimit: 256Mi}

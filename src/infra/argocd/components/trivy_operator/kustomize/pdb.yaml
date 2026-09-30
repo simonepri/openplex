@@ -1,0 +1,16 @@
+# Defines podDisruptionBudget for redundant Trivy Operator controllers, consumed by availability profiles.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: trivy-operator
+  namespace: trivy-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: trivy-operator
+      app.kubernetes.io/name: trivy-operator

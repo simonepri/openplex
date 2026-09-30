@@ -1,0 +1,43 @@
+# Configures base Helm values for the official Trivy server consumed by each <cluster>-trivy-operator Application as the shared vulnerability database and scan cache for that cluster's Trivy Operator Jobs.
+
+image:
+  registry: docker.io
+  repository: aquasec/trivy
+  tag: 0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+# Trivy's filesystem scan cache is server-local. Multiple server replicas
+# require a shared Redis-compatible cache.
+replicaCount: 1
+podAnnotations:
+  ignore-check.kube-linter.io/read-secret-from-env-var: >-
+    Trivy server loads token from Secret via environment.
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 5Gi
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+podSecurityContext:
+  runAsUser: 65534
+  runAsGroup: 65534
+  runAsNonRoot: true
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  privileged: false
+  readOnlyRootFilesystem: true
+trivy:
+  dbRepository: ghcr.io/aquasecurity/trivy-db
+service:
+  name: trivy-server
+  type: ClusterIP
+  port: 4954
+  sessionAffinity: None

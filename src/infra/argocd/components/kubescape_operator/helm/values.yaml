@@ -1,0 +1,175 @@
+# Configures base Helm values for Kubescape Operator managing cluster security and compliance scans.
+
+ksNamespace: kubescape-system
+additionalAnnotations:
+  automount-service-account-token: "true"
+certificates:
+  # The upstream-recommended GitOps mode reuses its CA instead of rendering a
+  # new certificate on every Argo comparison.
+  strategy: initContainer
+  certgen:
+    image:
+      repository: quay.io/kubescape/kubectl
+      tag: 1.36.1@sha256:e2b97dde9666986c61c56d49aae85a714b89b69392baa531438e74ec34096fb4
+excludeNamespaces: >-
+  kubescape-system,trivy-operator,kube-system,kube-public,kube-node-lease,kubeconfig,gmp-system,gmp-public
+capabilities:
+  # Kubescape is deliberately limited to Kubernetes configuration and
+  # compliance scans. Keep every other capability explicit so chart-default
+  # changes cannot silently broaden its access or duplicate another controller.
+  operator: enable
+  configurationScan: enable
+  # Admission-time posture is enforced by Kyverno. Run Kubescape's complete,
+  # staggered scan on the scheduler instead of fanning out one scan per live
+  # workload during every operator inventory or reconnect.
+  continuousScan: disable
+
+  # Host and image inventory stay off: Trivy owns vulnerability and SBOM
+  # reporting, and Kubescape receives no host-scanning access.
+  nodeScan: disable
+  nodeSbomGeneration: disable
+  scanEmbeddedSBOMs: disable
+  vulnerabilityScan: disable
+  relevancy: disable
+  vexGeneration: disable
+
+  # Runtime, network, and admission enforcement stay off: Falco, Kyverno, and
+  # component-owned NetworkPolicies own those contracts.
+  runtimeObservability: disable
+  networkPolicyService: disable
+  networkEventsStreaming: disable
+  runtimeDetection: disable
+  malwareDetection: disable
+  nodeProfileService: disable
+  admissionController: disable
+  httpDetection: disable
+  seccompProfileService: disable
+  seccompProfileBackend: crd
+  manageWorkloads: disable
+  syncSBOM: disable
+
+  # Kubescape remains observational and non-mutating: it neither accepts risk,
+  # remediates workloads, nor upgrades itself. Online artifact retrieval stays
+  # enabled, while a parallel Prometheus export path stays off.
+  riskAcceptance: disable
+  remediation: disable
+  autoUpgrading: disable
+  kubescapeOffline: disable
+  prometheusExporter: enable
+configurations:
+  persistence: enable
+  prometheusAnnotations: enable
+  priorityClass:
+    enabled: false
+persistence:
+  storageClass: "-"
+  accessMode: ReadWriteOnce
+  size:
+    backingStorage: 2Gi
+global:
+  # Public images remain scanable. Private ECR/Artifact Registry images are
+  # deliberately skipped until an exact namespace-scoped pull-Secret binding
+  # exists; Kubescape must never inventory unrelated fleet Secrets.
+  enableClusterWideSecretAccess: false
+  kubescapePsp:
+    enabled: false
+  networkPolicy:
+    enabled: false
+    createEgressRules: false
+kubescape:
+  image:
+    repository: quay.io/kubescape/kubescape
+    # v4.0.14 ships the refreshed v0.14 CEL policy bundle; earlier images
+    # embedded a bundle missing controls (e.g. C-0262) that aborted every scan.
+    tag: v4.0.15@sha256:40bb0ace10b8f33fc187a45232d047d6765ed508778b55a52a683145f7c9c3dd
+  downloadArtifacts: true
+  skipUpdateCheck: true
+  # Buffer the initial workload inventory while the single scanner drains it;
+  # the upstream default of ten returns 429s and turns admission bursts into
+  # repeated submissions without bounding scan CPU any further.
+  env:
+    - name: KS_SCAN_QUEUE_CAPACITY
+      value: "128"
+  # Scans and the health endpoint share this process, so reserve enough CPU
+  # for the endpoint to remain responsive while a configuration scan runs.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+operator:
+  image:
+    repository: quay.io/kubescape/operator
+    tag: v0.2.172@sha256:1ddcd2788e1ef1ce4c688920b48b4b9be35af549db19391bdb9be71bd42d1e26
+  # Reconciliation bursts must not starve the operator's health endpoint.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+  # Collapse duplicate Pod events while a one-at-a-time image scan is active.
+  podScanGuardTime: 1h
+storage:
+  enabled: true
+  priorityClassName: cluster-operators
+  mtls:
+    enabled: true
+  image:
+    repository: quay.io/kubescape/storage
+    tag: v0.0.348@sha256:6333d78455896ae3f32d6a8a6a743b2c976ec1253dc6049187943d22363367bd
+  cleanupInterval: 6h
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+  queueManagerEnabled: true
+  defaultQueueLength: 25
+  defaultWorkerCount: 1
+  defaultMaxObjectSize: 400000
+  kindQueues:
+    applicationprofiles: {queueLength: 25, workerCount: 1, maxObjectSize: 20000000}
+    containerprofiles: {queueLength: 25, workerCount: 1, maxObjectSize: 2500000}
+    networkneighborhoods: {queueLength: 25, workerCount: 1, maxObjectSize: 10000000}
+    openvulnerabilityexchangecontainers: {queueLength: 25, workerCount: 1, maxObjectSize: 500000}
+    sbomsyftfiltereds: {queueLength: 25, workerCount: 1, maxObjectSize: 50000000}
+    sbomsyfts: {queueLength: 25, workerCount: 1, maxObjectSize: 100000000}
+    vulnerabilitymanifests: {queueLength: 25, workerCount: 1, maxObjectSize: 50000000}
+# The fleet ApplicationSets replace this fallback with role-specific,
+# non-overlapping slots.
+kubescapeScheduler:
+  scanSchedule: "7 1,9,17 * * *"
+  podLabels:
+    cost-center: shared-infrastructure
+    environment: production
+  image:
+    repository: quay.io/kubescape/http-request
+    tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
+  resources:
+    requests: {cpu: 5m, memory: 16Mi}
+    limits: {cpu: 50m, memory: 64Mi}
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+# The operator stores this as a template for opt-in registry scans. Keep the
+# dormant path bounded and immutable as well.
+registryScanScheduler:
+  scanSchedule: "53 19 * * *"
+  image:
+    repository: quay.io/kubescape/http-request
+    tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
+  resources:
+    requests: {cpu: 5m, memory: 16Mi}
+    limits: {cpu: 50m, memory: 64Mi}
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+prometheusExporter:
+  image:
+    repository: quay.io/kubescape/prometheus-exporter
+    tag: v0.2.23@sha256:dddc28ca3d46918cb6e68097f76f6af20a8c05e401118692d06041b401903c7f
+
