@@ -1,0 +1,40 @@
+"""Packages and seeds platform and workload container images."""
+
+load("@rules_multirun//:defs.bzl", "command", "multirun")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+exports_files([
+    "infrastructure-images.json",
+    "workload-images.json",
+])
+
+command(
+    name = "seed",
+    command = ":seed_images",
+    environment = {
+        "WORKLOAD_STREAM_TAG": "",
+        "WORKLOAD_TAG_PREFIX": "ci",
+    },
+    visibility = ["//visibility:public"],
+)
+
+multirun(
+    name = "seed_images",
+    commands = [
+        "//src/infra/definitions/workspaces/templates/dev:seed",
+        "//src/infra/tools/coder_snapshot_portal:publish",
+        "//src/third_party/dragonflyoss/client:publish",
+        "//src/infra/tools/dragonfly_sso:publish",
+        "//src/third_party/openebs/rawfile-localpv:publish",
+        "//src/infra/tools/s3_resolver/server:publish",
+        "//src/infra/tools/workspace_backup_proxy:publish",
+        "//src/examples/batch_cron:publish",
+        "//src/examples/ray_data:publish",
+        "//src/examples/ray_serve:publish",
+        "//src/examples/ray_train:publish",
+        "//src/examples/svelte_web:publish",
+    ],
+    jobs = 0,
+)
+
+package_sources()

@@ -1,0 +1,48 @@
+{
+  "images": [
+    {
+      "imageDigest": "sha256:156d1b3edb4b5bb8bcc013d2fa500b4e3b3b9bccf92cd1ae03f8d7bc439ac089",
+      "name": "coder-snapshot-portal",
+      "repository": "src/infra/tools/coder_snapshot_portal",
+      "source": "src/infra/tools/coder_snapshot_portal",
+      "target": "//src/infra/tools/coder_snapshot_portal:publish"
+    },
+    {
+      "imageDigest": "sha256:b2d2f3c24f29db02ff94b815451b10e1914fd96dfc8bef01806837392d095bd3",
+      "name": "dragonfly-client",
+      "repository": "src/third_party/dragonflyoss/client",
+      "source": "src/third_party/dragonflyoss/client",
+      "tag": "v1.5.2-mtls-r3",
+      "target": "//src/third_party/dragonflyoss/client:image_push"
+    },
+    {
+      "imageDigest": "sha256:17d15fb97ab5e3211baad8f98b721d397c627b1b32e4e00a464ffbb5473479ff",
+      "name": "dragonfly-sso",
+      "repository": "src/infra/tools/dragonfly_sso",
+      "source": "src/infra/tools/dragonfly_sso",
+      "target": "//src/infra/tools/dragonfly_sso:publish"
+    },
+    {
+      "imageDigest": "sha256:d7498ff0f5380f745f740164640e042c6b2f87174f2f7a6299d43c67c75f8ff4",
+      "name": "rawfile-localpv",
+      "repository": "src/third_party/openebs/rawfile-localpv",
+      "source": "src/third_party/openebs/rawfile-localpv",
+      "target": "//src/third_party/openebs/rawfile-localpv:image_push"
+    },
+    {
+      "imageDigest": "sha256:0de8df5a4584f347e4545da6e3e78377d689117f8a007e07056b8b1a4bcd06a1",
+      "name": "s3-resolver",
+      "repository": "src/infra/tools/s3_resolver/server",
+      "source": "src/infra/tools/s3_resolver/server",
+      "target": "//src/infra/tools/s3_resolver/server:publish"
+    },
+    {
+      "imageDigest": "sha256:c06cd3abfae1a6b6b7c6e2517e35db5586d47b5c6cf9616c4d4f47126de2a70a",
+      "name": "workspace-backup-proxy",
+      "repository": "src/infra/tools/workspace_backup_proxy",
+      "source": "src/infra/tools/workspace_backup_proxy",
+      "target": "//src/infra/tools/workspace_backup_proxy:publish"
+    }
+  ],
+  "version": 1
+}
