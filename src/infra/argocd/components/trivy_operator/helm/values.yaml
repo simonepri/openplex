@@ -1,0 +1,170 @@
+# Configures base Helm values for the Trivy Operator, applied on every enabled ctrl and cell registration after its per-cluster shared scanner dependency is healthy.
+# Configures scanner concurrency limits, TTLs, and restricted security contexts for child scan Jobs.
+
+image:
+  registry: docker.io
+  repository: aquasec/trivy-operator
+  tag: 0.34.0@sha256:0e4f11e9632f34097f259f3a59d34bab4eea8cee9aef510d15cdfc7481d5e49c
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: trivy-operator
+              app.kubernetes.io/name: trivy-operator
+          topologyKey: kubernetes.io/hostname
+operator:
+  replicas: 2
+  # Start report reconciliation only after the wave-zero shared Trivy server
+  # is healthy; otherwise the initial scan Jobs fail before its cache listens.
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  # Reports outlive scanner Jobs; prompt cleanup prevents completed Jobs from
+  # occupying the deliberately small concurrent-scan budget.
+  scanJobTTL: 30s
+  scanJobTimeout: 10m
+  # One scanner per cluster prevents simultaneous restart recovery across the
+  # fleet from saturating the shared local and small-cloud container runtime.
+  scanJobsConcurrentLimit: 1
+  scanNodeCollectorLimit: 1
+  # Workloads deferred by the concurrency cap re-enter the queue promptly; the
+  # shared server makes retries cheap while the hard cap bounds peak load.
+  scanJobsRetryDelay: 30s
+  scannerReportTTL: 24h
+  cacheReportTTL: 120h
+  # Kubescape owns Kubernetes configuration and RBAC posture. Trivy remains
+  # the image vulnerability and exposed-secret scanner, without duplicating
+  # those findings or persisting per-workload SBOMs in Kubernetes storage.
+  vulnerabilityScannerEnabled: true
+  exposedSecretScannerEnabled: true
+  metricsVulnIdEnabled: false
+  configAuditScannerEnabled: false
+  rbacAssessmentScannerEnabled: false
+  sbomGenerationEnabled: false
+  infraAssessmentScannerEnabled: false
+  clusterComplianceEnabled: false
+  batchDeleteLimit: 1
+  batchDeleteDelay: 30s
+  # Fail closed for private registries: the operator never reads unrelated
+  # namespace Secrets or service accounts. Public images remain scannable. A
+  # future private-registry binding must add an exact namespace Role and name
+  # the approved pull Secret instead of restoring this cluster-wide grant.
+  accessGlobalSecretsAndServiceAccount: false
+  privateRegistryScanSecretsNames: {}
+  builtInTrivyServer: false
+trivyOperator:
+  scanJobsInSameNamespace: false
+  scanJobAutomountServiceAccountToken: false
+  scanJobPodTemplateLabels: app.kubernetes.io/component=security-report-scanner
+  # TODO(simonepri): Publish preload-only images and bind scanner-specific
+  # registry credentials, then remove these exact repository exclusions.
+  # Other containers in the same workloads remain in their scanner Jobs.
+  excludeImages: >-
+    docker.io/cluster/dragonfly-sso@sha256:*, docker.io/cluster/s3-resolver@sha256:*, docker.io/cluster/workspace-backup-proxy@sha256:*, docker.io/cluster/workspace-snapshot-catalog@sha256:*, docker.io/infra/headscale-key-producer@sha256:*, docker.io/infra/headscale-workspace-enrollment@sha256:*, ghcr.io/runatlantis/atlantis:*@sha256:*
+  additionalReportLabels: app.kubernetes.io/managed-by=trivy-operator
+  reportRecordFailedChecksOnly: true
+  # LINT.IfChange(scan-security-context)
+  scanJobPodTemplatePodSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  scanJobPodTemplateContainerSecurityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+    privileged: false
+    readOnlyRootFilesystem: true
+    # LINT.ThenChange(:scan-security-rollout)
+podAnnotations:
+  # The upstream checksum excludes operator.yaml; cached scanner settings need a rollout.
+  # LINT.IfChange(scan-security-rollout)
+  scan-security-context: restricted-65532-v1
+  # LINT.ThenChange(:scan-security-context)
+trivy:
+  image:
+    registry: docker.io
+    repository: aquasec/trivy
+    # The chart writes repository and tag to separate ConfigMap keys; the
+    # operator joins them as this digest-pinned multi-architecture scan image.
+    tag: 0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+  # Scanner Jobs use the shared official Trivy server instead of downloading a
+  # vulnerability database per workload. This bounds node disk and registry IO.
+  mode: ClientServer
+  serverURL: http://trivy-server.trivy-system:4954
+  # Local workload references use the node runtime's loopback registry name.
+  # Scanner Jobs resolve image layers themselves, so route that name to the
+  # shared Floci origin registry instead of the scanner Pod's loopback.
+  nonSslRegistries:
+    localOrigin: localhost:15100
+  configFile:
+    registry:
+      mirrors:
+        "localhost:15100": ['origin-registry:5000']
+  # Use the canonical OCI registries. The Google pull-through mirror can retain
+  # an index after its referenced database blob has expired.
+  dbRegistry: ghcr.io
+  dbRepository: aquasecurity/trivy-db
+  javaDbRegistry: ghcr.io
+  javaDbRepository: aquasecurity/trivy-java-db
+  # The operator stores each report in one etcd object. Omitting LOW findings
+  # and unfixable vulnerabilities keeps large image reports within the API request limit.
+  severity: MEDIUM,HIGH,CRITICAL
+  ignoreUnfixed: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+      # The Trivy Operator chart uses camelCase in values and renders the
+      # Kubernetes ephemeral-storage resource key into generated scan Jobs.
+      ephemeralStorage: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1.5Gi
+      ephemeralStorage: 2Gi
+  useBuiltinRegoPolicies: "false"
+  useEmbeddedRegoPolicies: "true"
+policiesBundle:
+  # This is a platform-neutral OPA bundle OCI artifact, not a container image.
+  # Keep it immutable, but do not require executable-image architecture data.
+  registry: mirror.gcr.io
+  repository: aquasec/trivy-checks
+  tag: 1@sha256:0491169789b867ae5a7353381220c1d4d97b3a0d6d9dfd84a25d06f0ba68aa93
+# This image remains immutable even though the corresponding scanner is
+# disabled; enabling infrastructure assessments later cannot reintroduce a
+# floating runtime reference.
+nodeCollector:
+  registry: ghcr.io
+  repository: aquasecurity/node-collector
+  tag: 0.3.1@sha256:f4702ce4667388f0219d6248d623a7e816231c2d4561d6af01c3ae053e524025
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  privileged: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+# Report reconciliation and the health endpoint share the controller process.
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+nodeSelector:
+  kubernetes.io/os: linux
+serviceMonitor:
+  enabled: false

@@ -1,0 +1,12 @@
+# Composes cronjob, RBAC, and policy manifests for scheduled Prowler CSPM assessments.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: prowler
+resources:
+  # keep-sorted start
+  - cronjob.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - service-account.yaml
+  # keep-sorted end

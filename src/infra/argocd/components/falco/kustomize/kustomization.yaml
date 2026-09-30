@@ -1,0 +1,11 @@
+# Kustomize entrypoint for Falco's API-free runtime sensor service account, consumed alongside the upstream Helm release on every cloud cluster.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  - service-account.yaml
+  - vpa.yaml
+  # keep-sorted end

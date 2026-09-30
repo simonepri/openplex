@@ -1,0 +1,17 @@
+# Defines namespace for scheduled in-cluster Prowler cloud security posture assessments, enforcing the restricted Pod Security Standard. Rendered by ctrl Applications.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prowler
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime
+    cost-center: shared-infrastructure
+    environment: production
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest

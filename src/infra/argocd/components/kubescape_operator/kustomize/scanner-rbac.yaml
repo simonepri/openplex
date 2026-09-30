@@ -1,0 +1,40 @@
+# Read-only supplemental discovery for Kubescape controls introduced after the upstream chart's scanner role, rendered by every Kubescape Application.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubescape-posture-reader
+  labels:
+    app.kubernetes.io/component: security-posture-scanner
+    app.kubernetes.io/managed-by: argocd
+rules:
+  - apiGroups: [admissionregistration.k8s.io]
+    resources:
+      # keep-sorted start
+      - validatingadmissionpolicies
+      - validatingadmissionpolicybindings
+      # keep-sorted end
+    verbs: [get, list, watch]
+  - apiGroups: [kubescape.io]
+    resources:
+      # keep-sorted start
+      - clustersecurityexceptions
+      - securityexceptions
+      # keep-sorted end
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubescape-posture-reader
+  labels:
+    app.kubernetes.io/component: security-posture-scanner
+    app.kubernetes.io/managed-by: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubescape-posture-reader
+subjects:
+  - kind: ServiceAccount
+    name: kubescape
+    namespace: kubescape-system

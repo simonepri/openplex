@@ -1,0 +1,119 @@
+# Configures base Helm values for upstream Falco runtime threat detection across control and cell clusters.
+
+image:
+  registry: docker.io
+  repository: falcosecurity/falco
+  tag: 0.44.1@sha256:788f1129c542171813083d4afc61b16730a47dde8c23d9c39370acef996349b6
+falcoctl:
+  image:
+    registry: docker.io
+    repository: falcosecurity/falcoctl
+    tag: 0.14.2@sha256:90ba9627886e8f26b746fa52465d755b28ee49b76eb1d047a0fefd8cadb21907
+  artifact:
+    install:
+      enabled: true
+    follow:
+      enabled: false
+  config:
+    artifact:
+      install:
+        # Keep the signed upstream rules artifact deterministic across restarts.
+        refs:
+          # keep-sorted start
+          - falco-rules:5.1.0
+          - k8saudit-rules:0.18.0
+          - k8saudit:0.18.0
+          # keep-sorted end
+driver:
+  enabled: true
+  kind: modern_ebpf
+  sysfsMountPath: /sys/kernel
+  modernEbpf:
+    leastPrivileged: true
+    sysfsMount: true
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    add:
+      # keep-sorted start
+      - BPF
+      - PERFMON
+      - SYS_PTRACE
+      - SYS_RESOURCE
+      # keep-sorted end
+    drop: [ALL]
+  readOnlyRootFilesystem: true
+collectors:
+  kubernetes:
+    enabled: false
+  containerEngine:
+    engines:
+      bpm: {enabled: false}
+      containerd: {enabled: false}
+      cri:
+        enabled: true
+        sockets: [/run/containerd/containerd.sock]
+      docker: {enabled: false}
+      libvirt_lxc: {enabled: false}
+      lxc: {enabled: false}
+      podman: {enabled: false}
+falco:
+  json_output: true
+  load_plugins:
+    # keep-sorted start
+    - json
+    - k8saudit
+    # keep-sorted end
+  log_syslog: false
+  plugins:
+    - name: k8saudit
+      library_path: libk8saudit.so
+      init_config: ""
+      open_params: "http://:9765/k8s-audit"
+    - name: json
+      library_path: libjson.so
+      init_config: ""
+  rules_files:
+    - /etc/falco/falco_rules.yaml
+    - /etc/falco/k8s_audit_rules.yaml
+    - /etc/falco/rules.d
+  stdout_output:
+    enabled: true
+  syslog_output:
+    enabled: false
+falcosidekick:
+  enabled: false
+grafana:
+  dashboards:
+    enabled: false
+serviceMonitor:
+  create: false
+podLabels:
+  app.kubernetes.io/component: runtime-security
+podPriorityClassName: node-agents
+serviceAccount:
+  create: false
+  name: falco
+rbac:
+  create: false
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            # Cloud providers do not expose their managed control planes as
+            # workload nodes. Preserve that topology locally and keep the
+            # control-plane cgroups available to Kubernetes itself.
+            - {key: node-role.kubernetes.io/control-plane, operator: DoesNotExist}
+tolerations:
+  - operator: Exists
+nodeSelector: {kubernetes.io/os: linux}
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+services:
+  - name: k8saudit-webhook
+    ports:
+      - port: 9765
+        protocol: TCP
+    type: ClusterIP

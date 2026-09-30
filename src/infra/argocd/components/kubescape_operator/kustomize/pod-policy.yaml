@@ -1,0 +1,66 @@
+# Completes the upstream chart's restricted Pod Security profile at admission. The chart hardcodes its container security contexts and does not expose the required capability drop through Helm values.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: kubescape-pod-security-defaults
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kubescape-pod-security-defaults
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: drop-container-capabilities
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [kubescape-system]
+              operations: [CREATE, UPDATE]
+      mutate:
+        foreach:
+          - list: request.object.spec.containers
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: '{{ element.name }}'
+                    securityContext:
+                      capabilities:
+                        drop: [ALL]
+          - list: request.object.spec.initContainers || `[]`
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: '{{ element.name }}'
+                    securityContext:
+                      capabilities:
+                        drop: [ALL]
+          - list: request.object.spec.ephemeralContainers || `[]`
+            patchStrategicMerge:
+              spec:
+                ephemeralContainers:
+                  - name: '{{ element.name }}'
+                    securityContext:
+                      capabilities:
+                        drop: [ALL]
+    - name: reap-finished-scan-jobs
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Job]
+              namespaces: [kubescape-system]
+              operations: [CREATE]
+      mutate:
+        patchStrategicMerge:
+          spec:
+            ttlSecondsAfterFinished: 300
