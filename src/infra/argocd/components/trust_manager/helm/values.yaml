@@ -1,0 +1,43 @@
+# Configures base Helm values for cert-manager's trust-manager, applied to every Floci-backed cluster. The Kustomize companion distributes the repository CA Bundle to the in-cluster OIDC clients that need it.
+
+crds:
+  enabled: true
+  keep: true
+image:
+  digest: sha256:a7c1d71cad37b404738192213e3801dbf89fe797e72664b0ff0d498db35cea74
+defaultPackage:
+  enabled: false
+resources:
+  requests: {cpu: 10m, memory: 32Mi}
+  limits: {cpu: 200m, memory: 128Mi}
+replicaCount: 2
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: trust-manager
+              app.kubernetes.io/name: trust-manager
+          topologyKey: kubernetes.io/hostname
+topologySpreadConstraints: []
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+filterExpiredCertificates:
+  enabled: true
+filterNonCACerts:
+  enabled: true
+app:
+  leaderElection: {enabled: true}
+  trust:
+    namespace: cert-manager-system
+  metrics:
+    service:
+      enabled: false
+  webhook:
+    tls:
+      helmCert:
+        enabled: false
+commonLabels: {}

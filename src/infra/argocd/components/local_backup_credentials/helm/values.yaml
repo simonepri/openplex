@@ -1,0 +1,3 @@
+# The dispatcher supplies the database-specific credential target.
+
+secretName: example-postgres-backup-s3

@@ -1,0 +1,71 @@
+# Local overlay: source-reader and token-request RBAC for the application identity store. The Local ClusterSecretStore uses it to obtain a bound reader token and read only its named source records.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: application-oidc-reader
+  namespace: application-identity
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: application-oidc-reader
+  namespace: application-identity
+rules:
+  # The Local Kubernetes provider must read these named source objects; it cannot
+  # list, watch, mutate, or read any other Secret in the namespace.
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames:
+      - application-oidc
+      - coder-snapshot-oauth
+      - coder-template-publication
+      - coder-workspace-kubeconfig
+      - opencost-cloud-provider-api
+    verbs: [get]
+  - apiGroups: [authorization.k8s.io]
+    resources: [selfsubjectrulesreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: application-oidc-reader
+  namespace: application-identity
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      The Local Kubernetes secret provider requires get-only read access to named source Secret records to synchronize application identity.
+subjects:
+  - kind: ServiceAccount
+    name: application-oidc-reader
+    namespace: application-identity
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: application-oidc-reader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: external-secrets-token-request
+  namespace: application-identity
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts/token]
+    resourceNames: [application-oidc-reader]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: external-secrets-token-request
+  namespace: application-identity
+subjects:
+  - kind: ServiceAccount
+    name: external-secrets
+    namespace: external-secrets-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: external-secrets-token-request

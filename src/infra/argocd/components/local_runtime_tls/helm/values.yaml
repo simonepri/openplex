@@ -1,0 +1,15 @@
+# Placeholder render inputs overridden by the canonical fleet registry in Argo CD.
+
+accessAliasDomain: c.example.invalid
+publicDomain: example.invalid
+internalDomain: c.example.invalid
+endpointRegions:
+  ecr: [local]
+  s3: [local]
+local:
+  control: {record: ctrl-example}
+  network:
+    services:
+      floci: 192.0.2.2
+      headscale: 192.0.2.23
+      origin_registry: 192.0.2.22

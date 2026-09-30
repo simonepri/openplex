@@ -1,0 +1,20 @@
+# Defines local CA bundle distributing cluster-local-ca across the cluster.
+
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: cluster-local-ca
+  labels:
+    app.kubernetes.io/name: cluster-local-ca
+spec:
+  sources:
+    - secret:
+        name: cluster-local-ca
+        key: ca.crt
+  target:
+    configMap:
+      key: ca.crt
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: trust-manager
+          app.kubernetes.io/name: cluster-local-ca

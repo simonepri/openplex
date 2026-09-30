@@ -1,0 +1,8 @@
+# Issues local host service certificates before Tailnet enrollment.
+
+apiVersion: v2
+name: local-runtime-tls
+description: Cluster-issued TLS certificates for the local runtime
+type: application
+version: 0.1.0
+appVersion: "1"
