@@ -1,0 +1,26 @@
+"""Builds Python client library and unit tests for the S3 URI resolver."""
+
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+py_library(
+    name = "python",
+    srcs = ["client.py"],
+    imports = ["../../../../.."],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "s3_resolver",
+    actual = ":python",
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "client_test",
+    size = "small",
+    srcs = ["client_test.py"],
+    deps = ["//src/infra/tools/s3_resolver/client/python"],
+)
+
+package_sources()
