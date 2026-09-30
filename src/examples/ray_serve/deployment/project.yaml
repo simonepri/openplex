@@ -1,0 +1,7 @@
+# Declares the release project contract and promotion stages for the continuously reconciled Ray Serve example.
+
+delivery: promoted
+stages:
+  - name: prod
+    promotion: automatic
+    source: {kind: warehouse}
