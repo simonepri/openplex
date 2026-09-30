@@ -1,0 +1,10 @@
+{
+  "images": [
+    {
+      "architecture": "arm64",
+      "tag": "v1",
+      "target": "//src/infra/definitions/workspaces/templates/dev:image_push"
+    }
+  ],
+  "version": 1
+}
