@@ -1,0 +1,367 @@
+"""Define container image layers, multi-arch indexes, and test targets for workload OCI artifacts."""
+
+# gazelle:exclude .
+
+load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/oci:defs.bzl", "oci_workload_publish", "python_wheel_site_packages", "third_party_image")
+
+exports_files(
+    [
+        "application_import_acceptance.py",
+        "generate_sbom.sh",
+        "image_structure_test.py",
+        "ray-torch-compiler-linux-amd64-packages.lock.json",
+        "ray-torch-compiler-linux-amd64-packages.yaml",
+        "ray-torch-compiler-linux-arm64-packages.lock.json",
+        "ray-torch-compiler-linux-arm64-packages.yaml",
+        "release_sbom_test.sh",
+        "runtime_import_acceptance.py",
+        "runtime_import_acceptance_test.py",
+        "stream_tag.sh",
+        "workload_cli.py",
+    ],
+    visibility = [
+        "//src:__subpackages__",
+        "//third_party:__subpackages__",
+    ],
+)
+
+py_binary(
+    name = "workload_cli",
+    srcs = ["workload_cli.py"],
+    visibility = [
+        "//src:__subpackages__",
+        "//third_party:__subpackages__",
+    ],
+)
+
+oci_image(
+    name = "launcher_fixture_image",
+    architecture = "amd64",
+    os = "linux",
+)
+
+oci_workload_publish(
+    name = "launcher_fixture_publish",
+    image = ":launcher_fixture_image",
+    repository_path = "src/examples/fixture",
+    workload_name = "fixture",
+)
+
+py_test(
+    name = "publication_launcher_test",
+    srcs = [
+        "publication_launcher_test.py",
+        "workload_cli.py",
+    ],
+    args = [
+        "$(location :launcher_fixture_publish)",
+        "$(location :launcher_fixture_image)/index.json",
+    ],
+    data = [
+        ":launcher_fixture_image",
+        ":launcher_fixture_publish",
+    ],
+)
+
+platform(
+    name = "linux_amd64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+)
+
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
+)
+
+platform_transition_filegroup(
+    name = "ray_torch_compiler_linux_amd64_flat",
+    srcs = ["@ray_torch_compiler_linux_amd64//:flat"],
+    target_platform = ":linux_amd64",
+)
+
+platform_transition_filegroup(
+    name = "ray_torch_compiler_linux_arm64_flat",
+    srcs = ["@ray_torch_compiler_linux_arm64//:flat"],
+    target_platform = ":linux_arm64",
+)
+
+pkg_tar(
+    name = "ray_torch_compiler_linux_amd64_unmerged_layer",
+    visibility = ["//src:__subpackages__"],
+    deps = [":ray_torch_compiler_linux_amd64_flat"],
+)
+
+pkg_tar(
+    name = "ray_torch_compiler_linux_arm64_unmerged_layer",
+    visibility = ["//src:__subpackages__"],
+    deps = [":ray_torch_compiler_linux_arm64_flat"],
+)
+
+py_binary(
+    name = "usrmerged_tar",
+    srcs = ["usrmerged_tar.py"],
+)
+
+py_binary(
+    name = "pure_wheel_tar",
+    srcs = ["pure_wheel_tar.py"],
+)
+
+py_test(
+    name = "pure_wheel_tar_test",
+    srcs = [
+        "pure_wheel_tar.py",
+        "pure_wheel_tar_test.py",
+    ],
+)
+
+genrule(
+    name = "ray_otel_layer",
+    srcs = [
+        "@python_deps//opentelemetry_api:whl",
+        "@python_deps//opentelemetry_exporter_http_transport:whl",
+        "@python_deps//opentelemetry_exporter_otlp_common:whl",
+        "@python_deps//opentelemetry_exporter_otlp_proto_common:whl",
+        "@python_deps//opentelemetry_exporter_otlp_proto_http:whl",
+        "@python_deps//opentelemetry_exporter_prometheus:whl",
+        "@python_deps//opentelemetry_proto:whl",
+        "@python_deps//opentelemetry_sdk:whl",
+        "@python_deps//opentelemetry_semantic_conventions:whl",
+    ],
+    outs = ["ray_otel_layer.tar"],
+    cmd = "$(location :pure_wheel_tar) $@ $(SRCS)",
+    tools = [":pure_wheel_tar"],
+    visibility = ["//src:__subpackages__"],
+)
+
+py_test(
+    name = "usrmerged_tar_test",
+    srcs = [
+        "usrmerged_tar.py",
+        "usrmerged_tar_test.py",
+    ],
+    main = "usrmerged_tar_test.py",
+)
+
+genrule(
+    name = "ray_torch_compiler_linux_amd64_layer",
+    srcs = [":ray_torch_compiler_linux_amd64_unmerged_layer"],
+    outs = ["ray_torch_compiler_linux_amd64_layer.tar"],
+    cmd = "$(location :usrmerged_tar) $(location :ray_torch_compiler_linux_amd64_unmerged_layer) $@",
+    tools = [":usrmerged_tar"],
+    visibility = ["//src:__subpackages__"],
+)
+
+genrule(
+    name = "ray_torch_compiler_linux_arm64_layer",
+    srcs = [":ray_torch_compiler_linux_arm64_unmerged_layer"],
+    outs = ["ray_torch_compiler_linux_arm64_layer.tar"],
+    cmd = "$(location :usrmerged_tar) $(location :ray_torch_compiler_linux_arm64_unmerged_layer) $@",
+    tools = [":usrmerged_tar"],
+    visibility = ["//src:__subpackages__"],
+)
+
+python_wheel_site_packages(
+    name = "ray_torch_runtime_linux_amd64",
+    wheels = [
+        "@ray_torch_linux_amd64//:files",
+        "@ray_torch_mpmath//:files",
+        "@ray_torch_networkx//:files",
+        "@ray_torch_redis//:files",
+        "@ray_torch_sympy//:files",
+    ],
+)
+
+python_wheel_site_packages(
+    name = "ray_torch_runtime_linux_arm64",
+    wheels = [
+        "@ray_torch_linux_arm64//:files",
+        "@ray_torch_mpmath//:files",
+        "@ray_torch_networkx//:files",
+        "@ray_torch_redis//:files",
+        "@ray_torch_sympy//:files",
+    ],
+)
+
+pkg_tar(
+    name = "ray_torch_runtime_linux_amd64_layer",
+    srcs = [":ray_torch_runtime_linux_amd64"],
+    visibility = ["//src:__subpackages__"],
+)
+
+pkg_tar(
+    name = "ray_torch_runtime_linux_arm64_layer",
+    srcs = [":ray_torch_runtime_linux_arm64"],
+    visibility = ["//src:__subpackages__"],
+)
+
+# LINT.IfChange(ray-torch-runtime-wheels)
+oci_image(
+    name = "ray_torch_base_linux_amd64",
+    base = "@ray_base_linux_amd64",
+    tars = [
+        ":ray_torch_compiler_linux_amd64_layer",
+        ":ray_torch_runtime_linux_amd64_layer",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+oci_image(
+    name = "ray_torch_base_linux_arm64_v8",
+    base = "@ray_base_linux_arm64_v8",
+    tars = [
+        ":ray_torch_compiler_linux_arm64_layer",
+        ":ray_torch_runtime_linux_arm64_layer",
+    ],
+    visibility = ["//visibility:public"],
+)
+# LINT.ThenChange(//MODULE.bazel:ray-torch-runtime-wheels)
+
+py_test(
+    name = "ray_torch_base_structure_test",
+    srcs = ["image_structure_test.py"],
+    args = [
+        "$(rootpath :ray_torch_base_linux_amd64)",
+        "$(rootpath :ray_torch_base_linux_arm64_v8)",
+    ],
+    data = [
+        ":ray_torch_base_linux_amd64",
+        ":ray_torch_base_linux_arm64_v8",
+    ],
+    main = "image_structure_test.py",
+    # LINT.IfChange(layer-workers)
+    tags = ["cpu:4"],
+    # LINT.ThenChange(//src/bazel/rules/oci/image_structure_test.py:layer-workers)
+    deps = ["@dev_python_deps//pyyaml"],
+)
+
+oci_load(
+    name = "ray_torch_base_linux_amd64_load",
+    image = ":ray_torch_base_linux_amd64",
+    repo_tags = ["ray-torch-base:bazel-load-linux-amd64"],
+    tags = ["manual"],
+)
+
+oci_load(
+    name = "ray_torch_base_linux_arm64_load",
+    image = ":ray_torch_base_linux_arm64_v8",
+    repo_tags = ["ray-torch-base:bazel-load-linux-arm64"],
+    tags = ["manual"],
+)
+
+py_test(
+    name = "runtime_import_acceptance",
+    timeout = "long",
+    srcs = ["runtime_import_acceptance_test.py"],
+    args = [
+        "$(rootpath :runtime_import_acceptance.py)",
+        "torch",
+        "$(rootpath :ray_torch_base_linux_amd64)",
+        "ray-torch-base:bazel-load-linux-amd64",
+        "linux/amd64",
+        "$(rootpath :ray_torch_base_linux_arm64_v8)",
+        "ray-torch-base:bazel-load-linux-arm64",
+        "linux/arm64",
+    ],
+    data = [
+        ":ray_torch_base_linux_amd64",
+        ":ray_torch_base_linux_arm64_v8",
+        ":runtime_import_acceptance.py",
+    ],
+    env_inherit = [
+        "DOCKER_CERT_PATH",
+        "DOCKER_CONFIG",
+        "DOCKER_CONTEXT",
+        "DOCKER_HOST",
+        "DOCKER_TLS_VERIFY",
+        "HOME",
+    ],
+    main = "runtime_import_acceptance_test.py",
+    tags = [
+        "manual",
+        "no-remote-exec",
+        "no-sandbox",
+        "requires-docker",
+        "requires-network",
+    ],
+)
+
+py_test(
+    name = "workload_cli_test",
+    srcs = [
+        "workload_cli.py",
+        "workload_cli_test.py",
+    ],
+    main = "workload_cli_test.py",
+)
+
+sh_test(
+    name = "release_sbom",
+    size = "medium",
+    srcs = ["release_sbom_test.sh"],
+    args = [
+        "$(location //src/bazel/tools:jq)",
+        "$(location //src/bazel/tools:yq)",
+    ],
+    data = [
+        ":generate_sbom.sh",
+        "//src/bazel/checks:license_images/exceptions.yaml",
+        "//src/bazel/checks:license_images/ray-base-exception.json",
+        "//src/bazel/tools:jq",
+        "//src/bazel/tools:yq",
+    ],
+    tags = ["no-sandbox"],
+)
+
+third_party_image(
+    name = "fixture_third_party_multiarch",
+    base = None,
+    entrypoint = ["/bin/sh"],
+    env = {
+        "TEST_ENV": "multiarch_ok",
+    },
+    repository = "test/third_party_multiarch",
+)
+
+third_party_image(
+    name = "fixture_third_party_singlearch",
+    architecture = "amd64",
+    base = None,
+    cmd = ["hello"],
+    created = "1970-01-01T00:00:00Z",
+    env = {
+        "TEST_ENV": "singlearch_ok",
+    },
+    repository = "test/third_party_singlearch",
+)
+
+py_test(
+    name = "third_party_image_macro_test",
+    srcs = ["third_party_image_macro_test.py"],
+    args = [
+        "$(rootpath :fixture_third_party_multiarch)",
+        "$(rootpath :fixture_third_party_singlearch)",
+        "$(rootpath :fixture_third_party_multiarch_publish)",
+        "$(rootpath :fixture_third_party_singlearch_publish)",
+    ],
+    data = [
+        ":fixture_third_party_multiarch",
+        ":fixture_third_party_multiarch_publish",
+        ":fixture_third_party_singlearch",
+        ":fixture_third_party_singlearch_publish",
+    ],
+)
+
+package_sources()

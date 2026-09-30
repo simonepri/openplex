@@ -1,0 +1,5 @@
+"""Export build graph coverage rules ensuring all repository files are tracked in Bazel targets."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()

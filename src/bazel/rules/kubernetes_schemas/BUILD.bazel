@@ -1,0 +1,5 @@
+"""Export repository rules providing offline Kubernetes OpenAPI JSON schemas for manifest validation."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()

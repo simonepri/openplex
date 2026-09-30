@@ -1,0 +1,23 @@
+# Configure kube-linter rules enforcing security posture and manifest integrity on rendered Kubernetes objects.
+
+checks:
+  addAllBuiltIn: true
+  exclude:
+    # keep-sorted start
+    - access-to-create-pods
+    - dangling-networkpolicy
+    - dangling-networkpolicypeer-podselector
+    - dnsconfig-options
+    - env-value-from
+    - exposed-services
+    - minimum-three-replicas
+    - no-node-affinity
+    - non-isolated-pod
+    - priority-class-name
+    - required-annotation-email
+    - required-label-owner
+    - restart-policy
+    - schema-validation
+    - sorted-keys
+    - use-namespace
+    # keep-sorted end
