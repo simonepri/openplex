@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Closed contract for cloud operator OAuth/Connector resources or a plain local tailscaled subnet router.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mode",
+    "clusterName",
+    "serviceCIDR",
+    "internalDomain",
+    "resolverRoutes",
+    "egress",
+    "cloud",
+    "image"
+  ],
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["disabled", "cloud-secret", "cloud-connector", "local-router"]
+    },
+    "clusterName": {
+      "type": "string",
+      "maxLength": 53,
+      "pattern": "^(|(?:cell|ctrl)-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)$"
+    },
+    "serviceCIDR": {
+      "type": "string",
+      "pattern": "^(|(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/(?:[0-9]|[12][0-9]|3[0-2]))$"
+    },
+    "internalDomain": { "type": "string" },
+    "resolverRoutes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32$" }
+    },
+    "egress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "gatewayIPv4", "kubernetesAPIs"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "gatewayIPv4": { "type": "string", "pattern": "^(|(?:[0-9]{1,3}\\.){3}[0-9]{1,3})$" },
+        "kubernetesAPIs": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^(?:cell|ctrl)-(?:aws|gcp)-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ipv4", "serviceName"],
+            "properties": {
+              "ipv4": { "type": "string", "format": "ipv4" },
+              "serviceName": {
+                "type": "string",
+                "pattern": "^svc:kube-api-(?:cell|ctrl)-(?:aws|gcp)-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "cloud": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["secretStoreName", "oauthRemoteKey"],
+      "properties": {
+        "secretStoreName": { "type": "string", "minLength": 1 },
+        "oauthRemoteKey": { "type": "string" }
+      }
+    },
+    "local": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "loginServer": {
+          "type": "string",
+          "pattern": "^(|https://headscale\\.[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?)$"
+        },
+        "authSecretName": { "type": "string", "pattern": "^(|headscale-preauth)$" },
+        "caConfigMapName": { "type": "string", "pattern": "^(|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)$" },
+        "recordName": {
+          "type": "string",
+          "pattern": "^(|headscale-preauth-(?:cell|ctrl)-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)$"
+        },
+        "runtimeForwardTarget": {
+          "type": "string",
+          "pattern": "^(|headscale-workspace-runtime\\.headscale\\.svc\\.cluster\\.local:8444)$"
+        },
+        "secretStoreName": { "type": "string", "pattern": "^(|local-secret-records)$" }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "digest"],
+      "properties": {
+        "repository": { "type": "string", "const": "ghcr.io/tailscale/tailscale" },
+        "tag": { "type": "string", "const": "v1.102.5" },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "local-router" } } },
+      "then": {
+        "required": ["local"],
+        "properties": {
+          "local": {
+            "required": [
+              "loginServer",
+              "authSecretName",
+              "caConfigMapName",
+              "recordName",
+              "runtimeForwardTarget",
+              "secretStoreName"
+            ],
+            "properties": {
+              "loginServer": {
+                "pattern": "^https://headscale\\.[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$"
+              },
+              "authSecretName": { "const": "headscale-preauth" },
+              "caConfigMapName": { "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+              "secretStoreName": { "const": "local-secret-records" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

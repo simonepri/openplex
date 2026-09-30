@@ -1,0 +1,33 @@
+# Exercises managed control fixture proving Argo and Coder reach private Kubernetes APIs through stable Tailscale Service addresses.
+
+mode: cloud-connector
+clusterName: ctrl-aws-usw2
+serviceCIDR: 172.16.0.0/20
+internalDomain: ctrl-aws-usw2.c.corp.local.internal
+resolverRoutes: [10.0.1.53/32, 10.0.2.53/32]
+egress:
+  enabled: true
+  gatewayIPv4: ""
+  kubernetesAPIs:
+    cell-aws-usw2:
+      ipv4: 100.100.100.8
+      serviceName: svc:kube-api-cell-aws-usw2
+    cell-gcp-usw1:
+      ipv4: 100.100.100.9
+      serviceName: svc:kube-api-cell-gcp-usw1
+    ctrl-aws-usw2:
+      ipv4: 100.100.100.2
+      serviceName: svc:kube-api-ctrl-aws-usw2
+cloud:
+  secretStoreName: runtime-secrets
+  oauthRemoteKey: tailscale-operator-oauth-ctrl-aws-usw2
+local:
+  loginServer: https://headscale.invalid
+  authSecretName: headscale-preauth
+  recordName: ""
+  runtimeForwardTarget: ""
+  secretStoreName: local-secret-records
+image:
+  repository: ghcr.io/tailscale/tailscale
+  tag: v1.102.5
+  digest: sha256:2667499ed87ae29218f292556ba062918402dd5e92e93637af14867e4df12dd3

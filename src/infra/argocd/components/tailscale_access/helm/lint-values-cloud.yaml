@@ -1,0 +1,19 @@
+# Exercises cloud lint fixture proving ExternalSecret and Connector modes use only the canonical service CIDR and installation-selected split-DNS domain.
+
+mode: cloud-connector
+clusterName: cell-aws-usw2
+serviceCIDR: 172.17.0.0/20
+internalDomain: cell-aws-usw2.c.corp.local.internal
+resolverRoutes: [10.16.1.53/32, 10.16.2.53/32]
+cloud:
+  secretStoreName: runtime-secrets
+  oauthRemoteKey: tailscale-operator-oauth-cell-aws-usw2
+local:
+  loginServer: https://headscale.invalid
+  authSecretName: headscale-preauth
+  recordName: ""
+  secretStoreName: local-secret-records
+image:
+  repository: ghcr.io/tailscale/tailscale
+  tag: v1.102.5
+  digest: sha256:2667499ed87ae29218f292556ba062918402dd5e92e93637af14867e4df12dd3

@@ -1,0 +1,57 @@
+// Defines Tailscale SaaS ACL policy for Kubernetes operators and subnet routers.
+
+{
+  "tagOwners": {
+    "tag:k8s-operator": ["autogroup:admin"],
+    "tag:k8s-egress": ["tag:k8s-operator"],
+    "tag:k8s": ["tag:k8s-operator"],
+    "tag:kube-api": ["autogroup:admin"],
+    "tag:subnet-router": ["autogroup:admin"],
+%{ for cluster_name, router_tag in kubernetes_api_router_tags ~}
+    "${router_tag}": ["autogroup:admin"],
+%{ endfor ~}
+  },
+  "autoApprovers": {
+    "routes": {
+      "172.16.0.0/12": ["tag:k8s", "tag:subnet-router"],
+%{ for route in resolver_route_cidrs ~}
+      "${route}": ["tag:k8s", "tag:subnet-router"],
+%{ endfor ~}
+    },
+    "services": {
+%{ for cluster_name, router_tag in kubernetes_api_router_tags ~}
+      "svc:kube-api-${cluster_name}": ["${router_tag}"],
+%{ endfor ~}
+    },
+  },
+  "grants": [
+    {
+      "src": ["autogroup:member"],
+      "dst": ["autogroup:self"],
+      "ip": ["tcp:2222", "tcp:6767"],
+    },
+    {
+      "src": ["autogroup:member", "tag:k8s-egress"],
+      "dst": ["tag:kube-api"],
+      "ip": ["tcp:443"],
+    },
+    {
+      "src": ["autogroup:member"],
+      "dst": [
+%{ for route in resolver_route_cidrs ~}
+        "${route}",
+%{ endfor ~}
+      ],
+      "ip": ["tcp:53", "udp:53"],
+    },
+    {
+      "src": ["autogroup:member", "tag:k8s-egress"],
+      "dst": [
+%{ for address in private_gateway_ipv4s ~}
+        "${address}/32",
+%{ endfor ~}
+      ],
+      "ip": ["tcp:443"],
+    },
+  ],
+}
