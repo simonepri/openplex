@@ -1,0 +1,89 @@
+"""Builds review engine libraries for evaluation matrix scoring, prompt compilation, and GitHub reporting."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "__init__",
+    srcs = ["__init__.py"],
+)
+
+py_library(
+    name = "agents",
+    srcs = ["agents.py"],
+    deps = [
+        ":api_keys",
+        ":report",
+    ],
+)
+
+py_library(
+    name = "api_keys",
+    srcs = ["api_keys.py"],
+)
+
+py_library(
+    name = "matrix",
+    srcs = ["matrix.py"],
+    pyi_deps = ["//src/infra/tools/review/context:rules_index"],
+)
+
+py_library(
+    name = "prompt",
+    srcs = ["prompt.py"],
+    pyi_deps = [
+        "//src/infra/tools/review/context:bazel_diff",
+        "//src/infra/tools/review/context:codegraph",
+        "//src/infra/tools/review/context:git_diff",
+        "//src/infra/tools/review/context:rules_index",
+        ":matrix",
+        ":rubrics",
+    ],
+    deps = [":report"],
+)
+
+py_library(
+    name = "report",
+    srcs = ["report.py"],
+)
+
+py_library(
+    name = "rubrics",
+    srcs = ["rubrics.py"],
+    pyi_deps = ["//src/infra/tools/review/context:rules_index"],
+)
+
+py_library(
+    name = "runner",
+    srcs = ["runner.py"],
+    deps = [
+        ":agents",
+        ":matrix",
+        ":prompt",
+        ":report",
+        ":rubrics",
+        "//src/infra/tools/review/context:bazel_diff",
+        "//src/infra/tools/review/context:codegraph",
+        "//src/infra/tools/review/context:git_diff",
+        "//src/infra/tools/review/context:rules_index",
+    ],
+)
+
+py_binary(
+    name = "github_comment",
+    srcs = ["github_comment.py"],
+    deps = [":report"],
+)
+
+py_test(
+    name = "api_keys_test",
+    srcs = ["api_keys_test.py"],
+    deps = [":api_keys"],
+)
+
+py_test(
+    name = "agents_test",
+    srcs = ["agents_test.py"],
+    deps = [":agents"],
+)
