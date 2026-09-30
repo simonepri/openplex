@@ -1,0 +1,76 @@
+"""Define the generators and drift tests for the OpenPlex logo and the readme overview graphic."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "logo_generator",
+    # keep
+    srcs = ["logo.py"],
+    # keep
+    data = [
+        "wordmark.svg",
+        "//src/infra/docs:sources",
+    ],
+    imports = ["."],
+    visibility = ["//visibility:private"],
+)
+
+py_binary(
+    name = "logo",
+    # keep
+    srcs = ["logo.py"],
+    main = "logo.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+)
+
+# Fails when an icon or the wordmark changed without regenerating the logo.
+py_test(
+    name = "logo_test",
+    size = "small",
+    # keep
+    srcs = ["logo_test.py"],
+    imports = ["."],
+    main = "logo_test.py",
+    precompile = "disabled",
+    # keep
+    deps = [":logo_generator"],
+)
+
+py_library(
+    name = "overview_generator",
+    # keep
+    srcs = ["overview.py"],
+    imports = ["."],
+    visibility = ["//visibility:private"],
+)
+
+py_binary(
+    name = "overview",
+    # keep
+    srcs = ["overview.py"],
+    main = "overview.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+)
+
+# Fails when the generator changed without regenerating the graphic.
+py_test(
+    name = "overview_test",
+    size = "small",
+    # keep
+    srcs = ["overview_test.py"],
+    # keep
+    data = ["//src/infra/docs:sources"],
+    imports = ["."],
+    main = "overview_test.py",
+    precompile = "disabled",
+    # keep
+    deps = [":overview_generator"],
+)

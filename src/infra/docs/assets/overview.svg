@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480">
+<title>Clone the repository, then dev workspaces, builds, and deployments serve every kind of workload</title>
+<defs>
+<filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#1c1917" flood-opacity="0.08"/></filter>
+<marker id="head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 8 5 L 1 9" fill="none" stroke="#b3aa94" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1280" height="480" rx="24" fill="#fdfbf4"/>
+<rect x="18.0" y="40" width="284" height="190" rx="16" fill="#1c1917"/>
+<circle cx="42.0" cy="64" r="6" fill="#ff5f57"/>
+<circle cx="62.0" cy="64" r="6" fill="#febc2e"/>
+<circle cx="82.0" cy="64" r="6" fill="#28c840"/>
+<text x="42.0" y="116" font-family="'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace" font-size="16" xml:space="preserve"><tspan fill="#9ee6b8" font-weight="500">$ git clone</tspan><tspan fill="#fdfbf4"> …/openplex</tspan></text>
+<text x="42.0" y="150" font-family="'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace" font-size="16" xml:space="preserve"><tspan fill="#9ee6b8" font-weight="500">$ mise run</tspan><tspan fill="#fdfbf4"> //src/infra:up</tspan></text>
+<text x="42.0" y="198.0" font-family="'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#a8a29e" text-anchor="start"># three clusters, one laptop</text>
+<path d="M 310.0 135.0 H 344.0" fill="none" stroke="#b3aa94" stroke-width="2.5" marker-end="url(#head)"/>
+<clipPath id="dev-workspaces"><rect x="346.0" y="40" width="196" height="190" rx="16"/></clipPath>
+<rect x="346.0" y="40" width="196" height="190" rx="16" fill="#ffffff" stroke="#c9bfa6" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="346.0" y="40" width="196" height="6" fill="#477bc5" clip-path="url(#dev-workspaces)"/>
+<rect x="370.0" y="70" width="34" height="26" rx="5" fill="none" stroke="#477bc5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="370.0" y1="78" x2="404.0" y2="78" fill="none" stroke="#477bc5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 378.0 85 l 5 4 l -5 4 M 387.0 93 h 8" fill="none" stroke="#477bc5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="370.0" y="142.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#1c1917" text-anchor="start">Dev workspaces</text>
+<text x="370.0" y="170.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#6f6a63" text-anchor="start">Your editor, terminal, files,</text>
+<text x="370.0" y="192.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#6f6a63" text-anchor="start">and agents, in the cloud.</text>
+<path d="M 550.0 135.0 H 584.0" fill="none" stroke="#b3aa94" stroke-width="2.5" marker-end="url(#head)"/>
+<clipPath id="builds"><rect x="586.0" y="40" width="196" height="190" rx="16"/></clipPath>
+<rect x="586.0" y="40" width="196" height="190" rx="16" fill="#ffffff" stroke="#c9bfa6" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="586.0" y="40" width="196" height="6" fill="#ea580c" clip-path="url(#builds)"/>
+<rect x="610.0" y="86" width="16" height="12" rx="3" fill="none" stroke="#ea580c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="628.0" y="86" width="16" height="12" rx="3" fill="none" stroke="#ea580c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="619.0" y="70" width="16" height="12" rx="3" fill="none" stroke="#ea580c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="610.0" y="142.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#1c1917" text-anchor="start">Builds</text>
+<text x="610.0" y="170.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#6f6a63" text-anchor="start">Hermetic and remote-cached,</text>
+<text x="610.0" y="192.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#6f6a63" text-anchor="start">from laptop to CI.</text>
+<path d="M 790.0 135.0 H 824.0" fill="none" stroke="#b3aa94" stroke-width="2.5" marker-end="url(#head)"/>
+<clipPath id="ai-review"><rect x="826.0" y="40" width="196" height="190" rx="16"/></clipPath>
+<rect x="826.0" y="40" width="196" height="190" rx="16" fill="#ffffff" stroke="#c9bfa6" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="826.0" y="40" width="196" height="6" fill="#0f766e" clip-path="url(#ai-review)"/>
+<rect x="850.0" y="70" width="34" height="28" rx="8" fill="none" stroke="#0f766e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="861.0" cy="82" r="2.5" fill="#0f766e"/>
+<circle cx="873.0" cy="82" r="2.5" fill="#0f766e"/>
+<path d="M 860.0 90 q 7 5 14 0" fill="none" stroke="#0f766e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="850.0" y="142.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#1c1917" text-anchor="start">AI review</text>
+<text x="850.0" y="170.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#6f6a63" text-anchor="start">Every pull request checked</text>
+<text x="850.0" y="192.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#6f6a63" text-anchor="start">against your own rules.</text>
+<path d="M 1030.0 135.0 H 1064.0" fill="none" stroke="#b3aa94" stroke-width="2.5" marker-end="url(#head)"/>
+<clipPath id="deployments"><rect x="1066.0" y="40" width="196" height="190" rx="16"/></clipPath>
+<rect x="1066.0" y="40" width="196" height="190" rx="16" fill="#ffffff" stroke="#c9bfa6" stroke-width="1.5" filter="url(#shadow)"/>
+<rect x="1066.0" y="40" width="196" height="6" fill="#4b3e8e" clip-path="url(#deployments)"/>
+<path d="M 1090.0 84 h 14 m -5 -6 l 6 6 l -6 6" fill="none" stroke="#4b3e8e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="1110.0" y="70" width="12" height="12" rx="3" fill="none" stroke="#4b3e8e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="1110.0" y="86" width="12" height="12" rx="3" fill="none" stroke="#4b3e8e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1090.0" y="142.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="23" font-weight="600" fill="#1c1917" text-anchor="start">Deployments</text>
+<text x="1090.0" y="170.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#6f6a63" text-anchor="start">Pull requests promoted</text>
+<text x="1090.0" y="192.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#6f6a63" text-anchor="start">to every cluster.</text>
+<path d="M 342.0 300 H 1164.0" fill="none" stroke="#b3aa94" stroke-width="2.5" stroke-linecap="round"/>
+<path d="M 444.0 230 V 300" fill="none" stroke="#b3aa94" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="444.0" cy="300" r="5" fill="#b3aa94"/>
+<path d="M 684.0 230 V 300" fill="none" stroke="#b3aa94" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="684.0" cy="300" r="5" fill="#b3aa94"/>
+<path d="M 924.0 230 V 300" fill="none" stroke="#b3aa94" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="924.0" cy="300" r="5" fill="#b3aa94"/>
+<path d="M 1164.0 230 V 300" fill="none" stroke="#b3aa94" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="1164.0" cy="300" r="5" fill="#b3aa94"/>
+<path d="M 342.0 300 V 378" fill="none" stroke="#b3aa94" stroke-width="2.5" stroke-linecap="round" marker-end="url(#head)"/>
+<circle cx="342.0" cy="300" r="5" fill="#b3aa94"/>
+<path d="M 640.0 300 V 378" fill="none" stroke="#b3aa94" stroke-width="2.5" stroke-linecap="round" marker-end="url(#head)"/>
+<circle cx="640.0" cy="300" r="5" fill="#b3aa94"/>
+<path d="M 938.0 300 V 378" fill="none" stroke="#b3aa94" stroke-width="2.5" stroke-linecap="round" marker-end="url(#head)"/>
+<circle cx="938.0" cy="300" r="5" fill="#b3aa94"/>
+<text x="789.0" y="328.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="500" fill="#6f6a63" text-anchor="middle">wired to work as one</text>
+<rect x="207.0" y="380" width="270" height="60" rx="29" fill="#ffffff" stroke="#c9bfa6" stroke-width="1.5" filter="url(#shadow)"/>
+<circle cx="237.0" cy="410.0" r="7" fill="#2c9560"/>
+<text x="257.0" y="416.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="600" fill="#1c1917" text-anchor="start">Services</text>
+<rect x="505.0" y="380" width="270" height="60" rx="29" fill="#ffffff" stroke="#c9bfa6" stroke-width="1.5" filter="url(#shadow)"/>
+<circle cx="535.0" cy="410.0" r="7" fill="#2c9560"/>
+<text x="555.0" y="416.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="600" fill="#1c1917" text-anchor="start">Data processing</text>
+<rect x="803.0" y="380" width="270" height="60" rx="29" fill="#ffffff" stroke="#c9bfa6" stroke-width="1.5" filter="url(#shadow)"/>
+<circle cx="833.0" cy="410.0" r="7" fill="#2c9560"/>
+<text x="853.0" y="416.0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="600" fill="#1c1917" text-anchor="start">ML training &amp; serving</text>
+</svg>
