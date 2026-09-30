@@ -1,0 +1,71 @@
+# Configures complete representative inputs for strict Helm lint of static, redirected, selected, rejected, and inventory-fan-out routes.
+
+phase: application
+exposure: private
+capabilities: {buildbuddy: true}
+atlantisEnabled: false
+gatewayOIDC: {}
+target:
+  name: ctrl-lint
+  provider: aws
+  role: ctrl
+gateway:
+  aliasDomain: lint.invalid
+  baseDomain: ctrl-lint.c.lint.invalid
+  canonicalScheme: https
+  httpRedirect: true
+  name: public
+  namespace: envoy-gateway-system
+routes:
+  - name: static
+    phase: application
+    auth: tailnet
+    exposure: private
+    scale: warm
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: team-fixture, service: static, port: 80}
+    entrypoints:
+      - path: /
+        backend: {namespace: team-fixture, service: static-entrypoint, port: 8080}
+    redirects: [{from: /old, to: /new, statusCode: 302}]
+  - name: zero
+    phase: application
+    auth: tailnet
+    exposure: private
+    scale: zero
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: team-fixture, service: zero, port: 80, podSelector: {app.kubernetes.io/name: zero}}
+  - name: api
+    phase: application
+    auth: api-key
+    exposure: private
+    apiKey: {header: x-api-key, record: lint/api-keys, sanitize: true, secretStore: runtime-secrets}
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: team-fixture, service: api, port: 80}
+  - name: argocd
+    phase: application
+    auth: oidc-native
+    exposure: private
+    oidc: {mode: native, contract: argocd}
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: argocd, service: argocd-server, port: 80}
+  - name: canonical-proxy
+    phase: application
+    auth: oidc-proxy
+    exposure: private
+    canonicalHostOnly: true
+    oidc:
+      mode: proxy
+      clientIDProperty: canonical_client_id
+      clientSecretProperty: canonical_client_secret
+      cookieSecretProperty: canonical_cookie_secret
+      externalURLProperty: canonical_external_url
+      secretName: canonical-oidc
+      upstream: {podSelector: {app.kubernetes.io/name: canonical}, port: 4141}
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: canonical, service: canonical, port: 80}

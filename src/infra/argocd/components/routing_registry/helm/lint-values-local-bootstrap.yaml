@@ -1,0 +1,18 @@
+# Exercises the Coder route's local bootstrap ownership in the same Argo CD Application that reconciles Coder and runs its PostSync publisher.
+
+phase: bootstrap
+exposure: private
+capabilities: {buildbuddy: false}
+atlantisEnabled: false
+gatewayOIDC: {}
+target:
+  name: ctrl-eaws-lh1
+  provider: floci
+  role: ctrl
+gateway:
+  aliasDomain: ""
+  baseDomain: ctrl-eaws-lh1.c.corp.local.internal
+  canonicalScheme: https
+  httpRedirect: true
+  name: private-access
+  namespace: envoy-gateway-system

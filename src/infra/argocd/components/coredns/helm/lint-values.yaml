@@ -1,0 +1,30 @@
+# Default lint fixture for CoreDNS chart validation.
+
+provider: floci
+cluster: {name: cell-eaws-lh1, role: cell}
+accessAliasDomain: c.corp.local.internal
+control:
+  name: ctrl-eaws-lh1
+  gatewayIPv4: 172.31.0.11
+  headscaleIPv4: 172.19.255.23
+  originRegistryIPv4: 172.19.255.22
+internalDomain: c.corp.local.internal
+cellDomains:
+  cell-eaws-lh1: c.corp.local.internal
+cellIPv4s:
+  cell-eaws-lh1: 172.31.16.11
+privateAccess:
+  baseDomain: cell-eaws-lh1.c.corp.local.internal
+  coderAppsWildcard: false
+  gatewayIPv4: 172.31.16.11
+  recordLabels: [coder-snapshots, kube-oidc-proxy, ray, snapshots, svelte-web, velero-ui]
+rewrites:
+  buildbuddy-events.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  buildbuddy-events.ctrl-eaws-lh1.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  buildbuddy.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  coder.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  coder.ctrl-eaws-lh1.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  dragonfly-manager.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  dragonfly-manager.ctrl-eaws-lh1.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  observability.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  observability.ctrl-eaws-lh1.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local

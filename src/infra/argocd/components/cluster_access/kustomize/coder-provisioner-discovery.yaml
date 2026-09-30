@@ -1,0 +1,29 @@
+# ClusterRole granting Coder provisioners read-only discovery of CRDs and cluster capabilities.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: coder-provisioner-discovery
+  labels:
+    app.kubernetes.io/component: coder-provisioner
+    app.kubernetes.io/managed-by: argocd
+rules:
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: coder-provisioner-discovery
+  labels:
+    app.kubernetes.io/component: coder-provisioner
+    app.kubernetes.io/managed-by: argocd
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: cluster:coder-provisioners
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: coder-provisioner-discovery

@@ -1,0 +1,55 @@
+# Exercises the tailnet-only data plane and its fixed IPv4 Service address.
+
+foundation:
+  manageNamespace: false
+  namespaceLabels:
+    ray-dashboard-routes: "true"
+gateway:
+  enabled: true
+  canonicalScheme: https
+  name: private-access
+  namespace: envoy-gateway-system
+  className: envoy-gateway-private-access
+  aliasDomain: corp.local.internal
+  baseDomain: cell-eaws-lh1.c.corp.local.internal
+  allowedNamespaces: [envoy-gateway-system, keda-system, s3-system]
+  listeners:
+    http: {enabled: true, redirectToHTTPS: true}
+    https:
+      enabled: true
+      hostname: "*.cell-eaws-lh1.c.corp.local.internal"
+      certificateSecret: private-access-tls
+      aliasCertificateSecret: private-access-alias-tls
+    kubeOidcTls:
+      enabled: true
+      hostname: kube-oidc-proxy.cell-eaws-lh1.c.corp.local.internal
+    s3Http: {enabled: true}
+certificate:
+  enabled: true
+  issuerRef: {group: cert-manager.io, kind: Issuer, name: private-access-local-ca}
+  caIssuer: {enabled: true, secretName: cluster-local-ca}
+proxy:
+  backendEgress:
+    - namespace: keda-system
+      podSelector:
+        app.kubernetes.io/component: interceptor
+        app.kubernetes.io/instance: keda-http
+        app.kubernetes.io/name: http-add-on
+      ports: [8080]
+    - namespace: s3-system
+      podSelector:
+        app.kubernetes.io/name: s3-gateway
+      ports: [8080]
+  deployment:
+    name: private-access-gateway
+  service:
+    name: private-access-gateway
+    type: ClusterIP
+    clusterIPv4: 172.31.16.11
+    loadBalancerClass: ""
+    annotations: {}
+    externalTrafficPolicy: Cluster
+    ipFamilyPolicy: SingleStack
+    ipFamilies: [IPv4]
+    loadBalancerSourceRanges: []
+    nodePorts: {http: 0, tls: 0}

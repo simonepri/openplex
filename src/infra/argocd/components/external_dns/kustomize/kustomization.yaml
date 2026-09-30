@@ -1,0 +1,9 @@
+# Kustomize entrypoint for external-dns companion network policy.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  # keep-sorted end

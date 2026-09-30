@@ -1,0 +1,14 @@
+{{- /* Renders optional namespace-scoped CA issuer for internal gateway TLS certificates. */ -}}
+
+{{- if .Values.certificate.caIssuer.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .Values.certificate.issuerRef.name }}
+  namespace: {{ .Values.gateway.namespace }}
+  labels:
+    {{- include "envoy-gateway-instance.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: {{ .Values.certificate.caIssuer.secretName }}
+{{- end }}

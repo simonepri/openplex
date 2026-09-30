@@ -1,0 +1,23 @@
+# Lint fixture for Floci control-plane CoreDNS configuration and access aliases.
+
+provider: floci
+cluster: {name: ctrl-eaws-lh1, role: ctrl}
+accessAliasDomain: c.corp.local.internal
+publicDomain: corp.local.internal
+control:
+  name: ctrl-eaws-lh1
+  gatewayIPv4: 172.31.0.11
+  headscaleIPv4: 172.19.255.23
+  originRegistryIPv4: 172.19.255.22
+internalDomain: c.corp.local.internal
+cellDomains:
+  cell-eaws-lh1: c.corp.local.internal
+cellIPv4s:
+  cell-eaws-lh1: 172.31.16.11
+privateAccess:
+  baseDomain: ctrl-eaws-lh1.c.corp.local.internal
+  coderAppsWildcard: true
+  gatewayIPv4: 172.31.0.11
+  recordLabels: [argocd, atlantis, buildbuddy, coder, coder-snapshots, dex, dragonfly-manager, headlamp, kargo, kuberhealthy, observability, parca, signoz]
+rewrites:
+  kube-oidc-proxy.cell-eaws-lh1.c.corp.local.internal: active-cell-private-access.tailscale-system.svc.cluster.local

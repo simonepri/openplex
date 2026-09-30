@@ -1,0 +1,18 @@
+# Exercises the cell-local BuildBuddy cache declaration. Direct cluster traffic must not produce any Gateway API resources.
+
+phase: application
+exposure: public
+capabilities: {buildbuddy: true}
+atlantisEnabled: false
+gatewayOIDC: {}
+target:
+  name: cell-cache-lint
+  provider: aws
+  role: cell
+gateway:
+  aliasDomain: ""
+  baseDomain: cell-cache-lint.c.corp.local.internal
+  canonicalScheme: https
+  httpRedirect: true
+  name: public
+  namespace: envoy-gateway-system

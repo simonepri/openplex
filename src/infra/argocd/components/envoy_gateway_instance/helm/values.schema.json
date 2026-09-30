@@ -1,0 +1,1199 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["certificate", "foundation", "gateway", "proxy"],
+  "properties": {
+    "foundation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "manageNamespace", "namespaceLabels"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "manageNamespace": { "type": "boolean" },
+        "namespaceLabels": {
+          "type": "object",
+          "propertyNames": { "type": "string", "minLength": 1 },
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "certificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caIssuer", "enabled", "issuerRef"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "caIssuer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "secretName"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" }
+          }
+        },
+        "issuerRef": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["group", "kind", "name"],
+          "properties": {
+            "group": { "type": "string" },
+            "kind": {
+              "type": "string",
+              "enum": ["ClusterIssuer", "Issuer"]
+            },
+            "name": { "type": "string" }
+          }
+        }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedNamespaces",
+        "aliasDomain",
+        "baseDomain",
+        "canonicalScheme",
+        "className",
+        "enabled",
+        "listeners",
+        "name",
+        "namespace"
+      ],
+      "properties": {
+        "allowedNamespaces": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "enabled": { "type": "boolean" },
+        "canonicalScheme": {
+          "type": "string",
+          "enum": ["", "http", "https"]
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "namespace": { "type": "string", "minLength": 1 },
+        "className": { "type": "string", "minLength": 1 },
+        "aliasDomain": {
+          "type": "string",
+          "pattern": "^(|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
+        },
+        "baseDomain": { "type": "string" },
+        "listeners": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "atlantisWebhookHttps",
+            "coderApps",
+            "dragonflyManagerTls",
+            "headscaleBootstrapTls",
+            "http",
+            "https",
+            "kubeOidcTls",
+            "s3Http",
+            "s3Https",
+            "tls"
+          ],
+          "properties": {
+            "atlantisWebhookHttps": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["certificateSecret", "enabled", "hostname"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "certificateSecret": { "type": "string" },
+                "hostname": {
+                  "type": "string",
+                  "pattern": "^(|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
+                }
+              }
+            },
+            "coderApps": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["certificateSecret", "enabled", "hostname"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "certificateSecret": { "type": "string" },
+                "hostname": {
+                  "type": "string",
+                  "pattern": "^(|\\*\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)+)$"
+                }
+              }
+            },
+            "dragonflyManagerTls": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "hostname"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "hostname": {
+                  "type": "string",
+                  "pattern": "^(|(?:\\*\\.)?[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
+                }
+              }
+            },
+            "http": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "redirectToHTTPS"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "redirectToHTTPS": { "type": "boolean" }
+              }
+            },
+            "s3Http": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "hostname"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "hostname": { "type": "string", "minLength": 1 }
+              }
+            },
+            "s3Https": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["certificateSecret", "enabled", "hostname"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "certificateSecret": { "type": "string" },
+                "hostname": {
+                  "type": "string",
+                  "pattern": "^(|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
+                }
+              }
+            },
+            "headscaleBootstrapTls": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "hostname"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "hostname": {
+                  "type": "string",
+                  "pattern": "^(|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
+                }
+              }
+            },
+            "https": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["aliasCertificateSecret", "certificateSecret", "enabled", "hostname"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "aliasCertificateSecret": { "type": "string" },
+                "certificateSecret": { "type": "string" },
+                "hostname": {
+                  "type": "string",
+                  "pattern": "^(|(?:\\*\\.)?[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
+                }
+              }
+            },
+            "kubeOidcTls": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "hostname"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "hostname": {
+                  "type": "string",
+                  "pattern": "^(|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
+                }
+              }
+            },
+            "tls": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "hostname"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "hostname": {
+                  "type": "string",
+                  "pattern": "^(|(?:\\*\\.)?[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowGeneralBackendEgress",
+        "autoscaling",
+        "backendEgress",
+        "deployment",
+        "disruptionBudget",
+        "namespace",
+        "service",
+        "telemetry"
+      ],
+      "properties": {
+        "namespace": { "type": "string", "const": "envoy-gateway-system" },
+        "allowGeneralBackendEgress": { "type": "boolean" },
+        "telemetry": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["accessLog"],
+          "properties": {
+            "accessLog": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled"],
+              "properties": {
+                "enabled": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        "backendEgress": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["namespace", "podSelector", "ports"],
+            "properties": {
+              "namespace": {
+                "type": "string",
+                "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+              },
+              "podSelector": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": { "type": "string", "minLength": 1 }
+              },
+              "ports": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+              }
+            }
+          }
+        },
+        "autoscaling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cooldownPeriod",
+            "enabled",
+            "fallback",
+            "maxReplicas",
+            "minReplicas",
+            "pollingInterval",
+            "prometheus"
+          ],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "pollingInterval": { "type": "integer", "minimum": 1 },
+            "cooldownPeriod": { "type": "integer", "minimum": 1 },
+            "maxReplicas": { "type": "integer", "minimum": 1 },
+            "minReplicas": { "type": "integer", "minimum": 1 },
+            "fallback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["failureThreshold", "replicas"],
+              "properties": {
+                "failureThreshold": { "type": "integer", "minimum": 1 },
+                "replicas": { "type": "integer", "minimum": 1 }
+              }
+            },
+            "prometheus": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "activeConnectionsPerReplica",
+                "activeRequestsPerReplica",
+                "bytesPerSecondPerReplica",
+                "cluster",
+                "p95RequestSeconds",
+                "serverAddress"
+              ],
+              "properties": {
+                "activeConnectionsPerReplica": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+                "activeRequestsPerReplica": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+                "bytesPerSecondPerReplica": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+                "p95RequestSeconds": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+                "cluster": { "type": "string" },
+                "serverAddress": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
+        "deployment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image", "name", "resources"],
+          "properties": {
+            "affinity": { "type": "object" },
+            "image": {
+              "type": "string",
+              "pattern": "^[^\\s@:]+(?:/[^\\s@:]+)+(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}$"
+            },
+            "name": { "type": "string", "minLength": 1 },
+            "resources": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["limits", "requests"],
+              "properties": {
+                "limits": { "type": "object" },
+                "requests": { "type": "object" }
+              }
+            },
+            "topologySpreadConstraints": { "type": "array" }
+          }
+        },
+        "disruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minAvailable": { "type": "integer", "minimum": 1 }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": { "enabled": { "const": true } },
+                "required": ["enabled"]
+              },
+              "then": { "required": ["minAvailable"] }
+            }
+          ]
+        },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "annotations",
+            "clusterIPv4",
+            "externalTrafficPolicy",
+            "ipFamilies",
+            "ipFamilyPolicy",
+            "loadBalancerClass",
+            "loadBalancerSourceRanges",
+            "name",
+            "nodePorts",
+            "type"
+          ],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "clusterIPv4": {
+              "oneOf": [{ "const": "" }, { "type": "string", "format": "ipv4" }]
+            },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "externalTrafficPolicy": {
+              "type": "string",
+              "enum": ["Cluster", "Local"]
+            },
+            "ipFamilies": {
+              "type": "array",
+              "maxItems": 2,
+              "uniqueItems": true,
+              "items": { "type": "string", "enum": ["IPv4", "IPv6"] }
+            },
+            "ipFamilyPolicy": {
+              "type": "string",
+              "enum": ["PreferDualStack", "SingleStack"]
+            },
+            "loadBalancerClass": { "type": "string" },
+            "loadBalancerSourceRanges": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "nodePorts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["http", "tls"],
+              "properties": {
+                "http": {
+                  "type": "integer",
+                  "oneOf": [{ "const": 0 }, { "minimum": 30000, "maximum": 32767 }]
+                },
+                "tls": {
+                  "type": "integer",
+                  "oneOf": [{ "const": 0 }, { "minimum": 30000, "maximum": 32767 }]
+                }
+              }
+            },
+            "type": {
+              "type": "string",
+              "enum": ["ClusterIP", "LoadBalancer", "NodePort"]
+            }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "foundation": {
+            "properties": { "enabled": { "const": false } },
+            "required": ["enabled"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "foundation": {
+            "properties": { "manageNamespace": { "const": false } }
+          },
+          "certificate": {
+            "properties": {
+              "caIssuer": {
+                "properties": { "enabled": { "const": false } }
+              },
+              "enabled": { "const": false }
+            }
+          },
+          "gateway": {
+            "properties": { "enabled": { "const": false } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "foundation": {
+            "properties": { "manageNamespace": { "const": true } },
+            "required": ["manageNamespace"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "foundation": {
+            "properties": { "enabled": { "const": true } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "proxy": {
+            "properties": {
+              "service": {
+                "properties": { "clusterIPv4": { "minLength": 1 } },
+                "required": ["clusterIPv4"]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "proxy": {
+            "properties": {
+              "service": {
+                "properties": {
+                  "annotations": { "maxProperties": 0 },
+                  "externalTrafficPolicy": { "const": "Cluster" },
+                  "ipFamilies": { "const": ["IPv4"] },
+                  "ipFamilyPolicy": { "const": "SingleStack" },
+                  "loadBalancerClass": { "const": "" },
+                  "loadBalancerSourceRanges": { "maxItems": 0 },
+                  "nodePorts": {
+                    "properties": {
+                      "http": { "const": 0 },
+                      "tls": { "const": 0 }
+                    }
+                  },
+                  "type": { "const": "ClusterIP" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "certificate": {
+            "properties": {
+              "caIssuer": {
+                "properties": { "enabled": { "const": true } }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "certificate": {
+            "properties": {
+              "caIssuer": {
+                "properties": { "secretName": { "minLength": 1 } }
+              },
+              "enabled": { "const": true },
+              "issuerRef": {
+                "properties": {
+                  "group": { "const": "cert-manager.io" },
+                  "kind": { "const": "Issuer" },
+                  "name": { "minLength": 1 }
+                }
+              }
+            }
+          },
+          "gateway": {
+            "properties": {
+              "canonicalScheme": { "const": "https" },
+              "enabled": { "const": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "proxy": {
+            "properties": {
+              "service": {
+                "properties": {
+                  "nodePorts": {
+                    "properties": { "http": { "minimum": 30000 } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "anyOf": [
+                  { "properties": { "http": { "properties": { "enabled": { "const": true } } } } },
+                  { "properties": { "s3Http": { "properties": { "enabled": { "const": true } } } } }
+                ]
+              }
+            }
+          },
+          "proxy": {
+            "properties": {
+              "service": {
+                "properties": {
+                  "externalTrafficPolicy": { "const": "Cluster" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "proxy": {
+            "properties": {
+              "service": {
+                "properties": {
+                  "nodePorts": {
+                    "properties": { "tls": { "minimum": 30000 } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "atlantisWebhookHttps": { "properties": { "enabled": { "const": true } } }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "dragonflyManagerTls": { "properties": { "enabled": { "const": true } } }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "headscaleBootstrapTls": { "properties": { "enabled": { "const": true } } }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "https": { "properties": { "enabled": { "const": true } } }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kubeOidcTls": { "properties": { "enabled": { "const": true } } }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "s3Https": { "properties": { "enabled": { "const": true } } }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "tls": { "properties": { "enabled": { "const": true } } }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "proxy": {
+            "properties": {
+              "service": {
+                "properties": {
+                  "externalTrafficPolicy": { "const": "Cluster" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "atlantisWebhookHttps": {
+                    "properties": { "enabled": { "const": true } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "atlantisWebhookHttps": {
+                    "properties": {
+                      "certificateSecret": { "minLength": 1 },
+                      "hostname": { "minLength": 1 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "s3Https": {
+                    "properties": { "enabled": { "const": true } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "s3Https": {
+                    "properties": {
+                      "certificateSecret": { "minLength": 1 },
+                      "hostname": { "minLength": 1 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": { "aliasDomain": { "minLength": 1 } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "https": {
+                    "properties": {
+                      "aliasCertificateSecret": { "minLength": 1 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": { "enabled": { "const": true } },
+            "required": ["enabled"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "baseDomain": { "minLength": 1 },
+              "canonicalScheme": { "enum": ["http", "https"] }
+            }
+          }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "gateway": {
+                "properties": {
+                  "listeners": {
+                    "properties": {
+                      "atlantisWebhookHttps": {
+                        "properties": { "enabled": { "const": true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "gateway": {
+                "properties": {
+                  "listeners": {
+                    "properties": {
+                      "dragonflyManagerTls": {
+                        "properties": { "enabled": { "const": true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "gateway": {
+                "properties": {
+                  "listeners": {
+                    "properties": {
+                      "headscaleBootstrapTls": {
+                        "properties": { "enabled": { "const": true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "gateway": {
+                "properties": {
+                  "listeners": {
+                    "properties": {
+                      "http": {
+                        "properties": { "enabled": { "const": true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "gateway": {
+                "properties": {
+                  "listeners": {
+                    "properties": {
+                      "https": {
+                        "properties": { "enabled": { "const": true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "gateway": {
+                "properties": {
+                  "listeners": {
+                    "properties": {
+                      "kubeOidcTls": {
+                        "properties": { "enabled": { "const": true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "gateway": {
+                "properties": {
+                  "listeners": {
+                    "properties": {
+                      "s3Http": {
+                        "properties": { "enabled": { "const": true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "gateway": {
+                "properties": {
+                  "listeners": {
+                    "properties": {
+                      "s3Https": {
+                        "properties": { "enabled": { "const": true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "gateway": {
+                "properties": {
+                  "listeners": {
+                    "properties": {
+                      "tls": {
+                        "properties": { "enabled": { "const": true } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "dragonflyManagerTls": {
+                    "properties": { "enabled": { "const": true } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "dragonflyManagerTls": {
+                    "properties": { "hostname": { "minLength": 1 } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "tls": {
+                    "properties": { "enabled": { "const": true } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "tls": {
+                    "properties": { "hostname": { "minLength": 1 } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": { "canonicalScheme": { "const": "http" } },
+            "required": ["canonicalScheme"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "http": {
+                    "properties": {
+                      "enabled": { "const": true },
+                      "redirectToHTTPS": { "const": false }
+                    }
+                  },
+                  "https": {
+                    "properties": { "enabled": { "const": false } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": { "canonicalScheme": { "const": "https" } },
+            "required": ["canonicalScheme"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "atlantisWebhookHttps": { "properties": { "enabled": { "const": true } } }
+                    }
+                  },
+                  { "properties": { "https": { "properties": { "enabled": { "const": true } } } } },
+                  {
+                    "properties": { "s3Https": { "properties": { "enabled": { "const": true } } } }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "canonicalScheme": { "const": "https" },
+              "listeners": {
+                "properties": {
+                  "http": {
+                    "properties": { "enabled": { "const": true } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "http": {
+                    "properties": { "redirectToHTTPS": { "const": true } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "http": {
+                    "properties": { "redirectToHTTPS": { "const": true } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "canonicalScheme": { "const": "https" },
+              "listeners": {
+                "properties": {
+                  "http": {
+                    "properties": { "enabled": { "const": true } }
+                  },
+                  "https": {
+                    "properties": { "enabled": { "const": true } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "https": {
+                    "properties": { "enabled": { "const": true } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "gateway": {
+            "properties": {
+              "listeners": {
+                "properties": {
+                  "https": {
+                    "properties": {
+                      "certificateSecret": { "minLength": 1 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "certificate": {
+            "properties": { "enabled": { "const": true } },
+            "required": ["enabled"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "certificate": {
+            "properties": {
+              "issuerRef": {
+                "properties": {
+                  "group": { "minLength": 1 },
+                  "name": { "minLength": 1 }
+                }
+              }
+            }
+          },
+          "gateway": {
+            "properties": {
+              "canonicalScheme": { "const": "https" },
+              "enabled": { "const": true },
+              "listeners": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "atlantisWebhookHttps": { "properties": { "enabled": { "const": true } } }
+                    }
+                  },
+                  { "properties": { "https": { "properties": { "enabled": { "const": true } } } } },
+                  {
+                    "properties": { "s3Https": { "properties": { "enabled": { "const": true } } } }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
