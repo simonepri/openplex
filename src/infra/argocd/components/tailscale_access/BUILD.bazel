@@ -1,0 +1,145 @@
+"""Defines build and check targets for the tailscale_access Argo CD component."""
+
+load("@rules_helm//helm:defs.bzl", "helm_chart", "helm_lint_test", "helm_template")
+load("@rules_python//python:defs.bzl", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "HELM_TEMPLATE", "package_sources", "source_set")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+exports_files(["cloud-policy.hujson"])
+
+helm_chart(
+    name = "chart",
+    chart = "helm/Chart.yaml",
+    schema = "helm/values.schema.json",
+    templates = glob(
+        ["helm/templates/**"],
+        allow_empty = True,
+    ),
+    values = "helm/values.yaml",
+)
+
+helm_lint_test(
+    name = "helm-lint-defaults",
+    chart = ":chart",
+    opts = ["--strict"],
+)
+
+helm_lint_test(
+    name = "helm-lint-cloud-api-egress",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values-cloud-api-egress.yaml"],
+)
+
+helm_template(
+    name = "helm_render-cloud-api-egress",
+    chart = ":chart",
+    values = ["helm/lint-values-cloud-api-egress.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm-cloud-api-egress",
+    rendered = ":helm_render-cloud-api-egress",
+)
+
+helm_lint_test(
+    name = "helm-lint-cloud-egress",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values-cloud-egress.yaml"],
+)
+
+helm_template(
+    name = "helm_render-cloud-egress",
+    chart = ":chart",
+    values = ["helm/lint-values-cloud-egress.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm-cloud-egress",
+    rendered = ":helm_render-cloud-egress",
+)
+
+helm_lint_test(
+    name = "helm-lint-cloud",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values-cloud.yaml"],
+)
+
+helm_template(
+    name = "helm_render-cloud",
+    chart = ":chart",
+    values = ["helm/lint-values-cloud.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm-cloud",
+    rendered = ":helm_render-cloud",
+)
+
+helm_lint_test(
+    name = "helm-lint-local-egress",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values-local-egress.yaml"],
+)
+
+helm_template(
+    name = "helm_render-local-egress",
+    chart = ":chart",
+    values = ["helm/lint-values-local-egress.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm-local-egress",
+    rendered = ":helm_render-local-egress",
+)
+
+helm_lint_test(
+    name = "helm-lint-local",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values-local.yaml"],
+)
+
+helm_template(
+    name = "helm_render-local",
+    chart = ":chart",
+    values = ["helm/lint-values-local.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm-local",
+    rendered = ":helm_render-local",
+)
+
+source_set(
+    name = "helm_templates",
+    srcs = glob(["helm/templates/**"]),
+    kind = HELM_TEMPLATE,
+)
+
+package_sources(exclude = [
+    "helm/templates/**",
+    "**/*.py",
+])
+
+py_test(
+    name = "local_router_test",
+    srcs = ["local_router_test.py"],
+    args = [
+        "$(location :helm_render-local)",
+        "$(location :helm_render-local-egress)",
+    ],
+    data = [
+        ":helm_render-local",
+        ":helm_render-local-egress",
+    ],
+    deps = ["@dev_python_deps//pyyaml"],
+)
