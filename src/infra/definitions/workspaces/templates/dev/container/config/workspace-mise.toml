@@ -1,0 +1,34 @@
+# Declares global tool versions and environment paths installed inside Coder developer workspace containers via mise.
+
+[tools]
+# keep-sorted start
+"cargo:ifttt-lint" = { version = "0.11.2", depends = "rust" }
+"github:coder/code-server" = "4.139.1"
+"github:lablup/all-smi" = "0.26.3"
+"github:zasper-io/zasper" = "2.0.0"
+"npm:@getpaseo/cli" = { version = "0.10.1", depends = "node" }
+"npm:@simonepri/refined-antigravity-acp" = { version = "1.2.9", depends = "node", allow_low_downloads = true }
+antigravity-cli = "1.2.12"
+claude-code = "2.1.284"
+codex = "0.159.0"
+duckdb = "1.5.6"
+eza = "0.23.5"
+fd = "10.5.0"
+fzf = "0.74.4"
+herdr = "0.9.1"
+kopia = "0.23.1"
+node = "24.21.0"
+python = "3.13.15"
+ripgrep = "15.2.0"
+rust = { version = "1.98.1", profile = "minimal" }
+uv = "0.12.19"
+zellij = "0.45.1"
+zig = "0.16.0"
+# keep-sorted end
+
+[env]
+CARGO_HOME = "{{env.HOME}}/.local/share/mise/cargo"
+RUSTUP_HOME = "{{env.HOME}}/.local/share/mise/rustup"
+
+[settings]
+trusted_config_paths = ["/etc/workspace/config", "/fs/depot"]

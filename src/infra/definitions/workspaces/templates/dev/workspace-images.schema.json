@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schema.invalid/internal/workspace-images.schema.json",
+  "$comment": "Validates the workspace OCI publish targets consumed by CI, local runtimes, and registry provisioning.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["images", "version"],
+  "properties": {
+    "images": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["architecture", "tag", "target"],
+        "properties": {
+          "architecture": {
+            "enum": ["amd64", "arm64"]
+          },
+          "tag": {
+            "type": "string",
+            "pattern": "^v[1-9][0-9]*$"
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^//src/infra/[a-z0-9_/-]+:image_push$"
+          }
+        }
+      }
+    },
+    "version": {
+      "const": 1
+    }
+  }
+}
