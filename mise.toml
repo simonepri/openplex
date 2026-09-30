@@ -15,6 +15,7 @@ config_roots = ["src/examples/*", "src/infra"]
 "aqua:oras-project/oras" = "1.3.4"
 "cargo:ifttt-lint" = { version = "0.11.2", depends = "rust" }
 "github:anchore/syft" = "1.52.0"
+"github:buildbuddy-io/bazel" = { version = "5.0.488", bin = "bb" }
 "github:google/keep-sorted" = "0.10.0"
 "go:github.com/fzipp/gocyclo/cmd/gocyclo" = { version = "0.6.0", depends = "go" }
 "npm:jscpd" = { version = "5.3.3", depends = "node", trust_policy_excludes = [
@@ -46,6 +47,7 @@ lima = "2.2.0"
 node = "24.21.0"
 opentofu = "1.12.6"
 oxfmt = "0.71.0"
+pnpm = "10.34.5"
 python = "3.13.15"
 ripgrep = "15.2.0"
 rust = { version = "1.98.1", profile = "minimal" }
@@ -61,19 +63,21 @@ yq = "4.53.6"
 # keep-sorted end
 
 [env]
-OPENPLEX_CACHE_DIR = '{{env.XDG_CACHE_HOME | default(value=env.HOME ~ "/.cache")}}/openplex'
+REPO_CACHE_DIR = '{{env.XDG_CACHE_HOME | default(value=env.HOME ~ "/.cache")}}/repo'
 BAZEL_OUTPUT_ROOT = '{{env.BAZEL_OUTPUT_ROOT | default(value=config_root ~ "/.tmp/state/bazel")}}'
 PYTHONDONTWRITEBYTECODE = "1"
-PYTHONPYCACHEPREFIX = "{{env.OPENPLEX_CACHE_DIR}}/python"
-PYTEST_ADDOPTS = "-o cache_dir={{env.OPENPLEX_CACHE_DIR}}/pytest"
+PYTHONPYCACHEPREFIX = "{{env.REPO_CACHE_DIR}}/python"
+PYTEST_ADDOPTS = "-o cache_dir={{env.REPO_CACHE_DIR}}/pytest"
 UV_CACHE_DIR = "{{env.HOME}}/.cache/uv"
 UV_PROJECT_ENVIRONMENT = "{{config_root}}/.tmp/venv"
 npm_config_store_dir = "{{env.HOME}}/.local/share/pnpm/store"
-RUMDL_CACHE_DIR = "{{env.OPENPLEX_CACHE_DIR}}/rumdl"
-RUFF_CACHE_DIR = "{{env.OPENPLEX_CACHE_DIR}}/ruff"
-TF_PLUGIN_CACHE_DIR = "{{env.OPENPLEX_CACHE_DIR}}/opentofu/plugins"
-TFLINT_PLUGIN_DIR = "{{env.OPENPLEX_CACHE_DIR}}/tflint/plugins"
+RUMDL_CACHE_DIR = "{{env.REPO_CACHE_DIR}}/rumdl"
+RUFF_CACHE_DIR = "{{env.REPO_CACHE_DIR}}/ruff"
+TF_PLUGIN_CACHE_DIR = "{{env.REPO_CACHE_DIR}}/opentofu/plugins"
+TFLINT_PLUGIN_DIR = "{{env.REPO_CACHE_DIR}}/tflint/plugins"
 TF_CLI_CONFIG_FILE = "{{config_root}}/.tmp/state/opentofu.tfrc"
+USE_BUILDBUDDY = "false"
+BUILDBUDDY_ORG = ""
 _.path = ["/bin", "/usr/bin", "/usr/sbin", "/sbin"]
 
 [tasks.init]
@@ -83,6 +87,7 @@ run = [
   "bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //:hooks.install",
   "gh auth status >/dev/null 2>&1 || gh auth login",
   "gh auth setup-git",
+  '[ "$USE_BUILDBUDDY" != true ] || bb login --allow_existing ${BUILDBUDDY_ORG:+--org="$BUILDBUDDY_ORG"}',
   "command -v gh >/dev/null 2>&1 && gh api --method PUT user/starred/simonepri/openplex >/dev/null 2>&1 || true",
 ]
 
@@ -96,7 +101,7 @@ run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //:check -- "$@"'
 
 [tasks.test]
 description = "Run first-party release, workload, and component tests on affected packages or specified path"
-run = 'python3 src/bazel/tools/diff/cli.py test "$@"'
+run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //:test -- "$@"'
 
 [tasks.ci]
 description = "Run the complete source gate: static checks, tests, and builds"
