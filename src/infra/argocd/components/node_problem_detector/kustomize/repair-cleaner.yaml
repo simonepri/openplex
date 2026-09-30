@@ -1,0 +1,133 @@
+# Declares the Cleaner custom resource for automated node problem remediation.
+# Evaluates Node resources for persistent unhealthy conditions (KernelDeadlock,
+# ReadonlyFilesystem, GPUProblem, MountHung, FrequentKubeletRestart, FrequentContainerdRestart, NPDSelfTest).
+# By default, runs in dry-run mode (action: Scan) to safely identify candidates
+# without mutating or deleting live resources. When active, taints the Node and
+# deletes associated Karpenter NodeClaims.
+
+apiVersion: apps.projectsveltos.io/v1alpha1
+kind: Cleaner
+metadata:
+  name: node-problem-repair
+  labels:
+    app.kubernetes.io/name: k8s-cleaner
+    app.kubernetes.io/part-of: cluster-runtime
+spec:
+  schedule: "*/2 * * * *"
+  # Defaults to Scan (dry-run detection only) per platform safety requirements.
+  action: Scan
+  occurrenceThreshold: 1
+  resourcePolicySet:
+    resourceSelectors:
+      - kind: Node
+        group: ""
+        version: v1
+        excludeDeleted: true
+        evaluate: |
+          function parseTimestamp(timestampStr)
+            local epoch = string.gsub(
+              timestampStr,
+              '(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)',
+              function(y, mon, d, h, mi, s)
+                return os.time({
+                  year = tonumber(y), month = tonumber(mon), day = tonumber(d),
+                  hour = tonumber(h), min = tonumber(mi), sec = tonumber(s)
+                })
+              end
+            )
+            return tonumber(epoch)
+          end
+
+          function evaluate()
+            local hs = {}
+            hs.matching = false
+
+            if not (obj.status and obj.status.conditions) then
+              return hs
+            end
+
+            -- Problem conditions monitored by node-problem-detector
+            local problemConditions = {
+              KernelDeadlock = true,
+              ReadonlyFilesystem = true,
+              GPUProblem = true,
+              MountHung = true,
+              FrequentKubeletRestart = true,
+              FrequentContainerdRestart = true,
+              NPDSelfTest = true,
+            }
+
+            local thresholdSeconds = 300 -- 5 minutes threshold
+            local now = os.time()
+
+            for _, cond in ipairs(obj.status.conditions) do
+              if problemConditions[cond.type] and cond.status == "True" then
+                local transitionTime = cond.lastTransitionTime
+                if transitionTime ~= nil then
+                  local transitionEpoch = parseTimestamp(transitionTime)
+                  if transitionEpoch ~= nil and os.difftime(now, transitionEpoch) >= thresholdSeconds then
+                    hs.matching = true
+                    hs.message = string.format("Node condition %s has been True for >= %ds", cond.type, thresholdSeconds)
+                    return hs
+                  end
+                end
+              end
+            end
+
+            return hs
+          end
+      - kind: NodeClaim
+        group: karpenter.sh
+        version: v1
+        excludeDeleted: true
+        evaluate: |
+          function evaluate()
+            local hs = {}
+            hs.matching = false
+
+            if not (obj.status and obj.status.conditions) then
+              return hs
+            end
+
+            for _, cond in ipairs(obj.status.conditions) do
+              if (cond.type == "NodeUnhealthy" or cond.type == "Unhealthy") and cond.status == "True" then
+                hs.matching = true
+                hs.message = "NodeClaim unhealthy condition detected"
+                return hs
+              end
+            end
+
+            return hs
+          end
+  transform: |
+    function transform()
+      local hs = {}
+      if obj.kind == "Node" then
+        if obj.spec == nil then
+          obj.spec = {}
+        end
+        if obj.spec.taints == nil then
+          obj.spec.taints = {}
+        end
+
+        local taintKey = "node.kubernetes.io/unhealthy"
+        local hasTaint = false
+        for _, t in ipairs(obj.spec.taints) do
+          if t.key == taintKey then
+            hasTaint = true
+            break
+          end
+        end
+
+        if not hasTaint then
+          table.insert(obj.spec.taints, {
+            key = taintKey,
+            value = "problem-detected",
+            effect = "NoSchedule"
+          })
+        end
+      end
+
+      hs.resource = obj
+      return hs
+    end

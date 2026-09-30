@@ -1,0 +1,80 @@
+# Defines NetworkPolicy and VerticalPodAutoscaler for node-problem-detector.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: node-problem-detector
+  namespace: node-problem-detector
+  labels:
+    app.kubernetes.io/name: node-problem-detector
+    app.kubernetes.io/instance: node-problem-detector
+    app.kubernetes.io/component: health-monitor
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: node-problem-detector
+      app.kubernetes.io/instance: node-problem-detector
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: signoz
+      ports:
+        - {port: 20257, protocol: TCP}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {port: 53, protocol: TCP}
+        - {port: 53, protocol: UDP}
+    - to:
+        - ipBlock: {cidr: 169.254.20.10/32}
+      ports:
+        - {port: 53, protocol: TCP}
+        - {port: 53, protocol: UDP}
+    # Kubernetes API server egress for reporting node conditions and events
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {port: 443, protocol: TCP}
+        - {port: 6443, protocol: TCP}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: node-problem-detector
+  namespace: node-problem-detector
+  labels:
+    app.kubernetes.io/name: node-problem-detector
+    app.kubernetes.io/instance: node-problem-detector
+    app.kubernetes.io/component: health-monitor
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: DaemonSet
+    name: node-problem-detector
+  updatePolicy:
+    updateMode: "Initial"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: node-problem-detector
+        controlledResources: [cpu, memory]
+        minAllowed: {cpu: 10m, memory: 32Mi}
+        maxAllowed: {cpu: 500m, memory: 512Mi}

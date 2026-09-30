@@ -1,0 +1,88 @@
+# Elastic on-demand and spot CPU capacity for GCP cells, using GKE-channel COS, private networking, and shielded VMs.
+
+apiVersion: karpenter.k8s.gcp/v1alpha1
+kind: GCENodeClass
+metadata:
+  name: dynamic-cpu
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  serviceAccount: cell-nodes@configured-by-applicationset.iam.gserviceaccount.com
+  imageSelectorTerms:
+    - family: ContainerOptimizedOS
+      channel: cluster
+  disks:
+    - category: pd-balanced
+      sizeGiB: 200
+      boot: true
+  labels:
+    cluster: configured-by-applicationset
+    component: kubernetes-worker
+    cost-center: shared-infrastructure
+    environment: production
+  networkConfig:
+    enablePrivateNodes: true
+  shieldedInstanceConfig:
+    enableIntegrityMonitoring: true
+    enableSecureBoot: true
+    enableVtpm: true
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: cpu-on-demand
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 20
+  template:
+    metadata:
+      labels:
+        cpu-capability.avx2: "true"
+        profiling: enabled
+    spec:
+      expireAfter: 720h
+      terminationGracePeriod: 15m
+      nodeClassRef: {group: karpenter.k8s.gcp, kind: GCENodeClass, name: dynamic-cpu}
+      requirements:
+        - {key: kubernetes.io/arch, operator: In, values: [amd64]}
+        - {key: kubernetes.io/os, operator: In, values: [linux]}
+        - {key: karpenter.sh/capacity-type, operator: In, values: [on-demand]}
+        - {key: node.kubernetes.io/instance-type, operator: In, values: [e2-standard-8]}
+        - {key: topology.kubernetes.io/zone, operator: In, values: [europe-west4-a, europe-west4-b, europe-west4-c]}
+  limits: {nodes: "6"}
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: cpu-spot
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 10
+  template:
+    metadata:
+      labels:
+        cpu-capability.avx2: "true"
+        profiling: enabled
+    spec:
+      expireAfter: 720h
+      terminationGracePeriod: 15m
+      nodeClassRef: {group: karpenter.k8s.gcp, kind: GCENodeClass, name: dynamic-cpu}
+      requirements:
+        - {key: kubernetes.io/arch, operator: In, values: [amd64]}
+        - {key: kubernetes.io/os, operator: In, values: [linux]}
+        - {key: karpenter.sh/capacity-type, operator: In, values: [spot]}
+        - {key: node.kubernetes.io/instance-type, operator: In, values: [e2-standard-8]}
+        - {key: topology.kubernetes.io/zone, operator: In, values: [europe-west4-a, europe-west4-b, europe-west4-c]}
+  limits: {nodes: "6"}
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%

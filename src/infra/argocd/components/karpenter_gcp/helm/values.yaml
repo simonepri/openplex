@@ -1,0 +1,48 @@
+# Hardened controller values for the GCP Karpenter provider, rendered by GCP cell Applications with cluster identity and location overrides.
+
+serviceAccount:
+  create: true
+  name: karpenter
+  annotations:
+    iam.gke.io/gcp-service-account: karpenter@configured-by-applicationset.iam.gserviceaccount.com
+controller:
+  replicaCount: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: karpenter
+                app.kubernetes.io/name: karpenter
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  image:
+    tag: v0.6.0@sha256:aab80cfd2c4e5a5414638f6d56e599da7a65d428f193f6951671499a8e8296b0
+  disableControllerWarmup: false
+  resources:
+    requests: {cpu: 500m, memory: 500Mi}
+    limits: {memory: 1Gi}
+  featureGates:
+    capacityBuffer: false
+    nodeOverlay: false
+    nodeRepair: false
+    reservedCapacity: false
+    spotToSpotConsolidation: false
+    staticCapacity: true
+  settings:
+    projectID: configured-by-applicationset
+    clusterLocation: configured-by-applicationset
+    clusterName: configured-by-applicationset
+    defaultNodePoolTemplateName: workload
+    defaultNodepoolServiceAccount: cell-nodes@configured-by-applicationset.iam.gserviceaccount.com
+    ignoreDRARequests: true
+podDisruptionBudget:
+  minAvailable: 1
+  maxUnavailable: null
+credentials:
+  enabled: false
+podAnnotations:
+  signoz.io/path: /metrics
+  signoz.io/port: "8080"
+  signoz.io/scrape: "true"

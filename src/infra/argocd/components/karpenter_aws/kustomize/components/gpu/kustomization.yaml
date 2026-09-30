@@ -1,0 +1,9 @@
+# Kustomize Component for AWS Karpenter NVIDIA GPU capacity: dynamic-gpu EC2NodeClass and GPU NodePools.
+
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  # keep-sorted start
+  - ec2-node-class.yaml
+  - gpu-node-pool.yaml
+  # keep-sorted end

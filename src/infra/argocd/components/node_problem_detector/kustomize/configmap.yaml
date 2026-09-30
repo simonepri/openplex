@@ -1,0 +1,248 @@
+# ConfigMap containing monitoring configurations, custom probe scripts, and
+# self-test definitions for node-problem-detector.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-problem-detector-config
+  namespace: node-problem-detector
+  labels:
+    app.kubernetes.io/name: node-problem-detector
+    app.kubernetes.io/instance: node-problem-detector
+    app.kubernetes.io/component: health-monitor
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime
+data:
+  kernel-monitor.json: |
+    {
+      "plugin": "kmsg",
+      "logPath": "/dev/kmsg",
+      "lookback": "5m",
+      "bufferSize": 10,
+      "source": "kernel-monitor",
+      "conditions": [
+        {
+          "type": "KernelDeadlock",
+          "reason": "KernelHasNoDeadlock",
+          "message": "kernel has no deadlock"
+        },
+        {
+          "type": "ReadonlyFilesystem",
+          "reason": "FilesystemIsNotReadOnly",
+          "message": "Filesystem is not read-only"
+        }
+      ],
+      "rules": [
+        {
+          "type": "temporary",
+          "reason": "OOMKilling",
+          "pattern": ".*Out of memory: Kill process \\d+.*"
+        },
+        {
+          "type": "permanent",
+          "condition": "KernelDeadlock",
+          "reason": "DockerHung",
+          "pattern": ".*blocked for more than \\d+ seconds.*"
+        },
+        {
+          "type": "permanent",
+          "condition": "KernelDeadlock",
+          "reason": "TaskHung",
+          "pattern": ".*task .* blocked for more than \\d+ seconds.*"
+        },
+        {
+          "type": "permanent",
+          "condition": "ReadonlyFilesystem",
+          "reason": "FilesystemIsReadOnly",
+          "pattern": ".*Remounting filesystem read-only.*"
+        },
+        {
+          "type": "permanent",
+          "condition": "ReadonlyFilesystem",
+          "reason": "Ext4FilesystemError",
+          "pattern": ".*EXT4-fs error.*"
+        },
+        {
+          "type": "permanent",
+          "condition": "ReadonlyFilesystem",
+          "reason": "XfsFilesystemError",
+          "pattern": ".*XFS.*I/O error.*"
+        }
+      ]
+    }
+
+  # GPU Xid kmsg monitor configures detection of critical NVIDIA GPU hardware and
+  # driver failures that require immediate node isolation and replacement:
+  # - Xid 48: Double-Bit ECC Error (DBE) - uncorrectable memory corruption in VRAM
+  # - Xid 54: Auxiliary power is not connected - power delivery fault to the card
+  # - Xid 62: Internal micro-controller halt - GPU Falcon/PMU processor crashed
+  # - Xid 64: Page retirement or row remapping failure - hardware protection exhausted
+  # - Xid 74: Fatal NVLink Error - physical link breakdown across GPU fabric
+  # - Xid 79: GPU has fallen off the bus - PCIe communication lost (link-down)
+  # - Xid 92: High single-bit ECC error rate - impending uncorrectable memory failure
+  # - Xid 95: Robust Channel Uncontained Error - uncontainable hardware fault
+  # - Xid 119: GSP Firmware RPC timeout - GSP management core unresponsive
+  # - Xid 120: GSP Firmware halt - GSP processor crashed
+  gpu-xid-monitor.json: |
+    {
+      "plugin": "kmsg",
+      "logPath": "/dev/kmsg",
+      "lookback": "5m",
+      "bufferSize": 10,
+      "source": "gpu-xid-monitor",
+      "conditions": [
+        {
+          "type": "GPUProblem",
+          "reason": "GPUNoProblems",
+          "message": "GPU hardware and driver operating normally"
+        }
+      ],
+      "rules": [
+        {
+          "type": "permanent",
+          "condition": "GPUProblem",
+          "reason": "CriticalGPUXidError",
+          "pattern": ".*NVRM: Xid \\(PCI:[^)]+\\): (48|54|62|64|74|79|92|95|119|120),.*"
+        }
+      ]
+    }
+
+  # Systemd monitor detects service crash/restart loops for kubelet and containerd daemons.
+  systemd-monitor.json: |
+    {
+      "plugin": "kmsg",
+      "logPath": "/dev/kmsg",
+      "lookback": "5m",
+      "bufferSize": 10,
+      "source": "systemd-monitor",
+      "conditions": [
+        {
+          "type": "FrequentKubeletRestart",
+          "reason": "NoFrequentKubeletRestart",
+          "message": "kubelet service is running and has not restarted frequently"
+        },
+        {
+          "type": "FrequentContainerdRestart",
+          "reason": "NoFrequentContainerdRestart",
+          "message": "containerd service is running and has not restarted frequently"
+        }
+      ],
+      "rules": [
+        {
+          "type": "permanent",
+          "condition": "FrequentKubeletRestart",
+          "reason": "FrequentKubeletRestart",
+          "pattern": ".*(kubelet\\.service: (Main process exited|Failed with result)|Restarting kubelet\\.service).*"
+        },
+        {
+          "type": "permanent",
+          "condition": "FrequentContainerdRestart",
+          "reason": "FrequentContainerdRestart",
+          "pattern": ".*(containerd\\.service: (Main process exited|Failed with result)|Restarting containerd\\.service).*"
+        }
+      ]
+    }
+
+  # Mount health custom plugin monitor probes active CSI, rclone, and NFS mounts
+  # with strict timeouts to detect kernel hung mounts and transport disconnections.
+  mount-health-monitor.json: |
+    {
+      "plugin": "custom",
+      "pluginConfig": {
+        "invoke_interval": "30s",
+        "timeout": "10s",
+        "max_output_length": 128,
+        "concurrency": 1
+      },
+      "source": "mount-health-monitor",
+      "conditions": [
+        {
+          "type": "MountHung",
+          "reason": "MountsHealthy",
+          "message": "All filesystem and CSI/rclone storage mounts are responding normally"
+        }
+      ],
+      "rules": [
+        {
+          "type": "permanent",
+          "condition": "MountHung",
+          "reason": "MountHungDetected",
+          "path": "/config/check-mount-health.sh",
+          "timeout": "10s"
+        }
+      ]
+    }
+
+  check-mount-health.sh: |
+    #!/bin/sh
+    # Probes filesystem and CSI/rclone mounts with a strict timeout to detect hung mounts.
+    TIMEOUT=5
+    FAILED_MOUNTS=""
+
+    # Inspect mounts from /proc/mounts matching fuse.rclone, nfs, cifs, or csi mounts
+    if [ -f /proc/mounts ]; then
+      while IFS= read -r line; do
+        dev=$(echo "$line" | awk '{print $1}')
+        mp=$(echo "$line" | awk '{print $2}')
+        fstype=$(echo "$line" | awk '{print $3}')
+
+        case "$fstype" in
+          fuse.rclone|nfs|nfs4|cifs)
+            if ! timeout "$TIMEOUT" stat "$mp" >/dev/null 2>&1; then
+              FAILED_MOUNTS="${FAILED_MOUNTS} ${mp}"
+            fi
+            ;;
+        esac
+      done < /proc/mounts
+    fi
+
+    # Inspect active CSI volume mounts under /var/lib/kubelet/pods if mounted
+    if [ -d /var/lib/kubelet/pods ]; then
+      for csi_dir in /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/*; do
+        if [ -d "$csi_dir" ]; then
+          if ! timeout "$TIMEOUT" stat "$csi_dir" >/dev/null 2>&1; then
+            FAILED_MOUNTS="${FAILED_MOUNTS} ${csi_dir}"
+          fi
+        fi
+      done
+    fi
+
+    if [ -n "$FAILED_MOUNTS" ]; then
+      echo "Mount probe timeout failure on:${FAILED_MOUNTS}" >&2
+      exit 1
+    fi
+
+    echo "All monitored mounts responding within ${TIMEOUT}s"
+    exit 0
+
+  # Synthetic self-test monitor reading synthetic log lines to verify NPD
+  # detection and live-safe remediation without mutating production nodes.
+  test-monitor.json: |
+    {
+      "plugin": "filelog",
+      "logPath": "/tmp/npd-synthetic.log",
+      "lookback": "10m",
+      "bufferSize": 10,
+      "source": "test-monitor",
+      "conditions": [
+        {
+          "type": "NPDSelfTest",
+          "reason": "SelfTestPassed",
+          "message": "NPD synthetic self-test monitor is passing"
+        }
+      ],
+      "rules": [
+        {
+          "type": "permanent",
+          "condition": "NPDSelfTest",
+          "reason": "SelfTestGPUXidDetected",
+          "pattern": ".*NVRM: Xid.*: (48|54|62|64|74|79|92|95|119|120),.*"
+        },
+        {
+          "type": "permanent",
+          "condition": "NPDSelfTest",
+          "reason": "SelfTestReadonlyFilesystemDetected",
+          "pattern": ".*(Remounting filesystem read-only|EXT4-fs error|XFS.*I/O error).*"
+        }
+      ]
+    }

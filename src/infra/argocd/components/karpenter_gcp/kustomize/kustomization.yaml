@@ -1,0 +1,11 @@
+# Kustomize base for GCP Karpenter CPU and GPU node classes and pools, patched from provider-derived registration annotations by the cell chart.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - cpu-node-pool.yaml
+  - gpu-node-pool.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  # keep-sorted end

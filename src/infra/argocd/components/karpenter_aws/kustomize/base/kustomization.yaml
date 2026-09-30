@@ -1,0 +1,10 @@
+# Kustomize base for AWS Karpenter: namespace, network isolation, and CPU EC2NodeClass.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - ec2-node-class.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  # keep-sorted end

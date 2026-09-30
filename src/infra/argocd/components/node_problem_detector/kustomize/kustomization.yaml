@@ -1,0 +1,13 @@
+# Composes node-problem-detector DaemonSet, RBAC, ConfigMap, and policy manifests.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - configmap.yaml
+  - daemonset.yaml
+  - namespace.yaml
+  - policy.yaml
+  - rbac.yaml
+  - repair-cleaner.yaml
+  # keep-sorted end

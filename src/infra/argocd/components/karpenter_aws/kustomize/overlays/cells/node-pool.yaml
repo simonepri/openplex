@@ -1,0 +1,59 @@
+# AWS cell Karpenter NodePools: provisions on-demand and spot AVX2 CPU instances with profiling enabled.
+
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: cpu-on-demand
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 20
+  template:
+    metadata:
+      labels:
+        cpu-capability.avx2: "true"
+        profiling: enabled
+    spec:
+      expireAfter: 720h
+      terminationGracePeriod: 15m
+      nodeClassRef: {group: karpenter.k8s.aws, kind: EC2NodeClass, name: dynamic-cpu}
+      requirements:
+        - {key: kubernetes.io/arch, operator: In, values: [amd64]}
+        - {key: kubernetes.io/os, operator: In, values: [linux]}
+        - {key: karpenter.sh/capacity-type, operator: In, values: [on-demand]}
+        - {key: karpenter.k8s.aws/instance-family, operator: In, values: [c6i, c7i, m6i, m7i, r6i, r7i]}
+  limits: {cpu: "2000", memory: 8Ti}
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: cpu-spot
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 10
+  template:
+    metadata:
+      labels:
+        cpu-capability.avx2: "true"
+        profiling: enabled
+    spec:
+      expireAfter: 720h
+      terminationGracePeriod: 15m
+      nodeClassRef: {group: karpenter.k8s.aws, kind: EC2NodeClass, name: dynamic-cpu}
+      requirements:
+        - {key: kubernetes.io/arch, operator: In, values: [amd64]}
+        - {key: kubernetes.io/os, operator: In, values: [linux]}
+        - {key: karpenter.sh/capacity-type, operator: In, values: [spot]}
+        - {key: karpenter.k8s.aws/instance-family, operator: In, values: [c6i, c7i, m6i, m7i, r6i, r7i]}
+  limits: {cpu: "2000", memory: 8Ti}
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%

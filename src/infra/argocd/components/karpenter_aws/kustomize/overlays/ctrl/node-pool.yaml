@@ -1,0 +1,29 @@
+# AWS control plane Karpenter NodePool: provisions on-demand AVX2 CPU instances without profiling.
+
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: control
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  template:
+    metadata:
+      labels:
+        cpu-capability.avx2: "true"
+    spec:
+      expireAfter: 720h
+      terminationGracePeriod: 15m
+      nodeClassRef: {group: karpenter.k8s.aws, kind: EC2NodeClass, name: dynamic-cpu}
+      requirements:
+        - {key: kubernetes.io/arch, operator: In, values: [amd64]}
+        - {key: kubernetes.io/os, operator: In, values: [linux]}
+        - {key: karpenter.sh/capacity-type, operator: In, values: [on-demand]}
+        - {key: karpenter.k8s.aws/instance-family, operator: In, values: [c6i, c7i, m6i, m7i, r6i, r7i]}
+  limits: {cpu: "1000", memory: 4Ti}
+  # Control services are mostly stateful (Postgres, ClickHouse, Atlantis): consolidate slowly, one node at a time.
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1h
+    budgets:
+      - nodes: "1"

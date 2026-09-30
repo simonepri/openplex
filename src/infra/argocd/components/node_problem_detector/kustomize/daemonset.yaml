@@ -1,0 +1,153 @@
+# Deploys DaemonSet running node-problem-detector across all cluster nodes.
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-problem-detector
+  namespace: node-problem-detector
+  annotations:
+    ignore-check.kube-linter.io/host-pid: >-
+      Node Problem Detector requires host process inspection to identify crashed daemons and runtime health.
+    ignore-check.kube-linter.io/privilege-escalation-container: >-
+      Kernel diagnostic inspection and reading kernel ring buffer /dev/kmsg require root escalation.
+    ignore-check.kube-linter.io/privileged-container: >-
+      Privileged mode is required by node-problem-detector to read host /dev/kmsg and probe systemd units.
+    ignore-check.kube-linter.io/run-as-non-root: >-
+      Reading /dev/kmsg and executing host filesystem mount probes require root execution.
+    ignore-check.kube-linter.io/sensitive-host-mounts: >-
+      Mounting host /dev/kmsg, /var/log, and /proc is essential for system log and kernel problem detection.
+    ignore-check.kube-linter.io/writable-host-mount: >-
+      Host mounts are configured read-only; no writable host filesystem mounts are used.
+  labels:
+    app.kubernetes.io/name: node-problem-detector
+    app.kubernetes.io/instance: node-problem-detector
+    app.kubernetes.io/component: health-monitor
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime
+spec:
+  minReadySeconds: 10
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-problem-detector
+      app.kubernetes.io/instance: node-problem-detector
+      app.kubernetes.io/component: health-monitor
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      annotations:
+        signoz.io/path: /metrics
+        signoz.io/port: "20257"
+        signoz.io/scrape: "true"
+      labels:
+        app.kubernetes.io/name: node-problem-detector
+        app.kubernetes.io/instance: node-problem-detector
+        app.kubernetes.io/component: health-monitor
+        app.kubernetes.io/managed-by: argocd
+        app.kubernetes.io/part-of: cluster-runtime
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values: [linux]
+      automountServiceAccountToken: true
+      hostPID: true
+      serviceAccountName: node-problem-detector
+      priorityClassName: node-agents
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - operator: Exists
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: node-problem-detector
+          image: registry.k8s.io/node-problem-detector/node-problem-detector:v1.36.0@sha256:b4db5a168c5f6192c3fb3d650920d192d83776598fcdfcc092d16ca8dc9213ff
+          imagePullPolicy: IfNotPresent
+          command: [/node-problem-detector]
+          args:
+            - --logtostderr
+            - --config.system-log-monitor=/config/kernel-monitor.json,/config/gpu-xid-monitor.json,/config/systemd-monitor.json
+            - --config.custom-plugin-monitor=/config/mount-health-monitor.json
+            - --prometheus-address=0.0.0.0
+            - --prometheus-port=20257
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: metrics
+              containerPort: 20257
+              protocol: TCP
+          startupProbe:
+            tcpSocket: {port: metrics}
+            failureThreshold: 30
+            periodSeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket: {port: metrics}
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: metrics}
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: true
+            privileged: true
+            readOnlyRootFilesystem: true
+            runAsNonRoot: false
+          volumeMounts:
+            - name: log
+              mountPath: /var/log
+              readOnly: true
+            - name: kmsg
+              mountPath: /dev/kmsg
+              readOnly: true
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: systemd
+              mountPath: /run/systemd
+              readOnly: true
+            - name: host-proc
+              mountPath: /proc
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: log
+          hostPath:
+            path: /var/log
+            type: Directory
+        - name: kmsg
+          hostPath:
+            path: /dev/kmsg
+            type: CharDevice
+        - name: config
+          configMap:
+            name: node-problem-detector-config
+            defaultMode: 493
+        - name: systemd
+          hostPath:
+            path: /run/systemd
+            type: DirectoryOrCreate
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory
+        - name: tmp
+          emptyDir: {}

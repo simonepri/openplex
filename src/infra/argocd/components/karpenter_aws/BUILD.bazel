@@ -1,0 +1,134 @@
+"""Check targets for the karpenter_aws Argo CD component."""
+
+load("@rules_helm//helm:defs.bzl", "helm_template")
+load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+kustomization(
+    name = "base",
+    srcs = glob(["kustomize/**"]),
+    file = "kustomize/base/kustomization.yaml",
+)
+
+kustomized_resources(
+    name = "base_render",
+    kustomization = ":base",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "base_manifest",
+    rendered = ":base_render",
+)
+
+sh_test(
+    name = "stargz-bootstrap_test",
+    srcs = ["bootstrap/stargz-bootstrap_test.sh"],
+    args = [
+        "$(location :overlay-cells_render)",
+        "$(location bootstrap/stargz-bootstrap.sh)",
+        "$(location bootstrap/stargz-config.toml)",
+        "$(location bootstrap/stargz-snapshotter.service)",
+        "$(location bootstrap/containerd-stargz.conf)",
+        "$(location bootstrap/stargz-node-config.yaml)",
+        "$(location //src/bazel/tools:yq)",
+    ],
+    data = [
+        "bootstrap/containerd-stargz.conf",
+        "bootstrap/stargz-bootstrap.sh",
+        "bootstrap/stargz-config.toml",
+        "bootstrap/stargz-node-config.yaml",
+        "bootstrap/stargz-snapshotter.service",
+        ":overlay-cells_render",
+        "//src/bazel/tools:yq",
+    ],
+)
+
+helm_template(
+    name = "vendor-helm-render",
+    chart = "@vendor_helm_karpenter_aws//:karpenter",
+    opts = [
+        "--include-crds",
+        "--namespace",
+        "manifest-checks",
+    ],
+    values = [
+        "helm/values.yaml",
+    ],
+)
+
+sh_library(
+    name = "shell",
+    srcs = [
+        "bootstrap/stargz-bootstrap.sh",
+    ],
+)
+
+package_sources(exclude = ["**/*.sh"])
+
+manifest_checks(
+    name = "vendor-helm",
+    kube_lint_config = "//src/bazel/rules/kubernetes_manifests:kube-linter-vendor.yaml",
+    rendered = ":vendor-helm-render",
+)
+
+kustomization(
+    name = "components-gpu",
+    srcs = glob(["kustomize/components/gpu/**"]),
+    file = "kustomize/components/gpu/kustomization.yaml",
+)
+
+kustomized_resources(
+    name = "components-gpu_render",
+    kustomization = ":components-gpu",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "components-gpu_manifest",
+    rendered = ":components-gpu_render",
+)
+
+kustomization(
+    name = "overlay-cells",
+    srcs = glob([
+        "kustomize/base/**",
+        "kustomize/components/gpu/**",
+        "kustomize/overlays/cells/**",
+    ]),
+    file = "kustomize/overlays/cells/kustomization.yaml",
+)
+
+kustomized_resources(
+    name = "overlay-cells_render",
+    kustomization = ":overlay-cells",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "overlay-cells_manifest",
+    rendered = ":overlay-cells_render",
+)
+
+kustomization(
+    name = "overlay-ctrl",
+    srcs = glob([
+        "kustomize/base/**",
+        "kustomize/overlays/ctrl/**",
+    ]),
+    file = "kustomize/overlays/ctrl/kustomization.yaml",
+)
+
+kustomized_resources(
+    name = "overlay-ctrl_render",
+    kustomization = ":overlay-ctrl",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "overlay-ctrl_manifest",
+    rendered = ":overlay-ctrl_render",
+)

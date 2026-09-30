@@ -1,0 +1,280 @@
+# On-demand and spot NVIDIA GPU capacity for GCP cells, using an exact accelerator count, provider-managed drivers, and empty-only consolidation.
+
+apiVersion: karpenter.k8s.gcp/v1alpha1
+kind: GCENodeClass
+metadata:
+  name: dynamic-gpu
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  serviceAccount: cell-nodes@configured-by-applicationset.iam.gserviceaccount.com
+  autoGPUTaint: true
+  gpuDriverVersion: default
+  imageSelectorTerms:
+    - family: ContainerOptimizedOS
+      channel: cluster
+  disks:
+    - category: pd-balanced
+      sizeGiB: 200
+      boot: true
+    - category: local-ssd
+      sizeGiB: 375
+      boot: false
+  labels:
+    cluster: configured-by-applicationset
+    component: kubernetes-worker
+    cost-center: shared-infrastructure
+    environment: production
+    gke-no-default-nvidia-gpu-device-plugin: "true"
+  networkConfig:
+    enablePrivateNodes: true
+  shieldedInstanceConfig:
+    enableIntegrityMonitoring: true
+    enableSecureBoot: true
+    enableVtpm: true
+---
+apiVersion: karpenter.k8s.gcp/v1alpha1
+kind: GCENodeClass
+metadata:
+  name: dynamic-gpu-hyperdisk
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  serviceAccount: cell-nodes@configured-by-applicationset.iam.gserviceaccount.com
+  autoGPUTaint: true
+  gpuDriverVersion: default
+  imageSelectorTerms:
+    - family: ContainerOptimizedOS
+      channel: cluster
+  disks:
+    - category: hyperdisk-balanced
+      sizeGiB: 200
+      boot: true
+  labels:
+    cluster: configured-by-applicationset
+    component: kubernetes-worker
+    cost-center: shared-infrastructure
+    environment: production
+    gke-no-default-nvidia-gpu-device-plugin: "true"
+  networkConfig:
+    enablePrivateNodes: true
+  shieldedInstanceConfig:
+    enableIntegrityMonitoring: true
+    enableSecureBoot: true
+    enableVtpm: true
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-a100-80gb-on-demand
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 10
+  template:
+    metadata:
+      labels:
+        gpu-class: a100-80gb
+        profiling: enabled
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 15m
+      nodeClassRef:
+        group: karpenter.k8s.gcp
+        kind: GCENodeClass
+        name: dynamic-gpu
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [on-demand]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+            - a2-ultragpu-1g
+            - a2-ultragpu-2g
+            - a2-ultragpu-4g
+            - a2-ultragpu-8g
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: [europe-west4-a, europe-west4-b]
+  limits:
+    nodes: "8"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-a100-80gb-spot
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 5
+  template:
+    metadata:
+      labels:
+        gpu-class: a100-80gb
+        profiling: enabled
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 15m
+      nodeClassRef:
+        group: karpenter.k8s.gcp
+        kind: GCENodeClass
+        name: dynamic-gpu
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [spot]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+            - a2-ultragpu-1g
+            - a2-ultragpu-2g
+            - a2-ultragpu-4g
+            - a2-ultragpu-8g
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: [europe-west4-a, europe-west4-b]
+  limits:
+    nodes: "8"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-l4-on-demand
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 10
+  template:
+    metadata:
+      labels:
+        gpu-class: l4
+        profiling: enabled
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 15m
+      nodeClassRef:
+        group: karpenter.k8s.gcp
+        kind: GCENodeClass
+        name: dynamic-gpu-hyperdisk
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [on-demand]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+            - g2-standard-4
+            - g2-standard-8
+            - g2-standard-12
+            - g2-standard-16
+            - g2-standard-24
+            - g2-standard-32
+            - g2-standard-48
+            - g2-standard-96
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: [europe-west4-a, europe-west4-b]
+  limits:
+    nodes: "8"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-l4-spot
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 5
+  template:
+    metadata:
+      labels:
+        gpu-class: l4
+        profiling: enabled
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 15m
+      nodeClassRef:
+        group: karpenter.k8s.gcp
+        kind: GCENodeClass
+        name: dynamic-gpu-hyperdisk
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [spot]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+            - g2-standard-4
+            - g2-standard-8
+            - g2-standard-12
+            - g2-standard-16
+            - g2-standard-24
+            - g2-standard-32
+            - g2-standard-48
+            - g2-standard-96
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: [europe-west4-a, europe-west4-b]
+  limits:
+    nodes: "8"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%

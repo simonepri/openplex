@@ -1,0 +1,16 @@
+# Kustomize overlay for AWS control plane Karpenter: includes base resources and control CPU NodePool.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - ../../base
+  - node-pool.yaml
+  # keep-sorted end
+patches:
+  # The eStargz lazy-pull bootstrap in the base user data serves cell workload nodes; control nodes boot with
+  # Karpenter's default AL2023 nodeadm configuration.
+  - target: {group: karpenter.k8s.aws, version: v1, kind: EC2NodeClass, name: dynamic-cpu}
+    patch: |-
+      - op: remove
+        path: /spec/userData

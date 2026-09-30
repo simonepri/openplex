@@ -1,0 +1,13 @@
+# Kustomize overlay for AWS cell Karpenter: includes base resources, cell CPU NodePools, and GPU component.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - ../../base
+  - node-pool.yaml
+  # keep-sorted end
+components:
+  # keep-sorted start
+  - ../../components/gpu
+  # keep-sorted end
