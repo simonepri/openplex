@@ -1,0 +1,9 @@
+# Configures containerd to route local registry pulls through Dragonfly with fallback.
+
+server = "http://origin-registry:5000/v2"
+
+[host."http://127.0.0.1:4001"]
+capabilities = ["pull", "resolve"]
+
+[host."http://127.0.0.1:4001".header]
+X-Dragonfly-Registry = ["http://origin-registry:5000"]
