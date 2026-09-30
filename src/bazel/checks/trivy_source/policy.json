@@ -1,0 +1,346 @@
+{
+  "description": "Classifies intentional and false-positive Trivy findings for the repository security scan gate.",
+  "schemaVersion": 1,
+  "intentionalSecurityNegativeFixtures": [
+    {
+      "path": "src/infra/definitions/conformance/fixtures/security/security-findings-examples.test.k8s.yaml",
+      "reason": "Scanner self-test fixture that deliberately enables host access, privilege escalation, and unsafe capabilities."
+    }
+  ],
+  "ordinaryConformanceFixtureRules": [
+    {
+      "prefix": "src/infra/definitions/conformance/",
+      "suffix": ".test.k8s.yaml",
+      "reason": "Authored conformance input; findings remain scanned and reported but the manifest is not a deployable cluster resource."
+    },
+    {
+      "prefix": "src/infra/argocd/components/kuberhealthy/kustomize/tests/",
+      "suffix": ".test.k8s.yaml",
+      "reason": "Authored conformance input; findings remain scanned and reported but the manifest is not a deployable cluster resource."
+    }
+  ],
+  "scannerRuleExceptions": [
+    {
+      "id": "KSV-0020",
+      "severity": "LOW",
+      "reason": "Containers execute with standard non-root POSIX unprivileged UIDs (e.g. 1000, 1001, 65532, 65534) under runAsNonRoot: true; requiring UID > 10000 conflicts with standard distroless/container user conventions."
+    },
+    {
+      "id": "KSV-0021",
+      "severity": "LOW",
+      "reason": "Containers execute with standard non-root POSIX unprivileged GIDs (e.g. 1000, 1001, 65532, 65534) under runAsNonRoot: true; requiring GID > 10000 conflicts with standard distroless/container user conventions."
+    },
+    {
+      "id": "KSV-0039",
+      "severity": "LOW",
+      "reason": "LimitRange objects are managed centrally per team namespace by team_namespace in platform GitOps rather than defined within individual application manifests."
+    },
+    {
+      "id": "KSV-0040",
+      "severity": "LOW",
+      "reason": "ResourceQuota objects are managed centrally per team namespace by team_namespace in platform GitOps rather than defined within individual application manifests."
+    },
+    {
+      "id": "KSV-0110",
+      "severity": "LOW",
+      "reason": "Application and example manifests omit hard-coded namespaces so target namespaces are bound dynamically by Argo CD Application destination environments."
+    }
+  ],
+  "scannerFalsePositives": [
+    {
+      "path": "src/infra/argocd/components/buildbuddy_cache/kustomize/gateway-service.yaml",
+      "id": "KSV-0108",
+      "reason": "The stable ExternalName resolves to the in-cluster Envoy Gateway service for BuildBuddy cache clients in envoy-gateway-system.",
+      "evidence": "src/infra/argocd/components/buildbuddy_cache/kustomize/gateway-service.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/s3_gateway/kustomize/services.yaml",
+      "id": "KSV-0108",
+      "reason": "The stable ExternalName resolves cross-namespace to the in-cluster Envoy Gateway private-access proxy for storage clients.",
+      "evidence": "src/infra/argocd/components/s3_gateway/kustomize/services.yaml"
+    },
+    {
+      "path": "src/infra/terraform/components/network_mesh/aws/main.tf",
+      "id": "AWS-0104",
+      "reason": "A subnet router must reach dynamic Tailscale control, DERP, STUN, and peer endpoints; unrestricted destinations are limited to the required TCP 443 and UDP 3478/41641 ports.",
+      "evidence": "src/infra/terraform/components/network_mesh/aws/main.tf"
+    },
+    {
+      "path": "src/infra/terraform/components/network_mesh/gcp/main.tf",
+      "id": "GCP-0043",
+      "reason": "A subnet router must have IP forwarding enabled to route mesh packets across subnets.",
+      "evidence": "src/infra/terraform/components/network_mesh/gcp/main.tf"
+    },
+    {
+      "path": "src/infra/argocd/components/clickhouse/kustomize/clickhouse-backup-config.yaml",
+      "id": "KSV-01010",
+      "reason": "ConfigMap keys CLICKHOUSE_PORT and CLICKHOUSE_USERNAME configure non-sensitive service connection coordinates rather than secrets or credentials.",
+      "evidence": "src/infra/argocd/components/clickhouse/kustomize/clickhouse-backup-config.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/clickhouse/kustomize/storage-stats-config.yaml",
+      "id": "KSV-01010",
+      "reason": "ConfigMap keys CLICKHOUSE_PORT, CLICKHOUSE_USERNAME, and INVENTORY_MANIFEST_FILE_KEY store non-sensitive schema and telemetry pipeline connection options.",
+      "evidence": "src/infra/argocd/components/clickhouse/kustomize/storage-stats-config.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/clickhouse/kustomize/storage-stats-provider.yaml",
+      "id": "KSV-01010",
+      "reason": "ConfigMap key INVENTORY_MANIFEST_FILE_KEY stores a non-sensitive S3 inventory manifest metadata key.",
+      "evidence": "src/infra/argocd/components/clickhouse/kustomize/storage-stats-provider.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/kube_oidc_proxy/kustomize/config.yaml",
+      "id": "KSV-01010",
+      "reason": "ConfigMap keys oidc-username-claim and oidc-username-prefix configure OIDC token claim mapping parameters rather than user credentials.",
+      "evidence": "src/infra/argocd/components/kube_oidc_proxy/kustomize/config.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/cluster_access/kustomize/workspace-snapshot-catalog-cluster-reader.yaml",
+      "id": "KSV-0113",
+      "reason": "The workspace-snapshot-catalog role is strictly restricted to get verbs on exact named cluster connection secret records across cells.",
+      "evidence": "src/infra/argocd/components/cluster_access/kustomize/workspace-snapshot-catalog-cluster-reader.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/external_secrets/kustomize/application-oidc-rbac.yaml",
+      "id": "KSV-0113",
+      "reason": "The application-oidc-reader role is strictly restricted to get verbs on exact named application identity secrets.",
+      "evidence": "src/infra/argocd/components/external_secrets/kustomize/application-oidc-rbac.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/external_secrets/kustomize/secret-records-store.yaml",
+      "id": "KSV-0113",
+      "reason": "The secret-record-reader role is strictly restricted to get verbs on exact named secret records to populate External Secrets stores.",
+      "evidence": "src/infra/argocd/components/external_secrets/kustomize/secret-records-store.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0001",
+      "reason": "Whole-node continuous eBPF CPU profiling requires privilege escalation to load eBPF tracing programs on the pinned kernel range.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0005",
+      "reason": "The Parca agent loads eBPF programs and maps for whole-node CPU profiling; SYS_ADMIN is required by the eBPF attach path.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0010",
+      "reason": "Whole-node profiles must resolve host process identities, which requires the host PID namespace by design.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0012",
+      "reason": "Loading whole-node eBPF tracing probes and reading debugfs require running as root user.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0017",
+      "reason": "The profiler attaches perf events and reads debugfs on every node; the privileged security context is the upstream-supported deployment mode.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0022",
+      "reason": "The Parca agent requires specific capabilities (such as SYS_ADMIN) to attach eBPF tracing programs.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0023",
+      "reason": "Parca agent requires hostPath mounts of kernel debug, BTF, and cgroup hierarchies to profile host processes.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0121",
+      "reason": "Read-only hostPath mounts of kernel debug and BTF paths are how the agent resolves symbols; no writable host paths are mounted.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/terraform/components/vpc/gcp/main.tf",
+      "id": "GCP-0072",
+      "reason": "Internal VPC mesh firewall rule permits private inter-subnet RFC1918 communications between cluster nodes and internal mesh peers.",
+      "evidence": "src/infra/terraform/components/vpc/gcp/main.tf"
+    },
+    {
+      "path": "src/infra/argocd/components/dragonfly_manager/kustomize/valkey.yaml",
+      "id": "KSV-0011",
+      "reason": "Custom ValkeyCluster resource defines CPU limits under .spec.resources rather than the standard pod container path inspected by Trivy.",
+      "evidence": "src/infra/argocd/components/dragonfly_manager/kustomize/valkey.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/dragonfly_manager/kustomize/valkey.yaml",
+      "id": "KSV-0015",
+      "reason": "Custom ValkeyCluster resource defines CPU requests under .spec.resources rather than the standard pod container path inspected by Trivy.",
+      "evidence": "src/infra/argocd/components/dragonfly_manager/kustomize/valkey.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/dragonfly_manager/kustomize/valkey.yaml",
+      "id": "KSV-0016",
+      "reason": "Custom ValkeyCluster resource defines memory requests under .spec.resources rather than the standard pod container path inspected by Trivy.",
+      "evidence": "src/infra/argocd/components/dragonfly_manager/kustomize/valkey.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/dragonfly_manager/kustomize/valkey.yaml",
+      "id": "KSV-0018",
+      "reason": "Custom ValkeyCluster resource defines memory limits under .spec.resources rather than the standard pod container path inspected by Trivy.",
+      "evidence": "src/infra/argocd/components/dragonfly_manager/kustomize/valkey.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0003",
+      "reason": "Parca eBPF profiling agent requires Linux kernel tracing capabilities and cannot drop all capabilities.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0105",
+      "reason": "Parca eBPF profiling agent must run as user 0 to attach kernel BPF tracing probes to host processes.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml",
+      "id": "KSV-0106",
+      "reason": "Parca eBPF profiling agent requires capabilities beyond NET_BIND_SERVICE to load BPF programs and attach kprobes.",
+      "evidence": "src/infra/argocd/components/parca_agent/kustomize/daemonset.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/torch_compile_cache/kustomize/workload.yaml",
+      "id": "KSV-0011",
+      "reason": "Custom ValkeyCluster resource defines CPU limits under .spec.resources rather than the standard pod container path inspected by Trivy.",
+      "evidence": "src/infra/argocd/components/torch_compile_cache/kustomize/workload.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/torch_compile_cache/kustomize/workload.yaml",
+      "id": "KSV-0015",
+      "reason": "Custom ValkeyCluster resource defines CPU requests under .spec.resources rather than the standard pod container path inspected by Trivy.",
+      "evidence": "src/infra/argocd/components/torch_compile_cache/kustomize/workload.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/torch_compile_cache/kustomize/workload.yaml",
+      "id": "KSV-0016",
+      "reason": "Custom ValkeyCluster resource defines memory requests under .spec.resources rather than the standard pod container path inspected by Trivy.",
+      "evidence": "src/infra/argocd/components/torch_compile_cache/kustomize/workload.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/torch_compile_cache/kustomize/workload.yaml",
+      "id": "KSV-0018",
+      "reason": "Custom ValkeyCluster resource defines memory limits under .spec.resources rather than the standard pod container path inspected by Trivy.",
+      "evidence": "src/infra/argocd/components/torch_compile_cache/kustomize/workload.yaml"
+    },
+    {
+      "path": "src/infra/tools/coder_snapshot_portal/Dockerfile",
+      "id": "DS-0026",
+      "reason": "Distroless static base image has no shell or utilities for container-level HEALTHCHECK; container health is monitored via Kubernetes liveness and readiness probes.",
+      "evidence": "src/infra/tools/coder_snapshot_portal/Dockerfile"
+    },
+    {
+      "path": "src/infra/terraform/components/cluster/gcp/main.tf",
+      "id": "GCP-0054",
+      "reason": "GKE cluster default node pool is removed immediately upon creation; node management is handled dynamically by Karpenter.",
+      "evidence": "src/infra/terraform/components/cluster/gcp/main.tf"
+    },
+    {
+      "path": "src/infra/terraform/components/cluster/gcp/main.tf",
+      "id": "GCP-0058",
+      "reason": "GKE cluster default node pool is removed immediately upon creation; node management is handled dynamically by Karpenter.",
+      "evidence": "src/infra/terraform/components/cluster/gcp/main.tf"
+    },
+    {
+      "path": "src/infra/terraform/components/cluster/gcp/main.tf",
+      "id": "GCP-0063",
+      "reason": "GKE cluster default node pool is removed immediately upon creation; node management is handled dynamically by Karpenter.",
+      "evidence": "src/infra/terraform/components/cluster/gcp/main.tf"
+    },
+    {
+      "path": "src/infra/terraform/components/network_mesh/gcp/main.tf",
+      "id": "GCP-0033",
+      "reason": "Subnet router VM boot disk is stateless and ephemeral; no persistent state is retained on disk.",
+      "evidence": "src/infra/terraform/components/network_mesh/gcp/main.tf"
+    },
+    {
+      "path": "src/infra/terraform/components/vpc/gcp/main.tf",
+      "id": "GCP-0074",
+      "reason": "Internal VPC mesh firewall rule permits private inter-subnet RFC1918 communications between cluster nodes and internal mesh peers across needed port ranges.",
+      "evidence": "src/infra/terraform/components/vpc/gcp/main.tf"
+    },
+    {
+      "path": "src/infra/argocd/components/coder/kustomize/snapshot-oauth-rbac.yaml",
+      "id": "KSV-0048",
+      "reason": "The coder-snapshot-oauth-rollout role is strictly restricted to patch the named coder-snapshot-portal deployment during OAuth credential rollouts.",
+      "evidence": "src/infra/argocd/components/coder/kustomize/snapshot-oauth-rbac.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/coder/kustomize/snapshot-oauth-rbac.yaml",
+      "id": "KSV-0113",
+      "reason": "The coder-snapshot-oauth-writer and coder-snapshot-oauth-rollout roles are strictly restricted to exact named OAuth secret records.",
+      "evidence": "src/infra/argocd/components/coder/kustomize/snapshot-oauth-rbac.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/coder/kustomize/workspace-healer.k8s.yaml",
+      "id": "KSV-0049",
+      "reason": "The coder-workspace-healer-state role is strictly restricted to read and update its exact named state ConfigMap.",
+      "evidence": "src/infra/argocd/components/coder/kustomize/workspace-healer.k8s.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/external_secrets/kustomize/coder-cell-kubeconfig-store.yaml",
+      "id": "KSV-0113",
+      "reason": "The coder-cell-kubeconfig-reader role is strictly restricted to get verbs on the exact named coder-cell-kubeconfig secret in kube-system.",
+      "evidence": "src/infra/argocd/components/external_secrets/kustomize/coder-cell-kubeconfig-store.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/kyverno/kustomize/pod-cleanup-policy.yaml",
+      "id": "KSV-0048",
+      "reason": "The kyverno:cleanup-pods ClusterRole requires pod management permissions for the Kyverno cleanup controller to prune failed and evicted pods.",
+      "evidence": "src/infra/argocd/components/kyverno/kustomize/pod-cleanup-policy.yaml"
+    },
+    {
+      "path": "src/infra/terraform/components/cluster/aws/main.tf",
+      "id": "AWS-0038",
+      "reason": "EKS cluster control plane logging types are configurable via var.enable_control_plane_logging and enabled in production environments.",
+      "evidence": "src/infra/terraform/components/cluster/aws/main.tf"
+    },
+    {
+      "path": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml",
+      "id": "KSV-0041",
+      "reason": "Chainsaw identity check manages temporary test credentials in the dex namespace for synthetic auth testing.",
+      "evidence": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml",
+      "id": "KSV-0042",
+      "reason": "Chainsaw synthetic checks require pod log access and cleanup permissions during synthetic test execution.",
+      "evidence": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml",
+      "id": "KSV-0048",
+      "reason": "Chainsaw synthetic checks require workload lifecycle permissions to deploy and verify transient probe jobs and pods.",
+      "evidence": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml",
+      "id": "KSV-0049",
+      "reason": "Chainsaw synthetic checks require ConfigMap management permissions to create and clean up temporary test configurations.",
+      "evidence": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml",
+      "id": "KSV-0053",
+      "reason": "Chainsaw networking check executes into synthetic probe pods to verify network connectivity and policy enforcement.",
+      "evidence": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml"
+    },
+    {
+      "path": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml",
+      "id": "KSV-0056",
+      "reason": "Chainsaw networking synthetic check requires permissions to manage network policies and services to test isolation.",
+      "evidence": "src/infra/argocd/components/kuberhealthy/kustomize/rbac.yaml"
+    }
+  ],
+  "exceptions": []
+}

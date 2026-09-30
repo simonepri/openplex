@@ -1,0 +1,11 @@
+"""Export external module patches and vendor Helm repository definitions consumed by MODULE.bazel."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+exports_files([
+    "rules_helm_chart_relative_files.patch",
+    "rules_tf_provider_plugins_and_mirror.patch",
+    "tofu_providers.lock.hcl",
+])
+
+package_sources()

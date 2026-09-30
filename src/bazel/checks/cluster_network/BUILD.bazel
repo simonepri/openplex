@@ -1,0 +1,38 @@
+"""Define test and library targets for cluster network CIDR allocations and host port collision checks."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "cluster_network_lib",
+    srcs = ["check_cluster_network.py"],
+    imports = ["."],
+    deps = [
+        "@dev_python_deps//pyyaml",
+    ],
+)
+
+py_binary(
+    name = "cluster_network",
+    srcs = ["check_cluster_network.py"],
+    imports = ["."],
+    main = "check_cluster_network.py",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":cluster_network_lib",
+    ],
+)
+
+py_test(
+    name = "check_cluster_network_test",
+    srcs = ["check_cluster_network_test.py"],
+    imports = ["."],
+    deps = [
+        ":cluster_network_lib",
+        "@dev_python_deps//pyyaml",
+    ],
+)

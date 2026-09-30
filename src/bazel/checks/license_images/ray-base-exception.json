@@ -1,0 +1,4023 @@
+{
+  "description": "Exact reviewed license findings for the pinned Ray 2.58 vendor base images.",
+  "version": 1,
+  "exceptionId": "ray-2.58-vendor-base-licenses",
+  "artifactRepository": "index.docker.io/rayproject/ray",
+  "artifacts": [
+    "index.docker.io/rayproject/ray@sha256:2d543193c6cbefd40d0a17b681f66be2fa85a4beada86bc84ef9c1fb7d94d3eb",
+    "index.docker.io/rayproject/ray@sha256:b833e75525ad8cce5222fde91a17478af826b789a7a5b80422473f07b5d8447c"
+  ],
+  "findingCount": 998,
+  "findings": [
+    {
+      "package": "adler2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aes",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ahash",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aho-corasick",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aiohappyeyeballs",
+      "license": "Python Software Foundation License"
+    },
+    {
+      "package": "allocator-api2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ambient-authority",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ambient-id",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "anstream",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "anstyle",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "anstyle-parse",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "anstyle-query",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "anyhow",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "arc-swap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "archive-trait",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "archspec",
+      "license": "Other/Proprietary License"
+    },
+    {
+      "package": "archspec",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "arcstr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "arrayref",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "arrayvec",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "asn1-rs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "asn1-rs-impl",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "assert-json-diff",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "assert_cmd",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "assert_fs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "astral-pubgrub",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "astral-reqwest-middleware",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "astral-reqwest-retry",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "astral-tl",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "astral-tokio-tar",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "astral-version-ranges",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "astral_async_http_range_reader",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "astral_async_zip",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "async-broadcast",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "async-channel",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "async-compression",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "async-fd-lock",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "async-once-cell",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "async-recursion",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "async-spooled-tempfile",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "async-trait",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "atomic-waker",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "autocommand",
+      "license": "LGPL-3.0-only"
+    },
+    {
+      "package": "aws-config",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-credential-types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-lc-rs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-lc-sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-runtime",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-sdk-s3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-sdk-signin",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-sdk-sso",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-sdk-ssooidc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-sdk-sts",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-sigv4",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-async",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-checksums",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-eventstream",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-http",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-http-client",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-json",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-observability",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-query",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-runtime",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-runtime-api",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-schema",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-smithy-xml",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "aws-types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "axoasset",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "axoprocess",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "axotag",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "axoupdater",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "backon",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "base-passwd",
+      "license": "public-domain"
+    },
+    {
+      "package": "base16ct",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "base64",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "base64-simd",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "base64ct",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bit-set",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bit-vec",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bitflags",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bitvec",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "blake2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "blake3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "block-buffer",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "block-padding",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "borrow-or-share",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "boxcar",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bs58",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bsdutils",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "bsdutils",
+      "license": "public-domain"
+    },
+    {
+      "package": "bstr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bumpalo",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bytecheck",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bytemuck",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "byteorder-lite",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bytes",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bytes-utils",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "bzip2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cache_control",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "camino",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cap-primitives",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cap-std",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cargo-util",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cbc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cfg-if",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "chacha20",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "charset",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "chrono",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cipher",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "clap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "clap-verbosity-flag",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "clap_builder",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "clap_complete",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "clap_complete_command",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "clap_complete_nushell",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "clap_lex",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cmov",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "coalesced_map",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "colorchoice",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "compression-codecs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "compression-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "concurrent-queue",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "conda_index",
+      "license": "CUSTOM License: BSD 3-Clause License..."
+    },
+    {
+      "package": "conda_index",
+      "license": "text://BSD 3-Clause License  Copyright (c) 2022, conda  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
+    },
+    {
+      "package": "configparser",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "console",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "const-oid",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "const-random",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "constant_time_eq",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cpufeatures",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "crc-fast",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "crc32c",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "crc32fast",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "crossbeam-channel",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "crossbeam-deque",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "crossbeam-epoch",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "crossbeam-utils",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "crypto-bigint",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "crypto-common",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "csv",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "csv-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ctrlc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ctutils",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cyclonedx-bom",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cyclonedx-bom-macros",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "darling",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "darling_core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "dash",
+      "license": "FSFUL"
+    },
+    {
+      "package": "dash",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "dash",
+      "license": "public-domain"
+    },
+    {
+      "package": "dashmap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "data-encoding",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "dbus",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "dbus-secret-service",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "dbus-secret-service-keyring-store",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "deadpool",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "deadpool-runtime",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "defmt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "defmt-macros",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "defmt-parser",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "der",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "der-parser",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "deranged",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "difflib",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "digest",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "dirmngr",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "dirmngr",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "dirmngr",
+      "license": "permissive"
+    },
+    {
+      "package": "dirs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "dirs-sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "diskus",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "displaydoc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "distlib",
+      "license": "Python Software Foundation License"
+    },
+    {
+      "package": "dlv-list",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "dotenvy",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "dpkg",
+      "license": "public-domain-md5"
+    },
+    {
+      "package": "dpkg",
+      "license": "public-domain-s-s-d"
+    },
+    {
+      "package": "dunce",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "dyn-clone",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ecdsa",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "either",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "elliptic-curve",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "elsa",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "encoding_rs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "encoding_rs_io",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "endi",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "enum_dispatch",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "enumflags2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "equivalent",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "erased-serde",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "errno",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "etcetera",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "event-listener",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "event-listener-strategy",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "fancy-regex",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "fastrand",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ff",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "file_url",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "filetime",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "fixedbitset",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "flate2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "float-cmp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "fluent-uri",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "fnv",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "foldhash",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "foreign-types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "foreign-types-shared",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "form_urlencoded",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "frozendict",
+      "license": "LGPL-3.0-only"
+    },
+    {
+      "package": "fs-err",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "fs-set-times",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "fs4",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "fslock",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "funty",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "futures",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "futures-channel",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "futures-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "futures-executor",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "futures-io",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "futures-lite",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "futures-sink",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "futures-task",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "futures-util",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "generic-array",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "getrandom",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "git",
+      "license": "Artistic-1"
+    },
+    {
+      "package": "git",
+      "license": "dlmalloc"
+    },
+    {
+      "package": "git",
+      "license": "mingw-runtime"
+    },
+    {
+      "package": "git-man",
+      "license": "Artistic-1"
+    },
+    {
+      "package": "git-man",
+      "license": "dlmalloc"
+    },
+    {
+      "package": "git-man",
+      "license": "mingw-runtime"
+    },
+    {
+      "package": "glob",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "globset",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "globwalk",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gnupg",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gnupg",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gnupg",
+      "license": "permissive"
+    },
+    {
+      "package": "gnupg-l10n",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gnupg-l10n",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gnupg-l10n",
+      "license": "permissive"
+    },
+    {
+      "package": "gnupg-utils",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gnupg-utils",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gnupg-utils",
+      "license": "permissive"
+    },
+    {
+      "package": "goblin",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "google-cloud-auth",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "google-cloud-gax",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "google-cloud-rpc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "google-cloud-wkt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "google-crc32c",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gpg",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gpg",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gpg",
+      "license": "permissive"
+    },
+    {
+      "package": "gpg-agent",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gpg-agent",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gpg-agent",
+      "license": "permissive"
+    },
+    {
+      "package": "gpg-wks-client",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gpg-wks-client",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gpg-wks-client",
+      "license": "permissive"
+    },
+    {
+      "package": "gpg-wks-server",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gpg-wks-server",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gpg-wks-server",
+      "license": "permissive"
+    },
+    {
+      "package": "gpgconf",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gpgconf",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gpgconf",
+      "license": "permissive"
+    },
+    {
+      "package": "gpgsm",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gpgsm",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gpgsm",
+      "license": "permissive"
+    },
+    {
+      "package": "gpgv",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "gpgv",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "gpgv",
+      "license": "permissive"
+    },
+    {
+      "package": "group",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gzip",
+      "license": "FSF-manpages"
+    },
+    {
+      "package": "gzip",
+      "license": "GFDL-1.3+-no-invariant"
+    },
+    {
+      "package": "gzip",
+      "license": "GFDL-3"
+    },
+    {
+      "package": "h2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "halfbrown",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "hashbrown",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "hex",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "hkdf",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "hmac",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "homedir",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "html-escape",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "http",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "http-body",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "http-body-util",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "http-cache-semantics",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "http-content-range",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "http-serde",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "httparse",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "httpdate",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "humansize",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "humantime",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "hybrid-array",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "hyper",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "hyper-rustls",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "hyper-tls",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "hyper-util",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "iana-time-zone",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "icu_collections",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "icu_locale_core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "icu_normalizer",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "icu_normalizer_data",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "icu_properties",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "icu_properties_data",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "icu_provider",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ident_case",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "idna",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "idna_adapter",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ignore",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "image",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "indexmap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "indicatif",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "indoc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "inout",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "insta",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "inventory",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "io-extras",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "io-lifetimes",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ipnet",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "iri-string",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "is-docker",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "is-wsl",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "is_ci",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "is_terminal_polyfill",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "itertools",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "itoa",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "jiff",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "jiff-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "jobserver",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "json-patch",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "jsonptr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "keyring-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "lazy-regex",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "lazy_static",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libassuan0",
+      "license": "GAP"
+    },
+    {
+      "package": "libassuan0",
+      "license": "GAP~FSF"
+    },
+    {
+      "package": "libassuan0",
+      "license": "GPL-2+ with libtool exception"
+    },
+    {
+      "package": "libblkid1",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libblkid1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-2-Clause-NetBSD"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-2-clause-author"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-2-clause-verbatim"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-3-clause-John-Birrell"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-3-clause-Regents"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-3-clause-author"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-4-clause-Christopher-G-Demetriou"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-4-clause-Niels-Provos"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-5-clause-Peter-Wemm"
+    },
+    {
+      "package": "libbsd0",
+      "license": "Beerware"
+    },
+    {
+      "package": "libbsd0",
+      "license": "ISC-Original"
+    },
+    {
+      "package": "libbsd0",
+      "license": "public-domain"
+    },
+    {
+      "package": "libbz2-rs-sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libcom-err2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libcrypt1",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libcurl3-gnutls",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libcurl3-gnutls",
+      "license": "curl"
+    },
+    {
+      "package": "libcurl3-gnutls",
+      "license": "other"
+    },
+    {
+      "package": "libcurl3-gnutls",
+      "license": "public-domain"
+    },
+    {
+      "package": "libdb5.3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libdbus-sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libdebconfclient0",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "liberror-perl",
+      "license": "MIT/X11"
+    },
+    {
+      "package": "libevent-core-2.1-7",
+      "license": "BSD-3-Clause~Kitware"
+    },
+    {
+      "package": "libevent-core-2.1-7",
+      "license": "FSFUL"
+    },
+    {
+      "package": "libevent-core-2.1-7",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "libevent-core-2.1-7",
+      "license": "FSFULLR-No-Warranty"
+    },
+    {
+      "package": "libevent-core-2.1-7",
+      "license": "curl"
+    },
+    {
+      "package": "libfido2-1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libgcc-s1",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libgdbm-compat4",
+      "license": "GFDL-1.3-no-invariants-or-later"
+    },
+    {
+      "package": "libgdbm6",
+      "license": "GFDL-1.3-no-invariants-or-later"
+    },
+    {
+      "package": "libgpg-error0",
+      "license": "g10-permissive"
+    },
+    {
+      "package": "libhogweed6",
+      "license": "GAP"
+    },
+    {
+      "package": "libhogweed6",
+      "license": "GPL-3.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libhogweed6",
+      "license": "public-domain"
+    },
+    {
+      "package": "libidn2-0",
+      "license": "Unicode"
+    },
+    {
+      "package": "libjemalloc-dev",
+      "license": "BSD-2-Clause-Chemeris"
+    },
+    {
+      "package": "libjemalloc-dev",
+      "license": "BSD-3-Clause-Google"
+    },
+    {
+      "package": "libjemalloc-dev",
+      "license": "BSD-3-Clause-Hiroshima-University"
+    },
+    {
+      "package": "libjemalloc2",
+      "license": "BSD-2-Clause-Chemeris"
+    },
+    {
+      "package": "libjemalloc2",
+      "license": "BSD-3-Clause-Google"
+    },
+    {
+      "package": "libjemalloc2",
+      "license": "BSD-3-Clause-Hiroshima-University"
+    },
+    {
+      "package": "libksba8",
+      "license": "FSFUL"
+    },
+    {
+      "package": "libldap-2.5-0",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libldap-common",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libloading",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "liblzma5",
+      "license": "Autoconf"
+    },
+    {
+      "package": "liblzma5",
+      "license": "PD"
+    },
+    {
+      "package": "liblzma5",
+      "license": "PD-debian"
+    },
+    {
+      "package": "liblzma5",
+      "license": "config-h"
+    },
+    {
+      "package": "liblzma5",
+      "license": "noderivs"
+    },
+    {
+      "package": "liblzma5",
+      "license": "none"
+    },
+    {
+      "package": "liblzma5",
+      "license": "permissive-fsf"
+    },
+    {
+      "package": "liblzma5",
+      "license": "permissive-nowarranty"
+    },
+    {
+      "package": "liblzma5",
+      "license": "probably-PD"
+    },
+    {
+      "package": "libm",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libmd0",
+      "license": "BSD-2-Clause-NetBSD"
+    },
+    {
+      "package": "libmd0",
+      "license": "BSD-3-clause-Aaron-D-Gifford"
+    },
+    {
+      "package": "libmd0",
+      "license": "Beerware"
+    },
+    {
+      "package": "libmd0",
+      "license": "public-domain-md4"
+    },
+    {
+      "package": "libmd0",
+      "license": "public-domain-md5"
+    },
+    {
+      "package": "libmd0",
+      "license": "public-domain-sha1"
+    },
+    {
+      "package": "libmount1",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libmount1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libncurses6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libncursesw6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libnettle8",
+      "license": "GAP"
+    },
+    {
+      "package": "libnettle8",
+      "license": "GPL-3.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libnettle8",
+      "license": "public-domain"
+    },
+    {
+      "package": "libnghttp2-14",
+      "license": "GPL-3.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libnghttp2-14",
+      "license": "SIL-OFL-1.1"
+    },
+    {
+      "package": "libnghttp2-14",
+      "license": "all-permissive"
+    },
+    {
+      "package": "libnsl2",
+      "license": "GPL-2+-autoconf-exception"
+    },
+    {
+      "package": "libnsl2",
+      "license": "GPL-2+-libtool-exception"
+    },
+    {
+      "package": "libnsl2",
+      "license": "GPL-3+-autoconf-exception"
+    },
+    {
+      "package": "libnsl2",
+      "license": "permissive-autoconf-m4"
+    },
+    {
+      "package": "libnsl2",
+      "license": "permissive-autoconf-m4-no-warranty"
+    },
+    {
+      "package": "libnsl2",
+      "license": "permissive-configure"
+    },
+    {
+      "package": "libnsl2",
+      "license": "permissive-fsf"
+    },
+    {
+      "package": "libnsl2",
+      "license": "permissive-makefile-in"
+    },
+    {
+      "package": "libp11-kit0",
+      "license": "ISC+IBM"
+    },
+    {
+      "package": "libp11-kit0",
+      "license": "permissive-like-automake-output"
+    },
+    {
+      "package": "libp11-kit0",
+      "license": "same-as-rest-of-p11kit"
+    },
+    {
+      "package": "libpcre2-8-0",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libpcre3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "Artistic-2"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "Artistic-dist"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "BSD-3-clause-GENERIC"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "BSD-3-clause-with-weird-numbering"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "BSD-4-clause-POWERDOG"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "BZIP"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "DONT-CHANGE-THE-GPL"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "GPL-2.0-with-bison-exception+"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "HSIEH-BSD"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "HSIEH-DERIVATIVE"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "REGCOMP"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "RRA-KEEP-THIS-NOTICE"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "SDBM-PUBLIC-DOMAIN"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "TEXT-TABS"
+    },
+    {
+      "package": "libperl5.34",
+      "license": "Unicode"
+    },
+    {
+      "package": "libpopt0",
+      "license": "X-Consortium"
+    },
+    {
+      "package": "libpsl5",
+      "license": "Chromium"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-2.2-clause"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-3-clause-JANET"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-3-clause-PADL"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "CUSTOM License: BSD-4-clause and IBM-as-is..."
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "CUSTOM License: IBM-as-is..."
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "MIT-CMU"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "MIT-Export"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "MIT-OpenVision"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "OpenLDAP"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "OpenSSL"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "RSA-MD"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "SSLeay"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "text://BSD-4-clause and IBM-as-is"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "text://IBM-as-is"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "BSD-2.2-clause"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "BSD-3-clause-JANET"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "BSD-3-clause-PADL"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "CUSTOM License: BSD-4-clause and IBM-as-is..."
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "CUSTOM License: IBM-as-is..."
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "MIT-CMU"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "MIT-Export"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "MIT-OpenVision"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "OpenLDAP"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "OpenSSL"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "RSA-MD"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "SSLeay"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "text://BSD-4-clause and IBM-as-is"
+    },
+    {
+      "package": "libsasl2-modules",
+      "license": "text://IBM-as-is"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-2.2-clause"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-3-clause-JANET"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-3-clause-PADL"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "CUSTOM License: BSD-4-clause and IBM-as-is..."
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "CUSTOM License: IBM-as-is..."
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "MIT-CMU"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "MIT-Export"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "MIT-OpenVision"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "OpenLDAP"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "OpenSSL"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "RSA-MD"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "SSLeay"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "text://BSD-4-clause and IBM-as-is"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "text://IBM-as-is"
+    },
+    {
+      "package": "libsmartcols1",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libsmartcols1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libsqlite3-0",
+      "license": "public-domain"
+    },
+    {
+      "package": "libss2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libssh-4",
+      "license": "LGPL-2.1+~OpenSSL"
+    },
+    {
+      "package": "libssh-4",
+      "license": "public-domain"
+    },
+    {
+      "package": "libstdc++6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libsystemd0",
+      "license": "GPL-2 with Linux-syscall-note exception"
+    },
+    {
+      "package": "libsystemd0",
+      "license": "public-domain"
+    },
+    {
+      "package": "libtinfo6",
+      "license": "MIT/X11"
+    },
+    {
+      "package": "libtinfo6",
+      "license": "X11"
+    },
+    {
+      "package": "libtirpc-common",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libtirpc-common",
+      "license": "PERMISSIVE"
+    },
+    {
+      "package": "libtirpc-common",
+      "license": "__AUTO_PERMISSIVE__"
+    },
+    {
+      "package": "libtirpc3",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libtirpc3",
+      "license": "PERMISSIVE"
+    },
+    {
+      "package": "libtirpc3",
+      "license": "__AUTO_PERMISSIVE__"
+    },
+    {
+      "package": "libudev1",
+      "license": "GPL-2 with Linux-syscall-note exception"
+    },
+    {
+      "package": "libudev1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libunistring2",
+      "license": "FreeSoftware"
+    },
+    {
+      "package": "libunistring2",
+      "license": "GPL-2+ with distribution exception"
+    },
+    {
+      "package": "libuuid1",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libuuid1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libx11-6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libx11-data",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libxau6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libxcb1",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libxdmcp6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libxext6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libxmuu1",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "linux-raw-sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "litemap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "lock_api",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "log",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "lru",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "lru-slab",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "mailparse",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "matchers",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "maybe-owned",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "md-5",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "mea",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "memchr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "memmap2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "memoffset",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "menuinst",
+      "license": "CUSTOM License: (c) 2016 Continuum..."
+    },
+    {
+      "package": "menuinst",
+      "license": "text://(c) 2016 Continuum Analytics, Inc. / http://continuum.io All Rights Reserved  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met: * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer. * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution. * Neither the name of Continuum Analytics, Inc. nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL CONTINUUM ANALYTICS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
+    },
+    {
+      "package": "miette",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "mime",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "mime_guess",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "minimal-lexical",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "miniz_oxide",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "mio",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "mount",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "mount",
+      "license": "public-domain"
+    },
+    {
+      "package": "moxcms",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "munge",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "my-test-package",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "native-tls",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ncurses-base",
+      "license": "MIT/X11"
+    },
+    {
+      "package": "ncurses-base",
+      "license": "X11"
+    },
+    {
+      "package": "ncurses-bin",
+      "license": "MIT/X11"
+    },
+    {
+      "package": "ncurses-bin",
+      "license": "X11"
+    },
+    {
+      "package": "netrc-rs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "nix",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "nom",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "nom-language",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "normalize-line-endings",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "nu-ansi-term",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num-bigint",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num-bigint-dig",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num-complex",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num-conv",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num-integer",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num-iter",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num-rational",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num-traits",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "num_cpus",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "oid-registry",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "once_cell",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "open",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "opendal",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "opendal-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "opendal-layer-retry",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "opendal-service-fs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "opendal-service-s3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "openssh-client",
+      "license": "Expat-with-advertising-restriction"
+    },
+    {
+      "package": "openssh-client",
+      "license": "Mazieres-BSD-style"
+    },
+    {
+      "package": "openssh-client",
+      "license": "OpenSSH"
+    },
+    {
+      "package": "openssh-client",
+      "license": "Powell-BSD-style"
+    },
+    {
+      "package": "openssh-client",
+      "license": "public-domain"
+    },
+    {
+      "package": "openssl",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "openssl-probe",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "openssl-sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "option-ext",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ordered-float",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ordered-multimap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ordered-stream",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "os_str_bytes",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "outref",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "owo-colors",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "p256",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "papaya",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "parking",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "parking_lot",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "parking_lot_core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "path-slash",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "path_resolver",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pathdiff",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pbkdf2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pem",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pem-rfc7468",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pep440_rs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pep508_rs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "percent-encoding",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "perl",
+      "license": "Artistic-2"
+    },
+    {
+      "package": "perl",
+      "license": "Artistic-dist"
+    },
+    {
+      "package": "perl",
+      "license": "BSD-3-clause-GENERIC"
+    },
+    {
+      "package": "perl",
+      "license": "BSD-3-clause-with-weird-numbering"
+    },
+    {
+      "package": "perl",
+      "license": "BSD-4-clause-POWERDOG"
+    },
+    {
+      "package": "perl",
+      "license": "BZIP"
+    },
+    {
+      "package": "perl",
+      "license": "DONT-CHANGE-THE-GPL"
+    },
+    {
+      "package": "perl",
+      "license": "GPL-2.0-with-bison-exception+"
+    },
+    {
+      "package": "perl",
+      "license": "HSIEH-BSD"
+    },
+    {
+      "package": "perl",
+      "license": "HSIEH-DERIVATIVE"
+    },
+    {
+      "package": "perl",
+      "license": "REGCOMP"
+    },
+    {
+      "package": "perl",
+      "license": "RRA-KEEP-THIS-NOTICE"
+    },
+    {
+      "package": "perl",
+      "license": "SDBM-PUBLIC-DOMAIN"
+    },
+    {
+      "package": "perl",
+      "license": "TEXT-TABS"
+    },
+    {
+      "package": "perl",
+      "license": "Unicode"
+    },
+    {
+      "package": "perl-base",
+      "license": "Artistic-2"
+    },
+    {
+      "package": "perl-base",
+      "license": "Artistic-dist"
+    },
+    {
+      "package": "perl-base",
+      "license": "BSD-3-clause-GENERIC"
+    },
+    {
+      "package": "perl-base",
+      "license": "BSD-3-clause-with-weird-numbering"
+    },
+    {
+      "package": "perl-base",
+      "license": "BSD-4-clause-POWERDOG"
+    },
+    {
+      "package": "perl-base",
+      "license": "BZIP"
+    },
+    {
+      "package": "perl-base",
+      "license": "DONT-CHANGE-THE-GPL"
+    },
+    {
+      "package": "perl-base",
+      "license": "GPL-2.0-with-bison-exception+"
+    },
+    {
+      "package": "perl-base",
+      "license": "HSIEH-BSD"
+    },
+    {
+      "package": "perl-base",
+      "license": "HSIEH-DERIVATIVE"
+    },
+    {
+      "package": "perl-base",
+      "license": "REGCOMP"
+    },
+    {
+      "package": "perl-base",
+      "license": "RRA-KEEP-THIS-NOTICE"
+    },
+    {
+      "package": "perl-base",
+      "license": "SDBM-PUBLIC-DOMAIN"
+    },
+    {
+      "package": "perl-base",
+      "license": "TEXT-TABS"
+    },
+    {
+      "package": "perl-base",
+      "license": "Unicode"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "Artistic-2"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "Artistic-dist"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "BSD-3-clause-GENERIC"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "BSD-3-clause-with-weird-numbering"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "BSD-4-clause-POWERDOG"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "BZIP"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "DONT-CHANGE-THE-GPL"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "GPL-2.0-with-bison-exception+"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "HSIEH-BSD"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "HSIEH-DERIVATIVE"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "REGCOMP"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "RRA-KEEP-THIS-NOTICE"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "SDBM-PUBLIC-DOMAIN"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "TEXT-TABS"
+    },
+    {
+      "package": "perl-modules-5.34",
+      "license": "Unicode"
+    },
+    {
+      "package": "pest",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pest_derive",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pest_generator",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pest_meta",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "petgraph",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pin-project",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pin-project-lite",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pin-utils",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pinentry-curses",
+      "license": "X11"
+    },
+    {
+      "package": "pkcs1",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pkcs5",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pkcs8",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "plain",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "portable-atomic",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "potential_utf",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "powerfmt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ppv-lite86",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "predicates",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "predicates-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "predicates-tree",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "primeorder",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "priority-queue",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "proc-macro-crate",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "proc-macro-error2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "proc-macro2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "procfs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "procfs-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "proptest",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ptr_meta",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "purl",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pxfm",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "py-rattler",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pyo3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pyo3-async-runtimes",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pyo3-ffi",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pyo3-file",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pythonize",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "quick-error",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "quick-xml",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "quinn",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "quinn-proto",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "quinn-udp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "quote",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "quoted_printable",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "radium",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rancor",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rand",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rand_chacha",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rand_core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rand_xorshift",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_cache",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_conda_types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_config",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_digest",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_index",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_lock",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_menuinst",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_networking",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_package_streaming",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_pty",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_redaction",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_repodata_gateway",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_s3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_shell",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_solve",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rattler_virtual_packages",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ray-haproxy",
+      "license": "GPL-2.0-only"
+    },
+    {
+      "package": "rayon",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rayon-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ref-cast",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reflink-copy",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "regex",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "regex-automata",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "regex-lite",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "regex-syntax",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rend",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqsign",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqsign-aws-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqsign-aws-v4",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqsign-azure-storage",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqsign-command-execute-tokio",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqsign-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqsign-file-read-tokio",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqsign-google",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqsign-http-send-reqwest",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "reqwest",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "resolvo",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "retry-policies",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rfc6979",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ring",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rkyv",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rmp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rmp-serde",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rsa",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rust-ini",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rustc-hash",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rusticata-macros",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rustix",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rustix-linux-procfs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rustls",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rustls-native-certs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rustls-pki-types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rustls-platform-verifier",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rustls-webpki",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rustversion",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rusty-fork",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ryu",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "salsa20",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "same-file",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "schemars",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "scopeguard",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "scroll",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "scrypt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "seahash",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "sec1",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "secrecy",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "secret-service",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "seize",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "self_cell",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "semver",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "sensible-utils",
+      "license": "All-permissive"
+    },
+    {
+      "package": "sensible-utils",
+      "license": "configure"
+    },
+    {
+      "package": "sensible-utils",
+      "license": "installsh"
+    },
+    {
+      "package": "serde",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde-untagged",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde-value",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde_bytes",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde_core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde_json",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde_repr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde_spanned",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde_urlencoded",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde_with",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde_with_macros",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "serde_yaml",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "sha1",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "sha2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "sharded-slab",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "shell-escape",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "shellexpand",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "shlex",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "signal-hook",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "signal-hook-registry",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "signature",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "simd-adler32",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "simd-json",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "simdutf8",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "similar",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "simple_spawn_blocking",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "slab",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "smallvec",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "smawk",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "socket2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "spdx",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "spin",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "spki",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "stable_deref_trait",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "strip-ansi-escapes",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "strsim",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "strum",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "subtle",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "sudo",
+      "license": "other"
+    },
+    {
+      "package": "superslice",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "supports-color",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "supports-hyperlinks",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "supports-unicode",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "syn",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "sync_wrapper",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "synstructure",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tar",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tar-codec",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tar-framing",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "target-lexicon",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "taskiq-dependencies",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "temp-env",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tempfile",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "terminal_size",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "termtree",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "textwrap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "thiserror",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "thread_local",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tikv-jemalloc-sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tikv-jemallocator",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "time",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "time-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tinystr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tinyvec",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tinyvec_macros",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tokio",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tokio-native-tls",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tokio-rustls",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tokio-stream",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tokio-util",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "toml",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "toml_datetime",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "toml_edit",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "toml_parser",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "toml_writer",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tower",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tower-http",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tower-layer",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tower-service",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tracing",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tracing-attributes",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tracing-core",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tracing-log",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tracing-subscriber",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tracing-tree",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "try-lock",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "typed-path",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "typeid",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "typenum",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "typing_extensions",
+      "license": "Python Software Foundation License"
+    },
+    {
+      "package": "tzdata",
+      "license": "ICU"
+    },
+    {
+      "package": "ucd-trie",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unarray",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unicase",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unicode-ident",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unicode-linebreak",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unicode-normalization",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unicode-width",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unindent",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unit-prefix",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unsafe-libyaml",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "unscanny",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "untrusted",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uritemplate",
+      "license": "BSD 3-Clause OR Apache-2.0"
+    },
+    {
+      "package": "url",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "urlencoding",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "utf8_iter",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "utf8parse",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "util-linux",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "util-linux",
+      "license": "public-domain"
+    },
+    {
+      "package": "uuid",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-audit",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-auth",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-bin-install",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-build-backend",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-build-frontend",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-cache",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-cache-info",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-cache-key",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-cli",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-client",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-configuration",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-console",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-dirs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-dispatch",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-distribution",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-distribution-filename",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-distribution-types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-errors",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-extract",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-fastid",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-flags",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-fs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-git",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-git-types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-globfilter",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-install-wheel",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-installer",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-keyring",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-logging",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-metadata",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-netrc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-normalize",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-once-map",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-options-metadata",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-pep440",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-pep508",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-performance-memory-allocator",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-platform",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-platform-tags",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-preview",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-publish",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-pypi-types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-python",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-redacted",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-requirements",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-requirements-txt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-resolver",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-scripts",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-settings",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-shell",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-small-str",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-state",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-static",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-test",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-toml",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-tool",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-torch",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-trampoline-builder",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-types",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-unix",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-version",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-virtualenv",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-warnings",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "uv-workspace",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "value-trait",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "version-ranges",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "vsimd",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "vte",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "wait-timeout",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "walkdir",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "want",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "webpki-root-certs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "which",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "winnow",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "wiremock",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "writeable",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "wyz",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "x509-parser",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "xattr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "xauth",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "xml-rs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "xmlparser",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "xxhash-rust",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "yoke",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "yoke-derive",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zbus",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zbus_macros",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zbus_names",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zerocopy",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zerocopy-derive",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zerofrom",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zerofrom-derive",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zeroize",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zerotrie",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zerovec",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zerovec-derive",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zip",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zlib-rs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zmij",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zopfli",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zstd",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zstd-safe",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zstd-sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zvariant",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zvariant_derive",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "zvariant_utils",
+      "license": "UNKNOWN"
+    }
+  ],
+  "generatedFrom": {
+    "scanner": "Trivy 0.74.0",
+    "reports": [
+      {
+        "artifact": "index.docker.io/rayproject/ray@sha256:2d543193c6cbefd40d0a17b681f66be2fa85a4beada86bc84ef9c1fb7d94d3eb",
+        "reportId": "3fb58d2c038e24bd05cdb2994fb4896e0972683e13c5256a8d32fc27dd3a4ab6"
+      },
+      {
+        "artifact": "index.docker.io/rayproject/ray@sha256:b833e75525ad8cce5222fde91a17478af826b789a7a5b80422473f07b5d8447c",
+        "reportId": "5e965dd0af8c265484c49756ed25d45dea63513c7eda45f1fa46348839bd87c5"
+      }
+    ]
+  },
+  "exitCondition": {
+    "owner": "simone.primarosa@gmail.com",
+    "replacement": "First-party minimal Ray base built from slim Python plus pip-installed Ray.",
+    "reviewBy": "2027-02-28"
+  }
+}

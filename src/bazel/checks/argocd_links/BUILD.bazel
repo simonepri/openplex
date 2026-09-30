@@ -1,0 +1,34 @@
+"""Define test and library targets for validating Argo CD application manifests, profiles, and value file links."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "argocd_links_lib",
+    srcs = ["check_argocd_links.py"],
+    imports = ["."],
+)
+
+py_binary(
+    name = "argocd_links",
+    srcs = ["check_argocd_links.py"],
+    imports = ["."],
+    main = "check_argocd_links.py",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":argocd_links_lib",
+    ],
+)
+
+py_test(
+    name = "check_argocd_links_test",
+    srcs = ["check_argocd_links_test.py"],
+    imports = ["."],
+    deps = [
+        ":argocd_links_lib",
+    ],
+)

@@ -1,0 +1,13 @@
+# List trusted container image registries permitted by Trivy security scanning policies.
+
+ksv0125:
+  trusted_registries:
+    # keep-sorted start
+    - docker.io
+    - gcr.io
+    - ghcr.io
+    - gke.gcr.io
+    - quay.io
+    - registry.invalid
+    - registry.k8s.io
+    # keep-sorted end
