@@ -1,0 +1,75 @@
+"""Builds the static k3s runtimes declared for Floci-managed local clusters."""
+
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/oci:defs.bzl", "oci_multiarch_image")
+
+package(default_visibility = ["//visibility:public"])
+
+# LINT.IfChange(floci-k3s-runtime-tag)
+K3S_RUNTIME_TAG = "v1.36.1-runtime7"
+# LINT.ThenChange(//src/third_party/k3s-io/k3s/images.toml:floci-k3s-version)
+
+sh_test(
+    name = "k3s_entrypoint_test",
+    srcs = ["k3s-entrypoint_test.sh"],
+    data = [
+        "hosts.toml",
+        "k3s-entrypoint.sh",
+    ],
+)
+
+pkg_files(
+    name = "entrypoint_file",
+    srcs = ["k3s-entrypoint.sh"],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/usr/local/bin",
+    renames = {"k3s-entrypoint.sh": "k3s-runtime"},
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_files(
+    name = "registry_hosts_source_file",
+    srcs = ["hosts.toml"],
+    attributes = pkg_attributes(mode = "0444"),
+    prefix = "/usr/local/share/k3s-runtime/registry/localhost-15100",
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "runtime_layer",
+    srcs = [
+        # keep-sorted start
+        ":entrypoint_file",
+        ":registry_hosts_source_file",
+        # keep-sorted end
+    ],
+)
+
+K3S_ENV = {
+    # keep-sorted start
+    "K3S_NODE_IPV4_CIDR": "172.19.255.10/16",
+    "K3S_POD_IPV4_CIDR": "10.240.0.0/16",
+    "K3S_SERVICE_IPV4_CIDR": "172.31.0.0/20",
+    "K3S_SHARED_IPV4_CIDR": "172.19.0.0/16",
+    # keep-sorted end
+}
+
+oci_multiarch_image(
+    name = "image",
+    base = "k3s_base",
+    entrypoint = ["/usr/local/bin/k3s-runtime"],
+    env = K3S_ENV,
+    push = False,
+    staging_tag = "cluster/k3s-runtime:{}".format(K3S_RUNTIME_TAG),
+    tars = [":runtime_layer"],
+)
+
+alias(
+    name = "load",
+    actual = ":image_load",
+)
+
+package_sources()
