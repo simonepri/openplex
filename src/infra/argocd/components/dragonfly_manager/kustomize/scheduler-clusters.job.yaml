@@ -1,0 +1,75 @@
+# Ctrl-only post-migration bootstrap for fleet-owned Dragonfly scheduler clusters. Argo CD runs it before any opted-in cell scheduler Application can sync.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dragonfly-scheduler-clusters
+  namespace: dragonfly-system
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "2"
+    ignore-check.kube-linter.io/no-liveness-probe: >-
+      Topology reconciler Job runs to completion and exits.
+    ignore-check.kube-linter.io/no-readiness-probe: >-
+      Topology reconciler Job runs to completion and exits.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Topology reconciler Job requires Postgres bootstrap password via environment.
+spec:
+  activeDeadlineSeconds: 300
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: topology-reconciler
+        app.kubernetes.io/name: dragonfly-scheduler-clusters
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsGroup: 70
+        runAsNonRoot: true
+        runAsUser: 70
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: reconcile
+          image: docker.io/library/postgres@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              attempts=0
+              until pg_isready "$1" "$2" "$3" --timeout=1 --quiet; do
+                attempts=$((attempts + 1))
+                if [ "$attempts" -ge 60 ]; then
+                  echo "PostgreSQL did not become reachable within 60 attempts" >&2
+                  exit 1
+                fi
+                sleep 1
+              done
+              exec psql "$@"
+            - --
+          args:
+            - --host=dragonfly-postgres-rw.dragonfly-system.svc.cluster.local
+            - --dbname=manager
+            - --username=dragonfly
+            - --set=desired_clusters=[]
+            - --file=/opt/dragonfly/scheduler-clusters.sql
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: {name: dragonfly-postgres-bootstrap, key: password}
+            - {name: PGSSLMODE, value: require}
+          resources:
+            limits: {cpu: 100m, memory: 128Mi}
+            requests: {cpu: 10m, memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - {name: program, mountPath: /opt/dragonfly, readOnly: true}
+      volumes:
+        - name: program
+          configMap: {name: dragonfly-scheduler-clusters-program}

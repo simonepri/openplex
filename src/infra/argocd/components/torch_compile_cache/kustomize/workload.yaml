@@ -1,0 +1,116 @@
+# Runs operator-managed memory-only PyTorch compile cache and preserves the namespace-local Service consumed by Coder workspaces and Ray pods.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: torch-compile-cache
+  annotations:
+    ignore-check.kube-linter.io/dangling-service: The selected pods are generated from the ValkeyCluster by the Valkey operator after this Argo CD Application reconciles.
+  labels:
+    app.kubernetes.io/component: compiler-cache
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: torch-compile-cache
+spec:
+  type: ClusterIP
+  selector:
+    valkey.io/cluster: torch-compile-cache
+  ports:
+    - {name: valkey, port: 6379, protocol: TCP, targetPort: client}
+    - {name: metrics, port: 9121, protocol: TCP, targetPort: metrics}
+---
+apiVersion: valkey.io/v1alpha1
+kind: ValkeyCluster
+metadata:
+  name: torch-compile-cache
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: compiler-cache
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: torch-compile-cache
+    velero.io/exclude-from-backup: "true"
+spec:
+  shards: 1
+  replicas: 0
+  workloadType: Deployment
+  # LINT.IfChange(cache-scheduling)
+  scheduling:
+    priorityClassName: be-ls
+  # LINT.ThenChange(//src/infra/argocd/components/valkey_operator/kustomize/pod-policy.yaml:cache-scheduling)
+  image: docker.io/valkey/valkey:9.1.2@sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd
+  config:
+    appendonly: "no"
+    maxmemory: 384mb
+    maxmemory-policy: allkeys-lru
+    save: '""'
+  podDisruptionBudget: {mode: Disabled}
+  resources:
+    requests: {cpu: 100m, memory: 384Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  users:
+    - name: default
+      enabled: false
+      resetpass: true
+    - name: torch
+      enabled: true
+      passwordSecret:
+        name: torch-compile-cache
+        keys: [password]
+      commands:
+        allow:
+          # keep-sorted start
+          - "@connection"
+          - asking
+          - cluster|shards
+          - cluster|slots
+          - get
+          - set
+          # keep-sorted end
+      keys:
+        readWrite: ["pt2:*"]
+  exporter:
+    enabled: true
+    image: docker.io/oliver006/redis_exporter:v1.92.1@sha256:7fbc93d30f0f91eed1b2fe6968a956259cc5d260a984dd9071f1d1e9c2692ecd
+    args:
+      - -config-command=-
+      - -exclude-latency-histogram-metrics
+      - -set-client-name=false
+    resources:
+      requests: {cpu: 10m, memory: 24Mi}
+      limits: {cpu: 100m, memory: 64Mi}
+    securityContext: &container-security
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsGroup: 1000
+      runAsUser: 999
+      seccompProfile: {type: RuntimeDefault}
+  podSecurityContext:
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    runAsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 999
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: server
+      securityContext: *container-security
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: torch-compile-cache
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: valkey-torch-compile-cache-0-0
+  updatePolicy:
+    updateMode: "InPlace"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "*"
+        controlledValues: RequestsOnly

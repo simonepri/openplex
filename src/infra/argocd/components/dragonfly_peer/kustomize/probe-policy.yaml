@@ -1,0 +1,54 @@
+# The upstream chart probes the Scheduler's mTLS gRPC port without TLS. Mutate its fixed probe commands before the StatefulSet reaches the API.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: dragonfly-scheduler-mtls-probes
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: authenticate-scheduler-health-probes
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [StatefulSet]
+              names: [dragonfly-scheduler]
+              namespaces: [dragonfly-system]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels: {app: dragonfly, component: scheduler}
+      mutate:
+        patchStrategicMerge:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: scheduler
+                    livenessProbe:
+                      timeoutSeconds: 5
+                      exec:
+                        command: &schedulerHealthProbe
+                          - /bin/grpc_health_probe
+                          - -addr=127.0.0.1:8002
+                          - -tls
+                          - -tls-ca-cert=/etc/dragonfly-trust/ca.crt
+                          - -tls-client-cert=/etc/dragonfly-mtls/tls.crt
+                          - -tls-client-key=/etc/dragonfly-mtls/tls.key
+                          - -tls-server-name=dragonfly-scheduler.dragonfly-system.svc
+                          - -connect-timeout=3s
+                          - -rpc-timeout=3s
+                    readinessProbe:
+                      timeoutSeconds: 5
+                      exec:
+                        command: *schedulerHealthProbe

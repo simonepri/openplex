@@ -1,0 +1,135 @@
+# CloudNativePG cluster for Dragonfly manager relational metadata.
+
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: dragonfly-postgres
+  namespace: dragonfly-system
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: dragonfly-postgres
+    app.kubernetes.io/part-of: dragonfly
+    velero.io/exclude-from-backup: "true"
+spec:
+  instances: 1
+  inheritedMetadata:
+    annotations:
+      signoz.io/path: /metrics
+      signoz.io/port: "9187"
+      signoz.io/scrape: "true"
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-standard-bookworm@sha256:9446e83aa490df3f14ebf5bf2f6002a1347728690ff38f35dd7a85b925a62468
+  imagePullPolicy: IfNotPresent
+  postgresUID: 26
+  postgresGID: 26
+  bootstrap:
+    initdb:
+      database: manager
+      owner: dragonfly
+      secret:
+        name: dragonfly-postgres-bootstrap
+  enablePDB: false
+  enableSuperuserAccess: false
+  primaryUpdateMethod: switchover
+  primaryUpdateStrategy: unsupervised
+  stopDelay: 300
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      enabled: true
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: dragonfly-postgres-backups
+        serverName: dragonfly-postgres
+  storage:
+    size: 10Gi
+    storageClass: general-expandable
+  walStorage:
+    size: 5Gi
+    storageClass: general-expandable
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  postgresql:
+    parameters:
+      log_temp_files: "1024"
+      password_encryption: scram-sha-256
+      temp_file_limit: "2GB"
+      work_mem: "16MB"
+  podSecurityContext:
+    fsGroup: 26
+    fsGroupChangePolicy: OnRootMismatch
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: dragonfly-postgres-daily
+  namespace: dragonfly-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: dragonfly-postgres-backup
+spec:
+  schedule: "0 45 2 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: dragonfly-postgres
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dragonfly-postgres-backup-s3
+  namespace: dragonfly-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: dragonfly-postgres-backup
+type: Opaque
+stringData:
+  access-key-id: local-dragonfly-postgres-backup
+  secret-access-key: local-dragonfly-postgres-backup-secret
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: dragonfly-postgres-backups
+  namespace: dragonfly-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: dragonfly-postgres-backups
+spec:
+  retentionPolicy: "30d"
+  configuration:
+    destinationPath: "s3://examples-dragonfly-postgres-backups" # nosemgrep: repository.storage.canonical-virtual-s3-uri - Barman Cloud physical backup destination path
+    s3Credentials:
+      accessKeyId:
+        name: dragonfly-postgres-backup-s3
+        key: access-key-id
+      secretAccessKey:
+        name: dragonfly-postgres-backup-s3
+        key: secret-access-key
+    wal:
+      compression: gzip
+      maxParallel: 4
+    data:
+      compression: gzip
+      jobs: 2

@@ -1,0 +1,48 @@
+# Restricts Dragonfly peer egress from dragonfly-system, blocking cloud metadata while permitting DNS and mesh peers.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dragonfly-peer
+  namespace: dragonfly-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: dragonfly-peer
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    # Cluster DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock: {cidr: 169.254.20.10/32}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # Intra-namespace peer coordination and chunk transfer
+    - to:
+        - podSelector: {}
+    # Cross-cluster control plane access via Tailscale mesh
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tailscale-system
+      ports:
+        - {protocol: TCP, port: 443}
+    # External egress to registries and ctrl manager; explicitly blocks link-local IMDS
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
