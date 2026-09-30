@@ -1,0 +1,16 @@
+"""Claims team specifications and schemas so bazel-diff tracks all changes."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/json_schema:defs.bzl", "json_schema")
+
+exports_files([
+    "team.schema.json",
+])
+
+package_sources()
+
+json_schema(
+    name = "schema",
+    srcs = glob(["*.yaml"]),
+    schema = "//src/infra/definitions/teams:team.schema.json",
+)
