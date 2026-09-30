@@ -1,0 +1,115 @@
+# Configures root mise workspace settings, toolchain versions, monorepo tasks, and sub-project delegation.
+
+monorepo_root = true
+
+[monorepo]
+config_roots = ["src/examples/*", "src/infra"]
+
+[tools]
+# keep-sorted start block=yes
+"aqua:aws/aws-cli" = "2.37.9"
+"aqua:boyter/scc" = "4.1.0"
+"aqua:google/osv-scanner" = "2.6.0"
+"aqua:kubescape/kubescape" = "4.0.15"
+"aqua:kyverno/chainsaw" = "0.2.15"
+"aqua:oras-project/oras" = "1.3.4"
+"cargo:ifttt-lint" = { version = "0.11.2", depends = "rust" }
+"github:anchore/syft" = "1.52.0"
+"github:buildbuddy-io/bazel" = { version = "5.0.488", bin = "bb" }
+"github:google/keep-sorted" = "0.10.0"
+"go:github.com/fzipp/gocyclo/cmd/gocyclo" = { version = "0.6.0", depends = "go" }
+"npm:cf" = { version = "1.0.0-beta.11", depends = "node" }
+"npm:jscpd" = { version = "5.3.3", depends = "node", trust_policy_excludes = [
+  "jscpd@4.3.0",
+] }
+"npm:oxlint" = { version = "1.86.0", depends = "node" }
+"npm:renovate" = { version = "44.117.0", depends = "node", trust_policy_excludes = [
+  "@yarnpkg/libzip@3.2.2",
+] }
+"npm:rulesync" = { version = "26.0.0", depends = "node" }
+agy = "1.2.13"
+argocd = "3.5.3"
+bazel = "9.2.0"
+bazel-watcher = "0.33.0"
+buildifier = "10.1.0"
+claude = "2.1.284"
+coder = "2.37.3"
+codex = "0.159.0"
+colima = "0.10.3"
+docker-cli = "29.8.1"
+docker-compose = "5.5.1"
+gcloud = "584.0.0"
+go = "1.27.1"
+helm = "4.3.0"
+jq = "1.8.2"
+kube-linter = "0.8.3"
+kubeconform = "0.8.0"
+kubectl = "1.37.1"
+lima = "2.2.0"
+node = "24.21.0"
+opentofu = "1.12.6"
+oxfmt = "0.71.0"
+pnpm = "12.9.1"
+python = "3.13.15"
+ripgrep = "15.2.0"
+rust = { version = "1.98.1", profile = "minimal" }
+shellcheck = "0.11.0"
+shfmt = "3.14.1"
+taplo = "0.10.0"
+terraform = "1.16.4"
+tflint = "0.64.0"
+trivy = "0.74.0"
+ty = "0.0.84"
+uv = "0.12.19"
+yq = "4.53.6"
+# keep-sorted end
+
+[env]
+REPO_CACHE_DIR = '{{env.XDG_CACHE_HOME | default(value=env.HOME ~ "/.cache")}}/repo'
+BAZEL_OUTPUT_ROOT = '{{env.BAZEL_OUTPUT_ROOT | default(value=config_root ~ "/.tmp/state/bazel")}}'
+PYTHONDONTWRITEBYTECODE = "1"
+PYTHONPYCACHEPREFIX = "{{env.REPO_CACHE_DIR}}/python"
+PYTEST_ADDOPTS = "-o cache_dir={{env.REPO_CACHE_DIR}}/pytest"
+UV_CACHE_DIR = "{{env.HOME}}/.cache/uv"
+UV_PROJECT_ENVIRONMENT = "{{config_root}}/.tmp/venv"
+npm_config_store_dir = "{{env.HOME}}/.local/share/pnpm/store"
+RUMDL_CACHE_DIR = "{{env.REPO_CACHE_DIR}}/rumdl"
+RUFF_CACHE_DIR = "{{env.REPO_CACHE_DIR}}/ruff"
+TF_PLUGIN_CACHE_DIR = "{{env.REPO_CACHE_DIR}}/opentofu/plugins"
+TFLINT_PLUGIN_DIR = "{{env.REPO_CACHE_DIR}}/tflint/plugins"
+TF_CLI_CONFIG_FILE = "{{config_root}}/.tmp/state/opentofu.tfrc"
+AWS_CONFIG_FILE = "{{config_root}}/.aws/config"
+USE_BUILDBUDDY = "false"
+BUILDBUDDY_ORG = "openplex"
+_.path = ["/bin", "/usr/bin", "/usr/sbin", "/sbin"]
+
+[tasks.init]
+description = "Install toolchains, git hooks, and initialize repository"
+run = [
+  "mise install",
+  "bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //:hooks.install",
+  "gh auth status >/dev/null 2>&1 || gh auth login",
+  "gh auth setup-git",
+  '[ "$USE_BUILDBUDDY" != true ] || bb login --allow_existing ${BUILDBUDDY_ORG:+--org="$BUILDBUDDY_ORG"}',
+  "command -v gh >/dev/null 2>&1 && gh api --method PUT user/starred/simonepri/openplex >/dev/null 2>&1 || true",
+]
+
+[tasks.fix]
+description = "Auto-fix and format authored workload, infrastructure, and configuration sources"
+run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //:fix -- "$@"'
+
+[tasks.check]
+description = "Run repository static analysis on affected packages or specified path"
+run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //:check -- "$@"'
+
+[tasks.test]
+description = "Run first-party release, workload, and component tests on affected packages or specified path"
+run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //:test -- "$@"'
+
+[tasks.ci]
+description = "Run the complete source gate: static checks, tests, and builds"
+run = ["mise run fix -- --check", "mise run check", "mise run test"]
+
+[tasks.review]
+description = "Review changes in the repository using an AI agent (claude, codex, agy)"
+run = 'python3 -m src.infra.tools.review.cli --agent "${REVIEW_AGENT:-auto}" "$@"'
