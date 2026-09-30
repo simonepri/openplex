@@ -1,0 +1,155 @@
+# BuildBuddy Workflows continuous integration configuration.
+#
+# Every action saves its VM snapshot after each run and resumes from the
+# newest one, so the next run reuses the warm Bazel server, output base, and
+# repository cache. BuildBuddy's default saves a default-branch snapshot at
+# most hourly and a branch snapshot only on the first run, so most runs
+# resumed a stale VM and started a cold server.
+
+actions:
+  - name: "Format"
+    triggers:
+      push:
+        branches:
+          - "main"
+      pull_request:
+        branches:
+          - "*"
+    os: "linux"
+    container_image: "ubuntu-24.04"
+    platform_properties:
+      EstimatedFreeDiskBytes: 100GB
+      recycle-runner: true
+      preserve-workspace: true
+      remote-snapshot-save-policy: always
+      snapshot-read-policy: newest
+    git_fetch_depth: 0
+    steps:
+      - name: "Reset pristine workspace"
+        run: git clean -ffdx && git reset --hard HEAD
+
+      - name: "Configure CI credentials and authentication"
+        run: python3 src/bazel/tools/ci/auth.py
+
+      - name: "Verify formatting and code generation"
+        run: |
+          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud"
+          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="Format" //:fix -- --check
+
+  - name: "Lint"
+    triggers:
+      push:
+        branches:
+          - "main"
+      pull_request:
+        branches:
+          - "*"
+    os: "linux"
+    container_image: "ubuntu-24.04"
+    platform_properties:
+      EstimatedFreeDiskBytes: 100GB
+      recycle-runner: true
+      preserve-workspace: true
+      remote-snapshot-save-policy: always
+      snapshot-read-policy: newest
+    git_fetch_depth: 0
+    steps:
+      - name: "Reset pristine workspace"
+        run: git clean -ffdx && git reset --hard HEAD
+
+      - name: "Configure CI credentials and authentication"
+        run: python3 src/bazel/tools/ci/auth.py
+
+      - name: "Run static analysis checks"
+        run: |
+          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud"
+          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="Lint" //:check
+
+  - name: "Test"
+    triggers:
+      push:
+        branches:
+          - "main"
+      pull_request:
+        branches:
+          - "*"
+    os: "linux"
+    container_image: "ubuntu-24.04"
+    platform_properties:
+      EstimatedFreeDiskBytes: 100GB
+      recycle-runner: true
+      preserve-workspace: true
+      remote-snapshot-save-policy: always
+      snapshot-read-policy: newest
+    git_fetch_depth: 0
+    steps:
+      - name: "Reset pristine workspace"
+        run: git clean -ffdx && git reset --hard HEAD
+
+      - name: "Configure CI credentials and authentication"
+        run: python3 src/bazel/tools/ci/auth.py
+
+      - name: "Run affected test suite"
+        run: python3 src/bazel/tools/diff/cli.py test --config=ci --config=bb-cloud --build_metadata=COMMIT_STATUS_LABEL="Test"
+
+  - name: "Review"
+    triggers:
+      pull_request:
+        branches:
+          - "*"
+    os: "linux"
+    container_image: "ubuntu-24.04"
+    platform_properties:
+      EstimatedFreeDiskBytes: 100GB
+      recycle-runner: true
+      preserve-workspace: true
+      remote-snapshot-save-policy: always
+      snapshot-read-policy: newest
+    git_fetch_depth: 0
+    timeout: "30m"
+    env:
+      IS_SANDBOX: "1"
+      MISE_YES: "1"
+    steps:
+      - name: "Reset pristine workspace"
+        run: git clean -ffdx && git reset --hard HEAD
+
+      - name: "Configure CI credentials and authentication"
+        run: python3 src/bazel/tools/ci/auth.py
+
+      - name: "Install the review agent CLIs"
+        run: |
+          bazel build --config=ci --config=bb-cloud @mise_linux_amd64//file
+          mise="$(bazel info --config=ci --config=bb-cloud execution_root)/$(bazel cquery --config=ci --config=bb-cloud --output=files @mise_linux_amd64//file)"
+          mkdir -p "$HOME/.local/bin"
+          ln -sf "$mise" "$HOME/.local/bin/mise"
+          "$HOME/.local/bin/mise" trust
+          "$HOME/.local/bin/mise" install claude codex agy node
+
+      - name: "Run review agent and publish sticky comment"
+        run: |
+          set -euo pipefail
+          mkdir -p .review
+          export GITHUB_OUTPUT=.review/outputs
+          export PATH="$HOME/.local/bin:$PATH"
+          eval "$(mise env --shell bash claude codex agy node)"
+          GH_TOKEN="$(python3 -c 'import netrc; print(netrc.netrc().authenticators("api.github.com")[2])')"
+          export GH_TOKEN
+          repo="$(git remote get-url origin | sed -E 's#^.*github\.com[:/]##; s#\.git$##')"
+          pr=(--repo "$repo" --pr "$GIT_PR_NUMBER" --sha "$GIT_COMMIT" --job-url "https://app.buildbuddy.io/invocation/$BUILDBUDDY_INVOCATION_ID")
+          python3 -m src.infra.tools.review.cli comment check-override --repo "$repo" --pr "$GIT_PR_NUMBER"
+          python3 -m src.infra.tools.review.cli comment start "${pr[@]}"
+          outcome="success"
+          python3 -m src.infra.tools.review.cli --agent "${REVIEW_AGENT:-auto}" --base "origin/$GIT_BASE_BRANCH" --target HEAD -o .review/review-bundle.md || outcome="failure"
+          [ -f .review/review-result.json ] || outcome="failure"
+          OVERRIDE_ACTIVE="$(sed -n 's/^active=//p' "$GITHUB_OUTPUT")"
+          OVERRIDE_REASON="$(sed -n 's/^reason=//p' "$GITHUB_OUTPUT")"
+          export OVERRIDE_ACTIVE OVERRIDE_REASON
+          python3 -m src.infra.tools.review.cli comment finish "${pr[@]}" \
+            --review-file .review/review-result.json \
+            --meta-file .review/review-meta.json \
+            --err-file .review/review-error.txt \
+            --outcome "$outcome"
+          gate="$(sed -n 's/^gate=//p' "$GITHUB_OUTPUT")"
+          echo "Review gate: $gate"
+          [ "$gate" = "pass" ] || [ "$gate" = "override" ]
