@@ -1,0 +1,45 @@
+# Declares monorepo Python package metadata, interpreter constraints, and root dependencies compiled by Bazel.
+
+[project]
+name = "cluster-monorepo"
+version = "0.0.0"
+license = "Apache-2.0"
+# LINT.IfChange(requires-python)
+requires-python = "==3.13.*"
+# LINT.ThenChange(//src/bazel/aspects/python/ty.toml:python-version)
+dependencies = [
+  "opentelemetry-api==1.45.0",
+  "opentelemetry-exporter-otlp-proto-http==1.45.0",
+  "opentelemetry-exporter-prometheus==0.66b0",
+  "opentelemetry-sdk==1.45.0",
+  # LINT.IfChange(ray-version)
+  "ray[data]==2.58.0",
+  # LINT.ThenChange(//MODULE.bazel:ray-version)
+  # ray.data imports typing_extensions without declaring it; the vendor image
+  # masks the gap because other bundled packages happen to provide it.
+  "typing-extensions",
+]
+
+# Tooling the checks import. Never reaches a shipped image; //src/bazel/static_analysis
+# :dev_tool_isolation proves the separation holds.
+[dependency-groups]
+dev = [
+  "PyYAML==6.0.3",
+  "check-jsonschema==0.38.2",
+  "jsonschema==4.26.0",
+  "python-hcl2==8.1.4",
+  "yamllint==1.38.0",
+]
+
+[tool.pyright]
+include = ["src"]
+exclude = [
+  "**/node_modules",
+  "**/__pycache__",
+  "**/.*",
+  "bazel-*",
+  "**/bazel-*",
+]
+
+[tool.ruff]
+extend = "src/bazel/aspects/python/ruff.toml"
