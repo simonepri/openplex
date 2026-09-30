@@ -1,0 +1,8 @@
+# Composes admission policies and node configurations for rawfile-localpv drivers.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - policy.yaml
+  # keep-sorted end

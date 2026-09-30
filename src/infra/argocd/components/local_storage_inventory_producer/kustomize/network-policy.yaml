@@ -1,0 +1,49 @@
+# Restricts network egress for the local storage inventory producer to DNS and Floci S3.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: local-storage-inventory-producer
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: local-storage-inventory-producer
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: local-storage-inventory-producer
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values:
+                  - kube-dns
+                  - node-local-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 169.254.20.10/32
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 4566
