@@ -1,0 +1,13 @@
+# Composes OpenCost namespace, network policies, and secret resources.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - auth-proxy.yaml
+  - cloud-integration.secret.yaml
+  - external-secrets.yaml
+  - metrics-network-policy.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  # keep-sorted end

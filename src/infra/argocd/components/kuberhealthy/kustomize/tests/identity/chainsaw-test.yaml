@@ -1,0 +1,77 @@
+# Proves Dex single sign-on, Headlamp cluster authorization, gateway cookie validation, and Coder snapshot OAuth state and PKCE binding.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: authenticate-catalog-tools-via-dex
+  labels:
+    cadence: commit
+    capability: identity
+    mutates: none
+spec:
+  namespace: dex
+  concurrent: false
+  timeouts:
+    apply: 30s
+    cleanup: 1m
+    exec: 2m
+  steps:
+    - try:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - job/dex-local-login-conformance
+              - configmap/dex-local-ca-conformance
+              - configmap/dex-local-login-conformance
+              - secret/dex-local-login-conformance-inputs
+              - --namespace=dex
+              - --ignore-not-found=true
+              - --wait=true
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                kubectl get configmap/cluster-local-ca \
+                  --namespace=cert-manager-system --output=json |
+                  jq '{
+                    apiVersion,
+                    kind,
+                    metadata: {
+                      name: "dex-local-ca-conformance",
+                      namespace: "dex",
+                      labels: {
+                        "app.kubernetes.io/component": "local-login-conformance",
+                        "app.kubernetes.io/managed-by": "chainsaw"
+                      }
+                    },
+                    data
+                  }' | kubectl apply --filename=-
+        - command:
+            entrypoint: kubectl
+            args:
+              - apply
+              - --kustomize=fixtures/identity
+        - apply:
+            file: fixtures/identity/local-login.test.k8s.yaml
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - --for=condition=complete
+              - job/dex-local-login-conformance
+              - --namespace=dex
+              - --timeout=100s
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - job/dex-local-login-conformance
+              - configmap/dex-local-ca-conformance
+              - configmap/dex-local-login-conformance
+              - secret/dex-local-login-conformance-inputs
+              - --namespace=dex
+              - --ignore-not-found=true
+              - --wait=true

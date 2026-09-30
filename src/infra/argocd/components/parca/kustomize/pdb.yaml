@@ -1,0 +1,23 @@
+# Guards Parca's exclusive PVC-backed singleton in replicated and resilient profiles. Voluntary drains require an explicit operator override.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: parca
+  namespace: parca
+  annotations:
+    ignore-check.kube-linter.io/pdb-min-available: >-
+      The singleton profile store intentionally blocks voluntary eviction; drains require an explicit operator override.
+  labels:
+    app.kubernetes.io/name: parca
+    app.kubernetes.io/instance: parca-server
+    app.kubernetes.io/component: profile-store
+    app.kubernetes.io/managed-by: argocd
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: parca
+      app.kubernetes.io/instance: parca-server
+      app.kubernetes.io/component: profile-store

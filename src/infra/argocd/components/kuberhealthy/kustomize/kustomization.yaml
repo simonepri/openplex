@@ -1,0 +1,66 @@
+# Kustomize declarations for the Kuberhealthy component.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - chainsaw-check.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - pod-policy.yaml
+  - rbac.yaml
+  # keep-sorted end
+configMapGenerator:
+  - name: chainsaw-identity-tests
+    namespace: kuberhealthy
+    files:
+      - tests/identity/chainsaw-test.yaml
+      - tests/identity/values.yaml
+      - tests/identity/fixtures/identity/kustomization.yaml
+      - tests/identity/fixtures/identity/local-login.test.k8s.yaml
+      - tests/identity/fixtures/identity/login.py
+  - name: chainsaw-networking-tests
+    namespace: kuberhealthy
+    files:
+      - tests/networking/chainsaw-test.yaml
+      - tests/networking/values.yaml
+      - tests/networking/fixtures/networking/policy-conformance.test.k8s.yaml
+  - name: chainsaw-observability-tests
+    namespace: kuberhealthy
+    files:
+      - tests/observability/chainsaw-test.yaml
+      - tests/observability/values.yaml
+      - tests/observability/fixtures/observability/door-query.test.k8s.yaml
+  - name: chainsaw-scheduling-tests
+    namespace: kuberhealthy
+    files:
+      - tests/scheduling/chainsaw-test.yaml
+      - tests/scheduling/values.yaml
+      - tests/scheduling/fixtures/scheduling/conformance-probe-job.test.k8s.yaml
+      - tests/scheduling/fixtures/scheduling/conformance-probe-queue.test.k8s.yaml
+  - name: chainsaw-scripts
+    namespace: kuberhealthy
+    files:
+      - run-chainsaw-check.sh
+  - name: chainsaw-secrets-tests
+    namespace: kuberhealthy
+    files:
+      - tests/secrets/chainsaw-test.yaml
+      - tests/secrets/values.yaml
+      - tests/secrets/fixtures/secrets/chainsaw-consumer.test.k8s.yaml
+      - tests/secrets/fixtures/secrets/chainsaw-fixture.test.k8s.yaml
+  - name: chainsaw-smoke-check-scripts
+    namespace: kuberhealthy
+    files:
+      - run-chainsaw-smoke-apiserver.sh
+      - run-chainsaw-smoke-check.sh
+      - run-chainsaw-smoke-cli.sh
+      - run-chainsaw-smoke-dns.sh
+  - name: chainsaw-storage-tests
+    namespace: kuberhealthy
+    files:
+      - tests/storage/chainsaw-test.yaml
+      - tests/storage/values.yaml
+      - tests/storage/fixtures/storage/gateway-name-resolution-probe.test.k8s.yaml
+generatorOptions:
+  disableNameSuffixHash: true

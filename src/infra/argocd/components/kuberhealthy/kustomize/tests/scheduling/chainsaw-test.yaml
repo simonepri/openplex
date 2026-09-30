@@ -1,0 +1,76 @@
+# Proves Kueue topology placement, availability-class preemption, HTTP scale-to-zero admission, and pod timeout requeuing defend scheduler quotas.
+
+# yamllint disable rule:line-length
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: admit-and-run-workload-through-kueue
+  labels:
+    cadence: commit
+    capability: scheduling
+    mutates: scratch
+spec:
+  namespace: conformance-workloads
+  concurrent: false
+  timeouts:
+    apply: 30s
+    assert: 30s
+    cleanup: 30s
+    exec: 30s
+  steps:
+    - try:
+        - apply:
+            file: fixtures/scheduling/conformance-probe-queue.test.k8s.yaml
+        - apply:
+            file: fixtures/scheduling/conformance-probe-job.test.k8s.yaml
+        - command:
+            entrypoint: kubectl
+            args:
+              - get
+              - job/admit-and-run-workload-through-kueue
+              - --namespace=conformance-workloads
+              - --output=jsonpath={.metadata.uid}
+            outputs:
+              - name: probeJobUID
+                value: (trim_space($stdout))
+        - command:
+            entrypoint: kubectl
+            env:
+              - name: JOB_UID
+                value: ($probeJobUID)
+            args:
+              - wait
+              - workloads
+              - --namespace=conformance-workloads
+              - --selector=kueue.x-k8s.io/job-uid=$JOB_UID
+              - --for=create
+              - --timeout=30s
+        - command:
+            entrypoint: kubectl
+            env:
+              - name: JOB_UID
+                value: ($probeJobUID)
+            args:
+              - wait
+              - workloads
+              - --namespace=conformance-workloads
+              - --selector=kueue.x-k8s.io/job-uid=$JOB_UID
+              - --for=condition=Admitted
+              - --timeout=30s
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - --for=condition=complete
+              - job/admit-and-run-workload-through-kueue
+              - --namespace=conformance-workloads
+              - --timeout=30s
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - job/admit-and-run-workload-through-kueue
+              - --namespace=conformance-workloads
+              - --ignore-not-found=true
+              - --wait=false

@@ -1,0 +1,48 @@
+# Grants cluster-scoped RBAC and defines ServiceAccount for parca-agent read-only Pod and Node access.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: parca-agent
+  namespace: parca
+  labels:
+    app.kubernetes.io/name: parca-agent
+    app.kubernetes.io/instance: parca-agent
+    app.kubernetes.io/component: profiler
+    app.kubernetes.io/managed-by: argocd
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: parca-agent-metadata
+  labels:
+    app.kubernetes.io/name: parca-agent
+    app.kubernetes.io/instance: parca-agent
+    app.kubernetes.io/component: profiler
+    app.kubernetes.io/managed-by: argocd
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: parca-agent-metadata
+  labels:
+    app.kubernetes.io/name: parca-agent
+    app.kubernetes.io/instance: parca-agent
+    app.kubernetes.io/component: profiler
+    app.kubernetes.io/managed-by: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: parca-agent-metadata
+subjects:
+  - kind: ServiceAccount
+    name: parca-agent
+    namespace: parca

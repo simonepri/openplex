@@ -1,0 +1,160 @@
+# Restricts the OpenCost Pod's egress to DNS, the Kubernetes API, and the in-cluster prometheus-api-bridge Service, rendered by every `<cluster>-opencost` registration regardless of provider overlay.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-opencost-to-prometheus-api-bridge
+  namespace: opencost
+  labels:
+    app.kubernetes.io/name: opencost
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: opencost}
+  policyTypes: [Egress]
+  egress:
+    # AWS Pod Identity agent endpoint
+    - to:
+        - ipBlock: {cidr: 169.254.170.23/32}
+      ports:
+        - {protocol: TCP, port: 80}
+    # GCP Workload Identity metadata server endpoint
+    - to:
+        - ipBlock: {cidr: 169.254.169.254/32}
+      ports:
+        - {protocol: TCP, port: 80}
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: signoz}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: prometheus-api-bridge}
+      ports: [{protocol: TCP, port: 9090}]
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock: {cidr: 169.254.20.10/32}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - ports:
+        - {protocol: TCP, port: 443}
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+---
+# Network boundary for the OpenCost OIDC authentication proxy.
+# Envoy Gateway private-access routes traffic in; proxy forwards to OpenCost and Dex.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: opencost-auth-proxy
+  namespace: opencost
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: opencost-auth-proxy
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: opencost-auth-proxy}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: envoy-gateway-system}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/managed-by: envoy-gateway
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 4180}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock: {cidr: 169.254.20.10/32}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: opencost}
+      ports:
+        - {protocol: TCP, port: 9090}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: identity}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: dex}
+      ports:
+        - {protocol: TCP, port: 5556}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: tailscale-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: tailscale-subnet-router}
+      ports:
+        - {protocol: TCP, port: 8443}
+    - to:
+        - ipBlock: {cidr: 172.31.0.11/32}
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: envoy-gateway-system}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/managed-by: envoy-gateway
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 10443}
+    - ports:
+        - {protocol: TCP, port: 443}
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/4
+              - 240.0.0.0/4
