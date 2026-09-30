@@ -1,0 +1,755 @@
+# ValidatingAdmissionPolicy enforcing public scheduling intent and admission-derived Kueue queue and Pod priority fields in managed team namespaces.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-governed-workload
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: team-governance
+spec:
+  failurePolicy: Fail
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [batch]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [cronjobs, jobs]
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+      - apiGroups: [apps]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [deployments, statefulsets]
+      - apiGroups: [ray.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [rayclusters, rayjobs, rayservices]
+  matchConditions:
+    # Validate the submitted workload, not child Pods and RayClusters that trusted
+    # controllers materialize from an already-validated parent.
+    # K3s uses per-controller ServiceAccounts; other distributions may use the
+    # shared kube-controller-manager client identity.
+    # LINT.IfChange(trusted_workload_controllers)
+    - name: workload-submission
+      expression: |-
+        !(request.userInfo.username in [
+          'system:kube-controller-manager',
+          'system:serviceaccount:cnpg-system:cloudnative-pg',
+          'system:serviceaccount:kube-system:cronjob-controller',
+          'system:serviceaccount:kube-system:generic-garbage-collector',
+          'system:serviceaccount:kube-system:job-controller',
+          'system:serviceaccount:kube-system:replicaset-controller',
+          'system:serviceaccount:kube-system:statefulset-controller',
+          'system:serviceaccount:kuberay-system:kuberay-operator'
+        ])
+    # LINT.ThenChange(//src/infra/argocd/components/kueue/kustomize/scheduling-defaults.yaml:trusted_workload_controllers)
+    - name: kueue-admission-update
+      expression: |-
+        !(request.operation == 'UPDATE' &&
+          object.kind == 'Pod' &&
+          request.userInfo.username == 'system:serviceaccount:kueue-system:kueue-controller-manager')
+    - name: garbage-collector-finalization
+      expression: |-
+        !(request.operation == 'UPDATE' &&
+          request.userInfo.username == 'system:serviceaccount:kube-system:generic-garbage-collector' &&
+          has(oldObject.metadata.deletionTimestamp) &&
+          object.spec == oldObject.spec &&
+          ((!has(object.metadata.labels) && !has(oldObject.metadata.labels)) ||
+           (has(object.metadata.labels) && has(oldObject.metadata.labels) &&
+            object.metadata.labels == oldObject.metadata.labels)) &&
+          has(oldObject.metadata.finalizers) &&
+          oldObject.metadata.finalizers.size() >
+            (has(object.metadata.finalizers) ? object.metadata.finalizers.size() : 0) &&
+          (!has(object.metadata.finalizers) ||
+           object.metadata.finalizers.all(finalizer,
+             finalizer in oldObject.metadata.finalizers)))
+    - name: queued-team-workload
+      expression: |-
+        !(object.kind == 'Deployment' && has(object.metadata.labels) &&
+          'app.kubernetes.io/managed-by' in object.metadata.labels &&
+          object.metadata.labels['app.kubernetes.io/managed-by'] == 'valkey-operator' &&
+          'valkey.io/cluster' in object.metadata.labels &&
+          object.metadata.labels['valkey.io/cluster'] == 'torch-compile-cache' &&
+          request.userInfo.username == 'system:serviceaccount:valkey-system:valkey-operator')
+    - name: conformance-workloads
+      expression: |-
+        request.namespace != 'conformance-workloads'
+  variables:
+    # LINT.IfChange(team_scheduling_classes)
+    - name: availability
+      expression: |-
+        has(object.metadata.labels) && 'availability-class' in object.metadata.labels ? object.metadata.labels['availability-class'] : ''
+    - name: latency
+      expression: |-
+        has(object.metadata.labels) && 'latency-class' in object.metadata.labels ? object.metadata.labels['latency-class'] : ''
+    - name: queue
+      expression: |-
+        has(object.metadata.labels) && 'kueue.x-k8s.io/queue-name' in object.metadata.labels ? object.metadata.labels['kueue.x-k8s.io/queue-name'] : ''
+    - name: priorityClass
+      expression: variables.availability + '-' + variables.latency
+    - name: priority
+      expression: |-
+        variables.availability in ['ha', 'ma', 'wa', 'be'] &&
+        variables.latency in ['ls', 'lt'] ?
+          {
+            'be-ls': 12,
+            'be-lt': 11,
+            'ha-ls': 42,
+            'ha-lt': 41,
+            'ma-ls': 32,
+            'ma-lt': 31,
+            'wa-ls': 22,
+            'wa-lt': 21
+          }[variables.priorityClass] : 0
+    # LINT.ThenChange(//src/infra/argocd/components/kueue/kustomize/scheduling-defaults.yaml:team_scheduling_classes,//src/infra/argocd/components/kueue/kustomize/priorities.yaml:team_priority_class_ladder)
+    - name: podSpecs
+      expression: |-
+        object.kind == 'Pod' ? [object.spec] : object.kind in ['Deployment', 'StatefulSet', 'Job'] ? [object.spec.template.spec] : object.kind == 'CronJob' ? [object.spec.jobTemplate.spec.template.spec] : object.kind == 'RayJob' ?
+          (has(object.spec.submitterPodTemplate) ? [object.spec.submitterPodTemplate.spec] : []) +
+          [object.spec.rayClusterSpec.headGroupSpec.template.spec] +
+          object.spec.rayClusterSpec.workerGroupSpecs.map(group, group.template.spec) :
+        object.kind == 'RayCluster' ?
+          [object.spec.headGroupSpec.template.spec] +
+          object.spec.workerGroupSpecs.map(group, group.template.spec) :
+        object.kind == 'RayService' ?
+          [object.spec.rayClusterConfig.headGroupSpec.template.spec] +
+          object.spec.rayClusterConfig.workerGroupSpecs.map(group, group.template.spec) : []
+    # LINT.IfChange(infrastructure_owned_selector_keys)
+    - name: infrastructureSelectorKeys
+      expression: |-
+        [
+          'agentpool',
+          'beta.kubernetes.io/instance-type',
+          'node.kubernetes.io/instance-type'
+        ]
+    - name: infrastructureLocationKeys
+      expression: |-
+        [
+          'failure-domain.beta.kubernetes.io/region',
+          'failure-domain.beta.kubernetes.io/zone',
+          'topology.kubernetes.io/region',
+          'topology.kubernetes.io/zone'
+        ]
+    - name: infrastructureSelectorPrefixes
+      expression: |-
+        [
+          'cloud.google.com/',
+          'eks.amazonaws.com/',
+          'feature.node.kubernetes.io/',
+          'karpenter.k8s.aws/',
+          'karpenter.k8s.gcp/',
+          'karpenter.sh/',
+          'k8s.amazonaws.com/',
+          'nvidia.com/'
+        ]
+    # LINT.ThenChange(//src/bazel/checks/workload_portability/check_workload_portability.py:infrastructure_owned_selector_keys)
+    - name: cpuCapabilityPrefix
+      expression: "'cpu-capability.'"
+    - name: gpuClassKey
+      expression: "'gpu-class'"
+    - name: gpuCapabilityPrefix
+      expression: "'gpu.'"
+    - name: gpuResource
+      expression: "'nvidia.com/gpu'"
+    - name: tpuClassKey
+      expression: "'tpu-class'"
+    - name: tpuCapabilityPrefix
+      expression: "'tpu.'"
+    - name: tpuResource
+      expression: "'google.com/tpu'"
+    - name: acceleratorResources
+      expression: "['google.com/tpu', 'nvidia.com/gpu']"
+  validations:
+    - expression: |-
+        variables.availability in ['ha', 'ma', 'wa', 'be']
+      message: "[rule:availability-class-supported] Team workloads must select availability-class ha, ma, wa, or be."
+    - expression: |-
+        variables.latency in ['ls', 'lt']
+      message: "[rule:latency-class-supported] Team workloads must select latency-class ls or lt."
+    - expression: |-
+        request.operation != 'UPDATE' ||
+        (has(oldObject.metadata.labels) &&
+         'availability-class' in oldObject.metadata.labels &&
+         'latency-class' in oldObject.metadata.labels &&
+         variables.availability == oldObject.metadata.labels['availability-class'] &&
+         variables.latency == oldObject.metadata.labels['latency-class'])
+      message: "[rule:scheduling-class-immutable] Replace a workload to change its availability or latency class."
+    - expression: |-
+        variables.queue == variables.availability
+      message: "[rule:queue-derived] The Kueue queue must equal the admission-derived availability class."
+    - expression: |-
+        variables.podSpecs.size() > 0 && variables.podSpecs.all(podSpec,
+          has(podSpec.priorityClassName) &&
+          podSpec.priorityClassName == variables.priorityClass)
+      message: "[rule:priority-class-derived] Every team Pod priority must equal the admission-derived availability and latency classes."
+    - expression: |-
+        object.kind != 'Pod' ||
+        variables.podSpecs.exists(podSpec,
+          has(podSpec.priority) && podSpec.priority == variables.priority)
+      message: "[rule:pod-priority-derived] A direct team Pod's numeric priority must match its admission-derived priority class."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          (!has(podSpec.nodeName) || podSpec.nodeName == '' ||
+           (request.operation == 'UPDATE' && object.kind == 'Pod' &&
+            has(dyn(oldObject.spec).nodeName) &&
+            podSpec.nodeName == dyn(oldObject.spec).nodeName)) &&
+          (!has(podSpec.nodeSelector) ||
+           podSpec.nodeSelector.all(key,
+             !(key in variables.infrastructureSelectorKeys) &&
+             !(key in variables.infrastructureLocationKeys) &&
+             (!variables.infrastructureSelectorPrefixes.exists(prefix,
+               key.startsWith(prefix)) ||
+              (request.operation == 'UPDATE' && key == 'karpenter.sh/capacity-type')) &&
+             (key != 'kubernetes.io/hostname' ||
+              (request.operation == 'UPDATE' && object.kind == 'Pod' &&
+               has(dyn(oldObject.spec).nodeSelector) &&
+               key in dyn(oldObject.spec).nodeSelector &&
+               podSpec.nodeSelector[key] == dyn(oldObject.spec).nodeSelector[key])))) &&
+          (!has(podSpec.affinity) ||
+           !has(podSpec.affinity.nodeAffinity) ||
+           (
+             (!has(podSpec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution) ||
+              podSpec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.all(term,
+                (!has(term.matchExpressions) ||
+                 term.matchExpressions.all(requirement,
+                   !(requirement.key in variables.infrastructureSelectorKeys) &&
+                   !(requirement.key in variables.infrastructureLocationKeys) &&
+                   !variables.infrastructureSelectorPrefixes.exists(prefix,
+                     requirement.key.startsWith(prefix)) &&
+                   requirement.key != 'kubernetes.io/hostname')) &&
+                (!has(term.matchFields) ||
+                 term.matchFields.all(requirement,
+                   requirement.key != 'metadata.name')))) &&
+             (!has(podSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+              podSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.all(term,
+                (!has(term.preference.matchExpressions) ||
+                 term.preference.matchExpressions.all(requirement,
+                   !(requirement.key in variables.infrastructureSelectorKeys) &&
+                   !(requirement.key in variables.infrastructureLocationKeys) &&
+                   !variables.infrastructureSelectorPrefixes.exists(prefix,
+                     requirement.key.startsWith(prefix)) &&
+                   requirement.key != 'kubernetes.io/hostname')) &&
+                (!has(term.preference.matchFields) ||
+                 term.preference.matchFields.all(requirement,
+                   requirement.key != 'metadata.name'))))
+           )) &&
+          (!has(podSpec.topologySpreadConstraints) ||
+           podSpec.topologySpreadConstraints.all(constraint,
+             !(constraint.topologyKey in variables.infrastructureSelectorKeys) &&
+             !variables.infrastructureSelectorPrefixes.exists(prefix,
+               constraint.topologyKey.startsWith(prefix)))))
+      message: "[rule:portable-node-placement] Team workloads must select portable compute capabilities instead of infrastructure-owned node capacity."
+    # LINT.IfChange(team_host_port_contract)
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          podSpec.containers.all(container,
+            !has(container.ports) ||
+            container.ports.all(port,
+              !has(port.hostPort) || port.hostPort == 0)) &&
+          (!has(podSpec.initContainers) || podSpec.initContainers.all(container,
+            !has(container.ports) ||
+            container.ports.all(port,
+              !has(port.hostPort) || port.hostPort == 0))))
+      message: "[rule:host-port-forbidden] Team workloads must use cluster Services and approved gateway routes instead of node host ports."
+    # LINT.ThenChange(//src/bazel/checks/workload_portability/check_workload_portability.py:team_host_port_contract)
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.nodeSelector) ||
+          podSpec.nodeSelector.all(key,
+            !key.startsWith(variables.cpuCapabilityPrefix) ||
+            (podSpec.nodeSelector[key] == 'true' &&
+             has(params.data) &&
+             ('cpu.' + key.substring(size(variables.cpuCapabilityPrefix))) in params.data &&
+             params.data['cpu.' + key.substring(size(variables.cpuCapabilityPrefix))] == 'true')))
+      message: "[rule:cpu-capability-offered] CPU capability selectors must request a capability offered by this cell with value true."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          (!has(podSpec.affinity) ||
+           !has(podSpec.affinity.nodeAffinity) ||
+           (
+            (!has(podSpec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution) ||
+             podSpec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.all(term,
+               !has(term.matchExpressions) ||
+               term.matchExpressions.all(requirement,
+                 !requirement.key.startsWith(variables.cpuCapabilityPrefix)))) &&
+            (!has(podSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+             podSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.all(term,
+               !has(term.preference.matchExpressions) ||
+               term.preference.matchExpressions.all(requirement,
+                 !requirement.key.startsWith(variables.cpuCapabilityPrefix))))
+           )) &&
+          (!has(podSpec.topologySpreadConstraints) ||
+           podSpec.topologySpreadConstraints.all(constraint,
+             !constraint.topologyKey.startsWith(variables.cpuCapabilityPrefix))))
+      message: "[rule:cpu-capability-node-selector-only] CPU capabilities must use an offered portable nodeSelector."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !(has(podSpec.nodeSelector) &&
+            podSpec.nodeSelector.exists(key,
+              key.startsWith(variables.cpuCapabilityPrefix))) ||
+          !(
+            podSpec.containers.exists(container,
+              has(container.resources) &&
+              variables.acceleratorResources.exists(resource,
+                (has(container.resources.requests) &&
+                 resource in container.resources.requests &&
+                 quantity(string(container.resources.requests[resource])).isGreaterThan(quantity('0'))) ||
+                (has(container.resources.limits) &&
+                 resource in container.resources.limits &&
+                 quantity(string(container.resources.limits[resource])).isGreaterThan(quantity('0'))))) ||
+            (has(podSpec.initContainers) && podSpec.initContainers.exists(container,
+              has(container.resources) &&
+              variables.acceleratorResources.exists(resource,
+                (has(container.resources.requests) &&
+                 resource in container.resources.requests &&
+                 quantity(string(container.resources.requests[resource])).isGreaterThan(quantity('0'))) ||
+                (has(container.resources.limits) &&
+                 resource in container.resources.limits &&
+                 quantity(string(container.resources.limits[resource])).isGreaterThan(quantity('0'))))))
+          ))
+      message: "[rule:cpu-capability-accelerator-exclusive] CPU capability selectors cannot be combined with GPU or TPU requests."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.nodeSelector) ||
+          !(variables.gpuClassKey in podSpec.nodeSelector) ||
+          (has(params.data) &&
+           (variables.gpuCapabilityPrefix + podSpec.nodeSelector[variables.gpuClassKey]) in params.data &&
+           isQuantity(params.data[variables.gpuCapabilityPrefix + podSpec.nodeSelector[variables.gpuClassKey]]) &&
+           quantity(params.data[variables.gpuCapabilityPrefix + podSpec.nodeSelector[variables.gpuClassKey]]).isInteger() &&
+           quantity(params.data[variables.gpuCapabilityPrefix + podSpec.nodeSelector[variables.gpuClassKey]]).isGreaterThan(quantity('0'))))
+      message: "[rule:gpu-class-offered] GPU classes must be offered by this cell."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          (!has(podSpec.affinity) ||
+           !has(podSpec.affinity.nodeAffinity) ||
+           (
+             (!has(podSpec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution) ||
+              podSpec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.all(term,
+                !has(term.matchExpressions) ||
+                term.matchExpressions.all(requirement,
+                  requirement.key != variables.gpuClassKey))) &&
+             (!has(podSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+              podSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.all(term,
+                !has(term.preference.matchExpressions) ||
+                term.preference.matchExpressions.all(requirement,
+                  requirement.key != variables.gpuClassKey)))
+           )) &&
+          (!has(podSpec.topologySpreadConstraints) ||
+           podSpec.topologySpreadConstraints.all(constraint,
+             constraint.topologyKey != variables.gpuClassKey)))
+      message: "[rule:gpu-class-node-selector-only] GPU classes must use the portable nodeSelector."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          podSpec.containers.all(container,
+            !has(container.resources) ||
+            ((!has(container.resources.limits) ||
+              !(variables.gpuResource in container.resources.limits) ||
+              (isQuantity(string(container.resources.limits[variables.gpuResource])) &&
+               quantity(string(container.resources.limits[variables.gpuResource])).isInteger() &&
+               quantity(string(container.resources.limits[variables.gpuResource])).isGreaterThan(quantity('0')))) &&
+             (!has(container.resources.requests) ||
+              !(variables.gpuResource in container.resources.requests) ||
+              (has(container.resources.limits) &&
+               variables.gpuResource in container.resources.limits &&
+               isQuantity(string(container.resources.requests[variables.gpuResource])) &&
+               quantity(string(container.resources.requests[variables.gpuResource])).isInteger() &&
+               quantity(string(container.resources.requests[variables.gpuResource])).isGreaterThan(quantity('0')) &&
+               isQuantity(string(container.resources.limits[variables.gpuResource])) &&
+               quantity(string(container.resources.requests[variables.gpuResource])).compareTo(
+                 quantity(string(container.resources.limits[variables.gpuResource]))) == 0)))) &&
+          (!has(podSpec.initContainers) || podSpec.initContainers.all(container,
+            !has(container.resources) ||
+            ((!has(container.resources.limits) ||
+              !(variables.gpuResource in container.resources.limits) ||
+              (isQuantity(string(container.resources.limits[variables.gpuResource])) &&
+               quantity(string(container.resources.limits[variables.gpuResource])).isInteger() &&
+               quantity(string(container.resources.limits[variables.gpuResource])).isGreaterThan(quantity('0')))) &&
+             (!has(container.resources.requests) ||
+              !(variables.gpuResource in container.resources.requests) ||
+              (has(container.resources.limits) &&
+               variables.gpuResource in container.resources.limits &&
+               isQuantity(string(container.resources.requests[variables.gpuResource])) &&
+               quantity(string(container.resources.requests[variables.gpuResource])).isInteger() &&
+               quantity(string(container.resources.requests[variables.gpuResource])).isGreaterThan(quantity('0')) &&
+               isQuantity(string(container.resources.limits[variables.gpuResource])) &&
+               quantity(string(container.resources.requests[variables.gpuResource])).compareTo(
+                 quantity(string(container.resources.limits[variables.gpuResource]))) == 0))))))
+      message: "[rule:gpu-count-valid] GPU counts must be whole and positive; requests require an equal limit."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !(has(podSpec.nodeSelector) && variables.gpuClassKey in podSpec.nodeSelector) ||
+          ((podSpec.containers.all(container,
+              !has(container.resources) ||
+              !has(container.resources.limits) ||
+              !(variables.gpuResource in container.resources.limits) ||
+              (isQuantity(string(container.resources.limits[variables.gpuResource])) &&
+               quantity(string(container.resources.limits[variables.gpuResource])).isInteger())) &&
+            (!has(podSpec.initContainers) || podSpec.initContainers.all(container,
+              !has(container.resources) ||
+              !has(container.resources.limits) ||
+              !(variables.gpuResource in container.resources.limits) ||
+              (isQuantity(string(container.resources.limits[variables.gpuResource])) &&
+               quantity(string(container.resources.limits[variables.gpuResource])).isInteger())))) &&
+           [podSpec.containers.map(container,
+              has(container.resources) &&
+              has(container.resources.limits) &&
+              variables.gpuResource in container.resources.limits ?
+                quantity(string(container.resources.limits[variables.gpuResource])).asInteger() : 0).sum(),
+            ([0] + (has(podSpec.initContainers) ? podSpec.initContainers.map(container,
+              has(container.resources) &&
+              has(container.resources.limits) &&
+              variables.gpuResource in container.resources.limits ?
+                quantity(string(container.resources.limits[variables.gpuResource])).asInteger() : 0) : [])).max()
+           ].max() > 0))
+      message: "[rule:gpu-class-request-paired] Every GPU class must have a positive native nvidia.com/gpu count."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !(
+            podSpec.containers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) && 'nvidia.com/gpu' in container.resources.requests) ||
+               (has(container.resources.limits) && 'nvidia.com/gpu' in container.resources.limits))) ||
+            (has(podSpec.initContainers) && podSpec.initContainers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) && 'nvidia.com/gpu' in container.resources.requests) ||
+               (has(container.resources.limits) && 'nvidia.com/gpu' in container.resources.limits))))
+          ) ||
+          (has(podSpec.nodeSelector) && variables.gpuClassKey in podSpec.nodeSelector))
+      message: "[rule:gpu-request-class-paired] Every native nvidia.com/gpu declaration must select one portable GPU class."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.initContainers) ||
+          podSpec.initContainers.all(container,
+            !has(container.restartPolicy) ||
+            container.restartPolicy != 'Always' ||
+            !has(container.resources) ||
+            !((has(container.resources.requests) &&
+               'nvidia.com/gpu' in container.resources.requests) ||
+              (has(container.resources.limits) &&
+               'nvidia.com/gpu' in container.resources.limits))))
+      message: "[rule:gpu-restartable-init-unsupported] Restartable init containers cannot request GPUs because they overlap application containers."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.nodeSelector) ||
+          !(variables.gpuClassKey in podSpec.nodeSelector) ||
+          !has(params.data) ||
+          !((variables.gpuCapabilityPrefix + podSpec.nodeSelector[variables.gpuClassKey]) in params.data) ||
+          !isQuantity(params.data[variables.gpuCapabilityPrefix + podSpec.nodeSelector[variables.gpuClassKey]]) ||
+          !quantity(params.data[variables.gpuCapabilityPrefix + podSpec.nodeSelector[variables.gpuClassKey]]).isInteger() ||
+          !podSpec.containers.all(container,
+            !has(container.resources) ||
+            !has(container.resources.limits) ||
+            !(variables.gpuResource in container.resources.limits) ||
+            (isQuantity(string(container.resources.limits[variables.gpuResource])) &&
+             quantity(string(container.resources.limits[variables.gpuResource])).isInteger())) ||
+          (has(podSpec.initContainers) && !podSpec.initContainers.all(container,
+            !has(container.resources) ||
+            !has(container.resources.limits) ||
+            !(variables.gpuResource in container.resources.limits) ||
+            (isQuantity(string(container.resources.limits[variables.gpuResource])) &&
+             quantity(string(container.resources.limits[variables.gpuResource])).isInteger()))) ||
+          ([podSpec.containers.map(container,
+              has(container.resources) &&
+              has(container.resources.limits) &&
+              variables.gpuResource in container.resources.limits ?
+                quantity(string(container.resources.limits[variables.gpuResource])).asInteger() : 0).sum(),
+            ([0] + (has(podSpec.initContainers) ? podSpec.initContainers.map(container,
+              has(container.resources) &&
+              has(container.resources.limits) &&
+              variables.gpuResource in container.resources.limits ?
+                quantity(string(container.resources.limits[variables.gpuResource])).asInteger() : 0) : [])).max()
+           ].max() <=
+           quantity(params.data[variables.gpuCapabilityPrefix + podSpec.nodeSelector[variables.gpuClassKey]]).asInteger()))
+      message: "[rule:gpu-class-max-count] A Pod template's native nvidia.com/gpu count must not exceed the selected class's per-node maximum."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.nodeSelector) ||
+          !(variables.tpuClassKey in podSpec.nodeSelector) ||
+          (has(params.data) &&
+           (variables.tpuCapabilityPrefix + podSpec.nodeSelector[variables.tpuClassKey]) in params.data &&
+           isQuantity(params.data[variables.tpuCapabilityPrefix + podSpec.nodeSelector[variables.tpuClassKey]]) &&
+           quantity(params.data[variables.tpuCapabilityPrefix + podSpec.nodeSelector[variables.tpuClassKey]]).isInteger() &&
+           quantity(params.data[variables.tpuCapabilityPrefix + podSpec.nodeSelector[variables.tpuClassKey]]).isGreaterThan(quantity('0'))))
+      message: "[rule:tpu-class-offered] TPU classes must be offered by this cell."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          (!has(podSpec.affinity) ||
+           !has(podSpec.affinity.nodeAffinity) ||
+           (
+             (!has(podSpec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution) ||
+              podSpec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms.all(term,
+                !has(term.matchExpressions) ||
+                term.matchExpressions.all(requirement,
+                  requirement.key != variables.tpuClassKey))) &&
+             (!has(podSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+              podSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.all(term,
+                !has(term.preference.matchExpressions) ||
+                term.preference.matchExpressions.all(requirement,
+                  requirement.key != variables.tpuClassKey)))
+           )) &&
+          (!has(podSpec.topologySpreadConstraints) ||
+           podSpec.topologySpreadConstraints.all(constraint,
+             constraint.topologyKey != variables.tpuClassKey)))
+      message: "[rule:tpu-class-node-selector-only] TPU classes must use the portable nodeSelector."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          podSpec.containers.all(container,
+            !has(container.resources) ||
+            ((!has(container.resources.limits) ||
+              !(variables.tpuResource in container.resources.limits) ||
+              (isQuantity(string(container.resources.limits[variables.tpuResource])) &&
+               quantity(string(container.resources.limits[variables.tpuResource])).isInteger() &&
+               quantity(string(container.resources.limits[variables.tpuResource])).isGreaterThan(quantity('0')))) &&
+             (!has(container.resources.requests) ||
+              !(variables.tpuResource in container.resources.requests) ||
+              (has(container.resources.limits) &&
+               variables.tpuResource in container.resources.limits &&
+               isQuantity(string(container.resources.requests[variables.tpuResource])) &&
+               quantity(string(container.resources.requests[variables.tpuResource])).isInteger() &&
+               quantity(string(container.resources.requests[variables.tpuResource])).isGreaterThan(quantity('0')) &&
+               isQuantity(string(container.resources.limits[variables.tpuResource])) &&
+               quantity(string(container.resources.requests[variables.tpuResource])).compareTo(
+                 quantity(string(container.resources.limits[variables.tpuResource]))) == 0)))) &&
+          (!has(podSpec.initContainers) || podSpec.initContainers.all(container,
+            !has(container.resources) ||
+            ((!has(container.resources.limits) ||
+              !(variables.tpuResource in container.resources.limits) ||
+              (isQuantity(string(container.resources.limits[variables.tpuResource])) &&
+               quantity(string(container.resources.limits[variables.tpuResource])).isInteger() &&
+               quantity(string(container.resources.limits[variables.tpuResource])).isGreaterThan(quantity('0')))) &&
+             (!has(container.resources.requests) ||
+              !(variables.tpuResource in container.resources.requests) ||
+              (has(container.resources.limits) &&
+               variables.tpuResource in container.resources.limits &&
+               isQuantity(string(container.resources.requests[variables.tpuResource])) &&
+               quantity(string(container.resources.requests[variables.tpuResource])).isInteger() &&
+               quantity(string(container.resources.requests[variables.tpuResource])).isGreaterThan(quantity('0')) &&
+               isQuantity(string(container.resources.limits[variables.tpuResource])) &&
+               quantity(string(container.resources.requests[variables.tpuResource])).compareTo(
+                 quantity(string(container.resources.limits[variables.tpuResource]))) == 0))))))
+      message: "[rule:tpu-count-valid] TPU limits must be whole and positive; requests require an equal limit."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !(has(podSpec.nodeSelector) && variables.tpuClassKey in podSpec.nodeSelector) ||
+          (podSpec.containers.filter(container,
+             has(container.resources) &&
+             has(container.resources.limits) &&
+             variables.tpuResource in container.resources.limits &&
+             isQuantity(string(container.resources.limits[variables.tpuResource])) &&
+             quantity(string(container.resources.limits[variables.tpuResource])).isInteger() &&
+             quantity(string(container.resources.limits[variables.tpuResource])).isGreaterThan(quantity('0'))).size() +
+           (has(podSpec.initContainers) ? podSpec.initContainers.filter(container,
+             has(container.resources) &&
+             has(container.resources.limits) &&
+             variables.tpuResource in container.resources.limits &&
+             isQuantity(string(container.resources.limits[variables.tpuResource])) &&
+             quantity(string(container.resources.limits[variables.tpuResource])).isInteger() &&
+             quantity(string(container.resources.limits[variables.tpuResource])).isGreaterThan(quantity('0'))).size() : 0)) == 1)
+      message: "[rule:tpu-class-request-paired] A TPU class must have exactly one TPU-consuming container with a positive native limit."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !(
+            podSpec.containers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) && variables.tpuResource in container.resources.requests) ||
+               (has(container.resources.limits) && variables.tpuResource in container.resources.limits))) ||
+            (has(podSpec.initContainers) && podSpec.initContainers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) && variables.tpuResource in container.resources.requests) ||
+               (has(container.resources.limits) && variables.tpuResource in container.resources.limits))))
+          ) ||
+          (has(podSpec.nodeSelector) && variables.tpuClassKey in podSpec.nodeSelector))
+      message: "[rule:tpu-request-class-paired] Every native google.com/tpu declaration must select one portable TPU class."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.initContainers) ||
+          podSpec.initContainers.all(container,
+            !has(container.restartPolicy) ||
+            container.restartPolicy != 'Always' ||
+            !has(container.resources) ||
+            !((has(container.resources.requests) &&
+               variables.tpuResource in container.resources.requests) ||
+              (has(container.resources.limits) &&
+               variables.tpuResource in container.resources.limits))))
+      message: "[rule:tpu-restartable-init-unsupported] Restartable init containers cannot request TPUs because they overlap application containers."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.nodeSelector) ||
+          !(variables.tpuClassKey in podSpec.nodeSelector) ||
+          !has(params.data) ||
+          !((variables.tpuCapabilityPrefix + podSpec.nodeSelector[variables.tpuClassKey]) in params.data) ||
+          !isQuantity(params.data[variables.tpuCapabilityPrefix + podSpec.nodeSelector[variables.tpuClassKey]]) ||
+          !quantity(params.data[variables.tpuCapabilityPrefix + podSpec.nodeSelector[variables.tpuClassKey]]).isInteger() ||
+          !podSpec.containers.all(container,
+            !has(container.resources) ||
+            !has(container.resources.limits) ||
+            !(variables.tpuResource in container.resources.limits) ||
+            (isQuantity(string(container.resources.limits[variables.tpuResource])) &&
+             quantity(string(container.resources.limits[variables.tpuResource])).isInteger())) ||
+          (has(podSpec.initContainers) && !podSpec.initContainers.all(container,
+            !has(container.resources) ||
+            !has(container.resources.limits) ||
+            !(variables.tpuResource in container.resources.limits) ||
+            (isQuantity(string(container.resources.limits[variables.tpuResource])) &&
+             quantity(string(container.resources.limits[variables.tpuResource])).isInteger()))) ||
+          (podSpec.containers.map(container,
+             has(container.resources) &&
+             has(container.resources.limits) &&
+             variables.tpuResource in container.resources.limits ?
+               quantity(string(container.resources.limits[variables.tpuResource])).asInteger() : 0).sum() +
+           (has(podSpec.initContainers) ? podSpec.initContainers.map(container,
+             has(container.resources) &&
+             has(container.resources.limits) &&
+             variables.tpuResource in container.resources.limits ?
+               quantity(string(container.resources.limits[variables.tpuResource])).asInteger() : 0).sum() : 0)) ==
+          quantity(params.data[variables.tpuCapabilityPrefix + podSpec.nodeSelector[variables.tpuClassKey]]).asInteger())
+      message: "[rule:tpu-class-count] A Pod template must consume the selected TPU class's exact chip count."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.nodeSelector) ||
+          !(variables.tpuClassKey in podSpec.nodeSelector) ||
+          !(
+            podSpec.containers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) &&
+                variables.gpuResource in container.resources.requests &&
+                quantity(string(container.resources.requests[variables.gpuResource])).isGreaterThan(quantity('0'))) ||
+               (has(container.resources.limits) &&
+                variables.gpuResource in container.resources.limits &&
+                quantity(string(container.resources.limits[variables.gpuResource])).isGreaterThan(quantity('0'))))) ||
+            (has(podSpec.initContainers) && podSpec.initContainers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) &&
+                variables.gpuResource in container.resources.requests &&
+                quantity(string(container.resources.requests[variables.gpuResource])).isGreaterThan(quantity('0'))) ||
+               (has(container.resources.limits) &&
+                variables.gpuResource in container.resources.limits &&
+                quantity(string(container.resources.limits[variables.gpuResource])).isGreaterThan(quantity('0'))))))
+          ))
+      message: "[rule:tpu-gpu-exclusive] TPU classes cannot be combined with positive NVIDIA GPU resources."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !(
+            podSpec.containers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) && 'nvidia.com/gpu' in container.resources.requests) ||
+               (has(container.resources.limits) && 'nvidia.com/gpu' in container.resources.limits))) ||
+            (has(podSpec.initContainers) && podSpec.initContainers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) && 'nvidia.com/gpu' in container.resources.requests) ||
+               (has(container.resources.limits) && 'nvidia.com/gpu' in container.resources.limits))))
+          ) ||
+          (has(podSpec.tolerations) && podSpec.tolerations.exists(toleration,
+            toleration.key == 'nvidia.com/gpu' &&
+            toleration.operator == 'Equal' &&
+            toleration.value == 'present' &&
+            toleration.effect == 'NoSchedule')))
+      message: "[rule:nvidia-toleration-required] Every Pod template requesting NVIDIA GPUs must tolerate the native NVIDIA accelerator taint."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !(
+            podSpec.containers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) && 'google.com/tpu' in container.resources.requests) ||
+               (has(container.resources.limits) && 'google.com/tpu' in container.resources.limits))) ||
+            (has(podSpec.initContainers) && podSpec.initContainers.exists(container,
+              has(container.resources) &&
+              ((has(container.resources.requests) && 'google.com/tpu' in container.resources.requests) ||
+               (has(container.resources.limits) && 'google.com/tpu' in container.resources.limits))))
+          ) ||
+          (has(podSpec.tolerations) && podSpec.tolerations.exists(toleration,
+            toleration.key == 'google.com/tpu' &&
+            toleration.operator == 'Equal' &&
+            toleration.value == 'present' &&
+            toleration.effect == 'NoSchedule')))
+      message: "[rule:tpu-toleration-required] Every Pod template requesting Google TPUs must tolerate the native TPU accelerator taint."
+    # LINT.IfChange(accelerator_toleration_contract)
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.tolerations) ||
+          podSpec.tolerations.all(toleration,
+            !(((!has(toleration.key) || toleration.key == '') &&
+               toleration.operator == 'Exists' &&
+               (!has(toleration.effect) ||
+                toleration.effect == '' ||
+                toleration.effect == 'NoSchedule'))) &&
+            ((!has(toleration.key) || toleration.key != variables.gpuResource) ||
+             (has(toleration.operator) &&
+              toleration.operator == 'Equal' &&
+              has(toleration.value) &&
+              toleration.value == 'present' &&
+              has(toleration.effect) &&
+              toleration.effect == 'NoSchedule' &&
+              !has(toleration.tolerationSeconds))) &&
+            ((!has(toleration.key) || toleration.key != variables.tpuResource) ||
+             (has(toleration.operator) &&
+              toleration.operator == 'Equal' &&
+              has(toleration.value) &&
+              toleration.value == 'present' &&
+              has(toleration.effect) &&
+              toleration.effect == 'NoSchedule' &&
+              !has(toleration.tolerationSeconds)))))
+      message: "[rule:accelerator-toleration-canonical] Accelerator taints permit only the exact platform toleration; wildcard NoSchedule tolerations are forbidden."
+    - expression: |-
+        variables.podSpecs.all(podSpec,
+          !has(podSpec.tolerations) ||
+          podSpec.tolerations.all(toleration,
+            ((!has(toleration.key) || toleration.key != variables.gpuResource) ||
+             ((has(podSpec.nodeSelector) &&
+               variables.gpuClassKey in podSpec.nodeSelector) &&
+              (podSpec.containers.exists(container,
+                 has(container.resources) &&
+                 ((has(container.resources.requests) &&
+                   variables.gpuResource in container.resources.requests) ||
+                  (has(container.resources.limits) &&
+                   variables.gpuResource in container.resources.limits))) ||
+               (has(podSpec.initContainers) && podSpec.initContainers.exists(container,
+                 has(container.resources) &&
+                 ((has(container.resources.requests) &&
+                   variables.gpuResource in container.resources.requests) ||
+                  (has(container.resources.limits) &&
+                   variables.gpuResource in container.resources.limits))))))) &&
+            ((!has(toleration.key) || toleration.key != variables.tpuResource) ||
+             ((has(podSpec.nodeSelector) &&
+               variables.tpuClassKey in podSpec.nodeSelector) &&
+              (podSpec.containers.exists(container,
+                 has(container.resources) &&
+                 ((has(container.resources.requests) &&
+                   variables.tpuResource in container.resources.requests) ||
+                  (has(container.resources.limits) &&
+                   variables.tpuResource in container.resources.limits))) ||
+               (has(podSpec.initContainers) && podSpec.initContainers.exists(container,
+                 has(container.resources) &&
+                 ((has(container.resources.requests) &&
+                   variables.tpuResource in container.resources.requests) ||
+                  (has(container.resources.limits) &&
+                   variables.tpuResource in container.resources.limits)))))))))
+      message: "[rule:accelerator-toleration-paired] Accelerator taint tolerations require the matching portable class and native resource declaration."
+      # LINT.ThenChange(//src/bazel/checks/workload_portability/check_workload_portability.py:accelerator_toleration_contract)
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-governed-workload
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: team-governance
+spec:
+  policyName: team-governed-workload
+  paramRef:
+    name: team-compute-capabilities
+    namespace: kueue-system
+    parameterNotFoundAction: Deny
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kueue.x-k8s.io/managed: "true"

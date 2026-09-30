@@ -1,0 +1,17 @@
+# keda-system namespace hosting the upstream autoscaling controller and admission webhook; rendered by every <cluster>-keda Application.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keda-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime
+    cost-center: shared-infrastructure
+    environment: production
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest

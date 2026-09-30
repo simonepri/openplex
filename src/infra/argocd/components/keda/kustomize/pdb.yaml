@@ -1,0 +1,29 @@
+# KEDA HTTP controller disruption budgets consumed by redundant availability profiles.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: keda-add-ons-http-controller-manager
+  namespace: keda-system
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: operator
+      app.kubernetes.io/instance: keda-http
+      app.kubernetes.io/name: http-add-on
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: keda-add-ons-http-external-scaler
+  namespace: keda-system
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: scaler
+      app.kubernetes.io/instance: keda-http
+      app.kubernetes.io/name: http-add-on

@@ -1,0 +1,8 @@
+# Declares Kubernetes resources and policies for the k8s-cleaner component.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - cleaner-pv.yaml
+  # keep-sorted end

@@ -1,0 +1,38 @@
+{{- /* Defines provider-native Kueue ResourceFlavors and topology hierarchy for cell nodes. */ -}}
+
+{{- include "kueue-admission.validateCompute" . -}}
+{{- if eq .Values.role "cell" }}
+{{- range .Values.topologies }}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: Topology
+metadata:
+  name: {{ .name }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  levels:
+    {{- range .levels }}
+    - nodeLabel: {{ . }}
+    {{- end }}
+{{- end }}
+{{- range .Values.flavors }}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: {{ .name }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  {{- with .nodeLabels }}
+  nodeLabels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .nodeTaints }}
+  nodeTaints:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  topologyName: cell-topology
+{{- end }}
+{{- end }}

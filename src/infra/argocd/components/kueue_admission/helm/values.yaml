@@ -1,0 +1,20 @@
+# Default Kueue admission values configuring cluster queue cohorts, compute limits, and team flavors.
+
+role: disabled
+clusterName: ""
+cohortRootName: cluster-pool
+provider: ""
+compute:
+  cpu_capabilities: []
+  gpu_classes: {}
+  tpu_classes: {}
+  floors:
+    ha: {cpu: "0", memory: "0"}
+    ma: {cpu: "0", memory: "0"}
+    wa: {cpu: "0", memory: "0"}
+    be: {cpu: "0", memory: "0"}
+  ceiling: {cpu: "0", memory: "0"}
+
+flavors: []
+topologies: []
+teams: []

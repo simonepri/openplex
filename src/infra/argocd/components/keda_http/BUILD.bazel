@@ -1,0 +1,26 @@
+"""Check targets for the keda_http Argo CD component."""
+
+load("@rules_helm//helm:defs.bzl", "helm_template")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+helm_template(
+    name = "vendor-helm-render",
+    chart = "@vendor_helm_keda_http//:keda-add-ons-http",
+    opts = [
+        "--include-crds",
+        "--namespace",
+        "manifest-checks",
+    ],
+    values = [
+        "helm/values.yaml",
+    ],
+)
+
+package_sources()
+
+manifest_checks(
+    name = "vendor-helm",
+    kube_lint_config = "//src/bazel/rules/kubernetes_manifests:kube-linter-vendor.yaml",
+    rendered = ":vendor-helm-render",
+)

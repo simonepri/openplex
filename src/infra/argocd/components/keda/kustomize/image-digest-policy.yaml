@@ -1,0 +1,115 @@
+# Mutates KEDA HTTP add-on deployment templates to pin immutable image digests before admission.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: keda-http-add-on-image-digests
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: keda-http-add-on-image-digests
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    # LINT.IfChange(keda-http-add-on-image-tag-contract)
+    - name: pin-http-add-on-operator-image
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              namespaces: [keda-system]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: operator
+                  app.kubernetes.io/instance: keda-http
+                  app.kubernetes.io/name: http-add-on
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers
+            preconditions:
+              all:
+                - key: '{{ element.name }}'
+                  operator: Equals
+                  value: keda-add-ons-http-operator
+                - key: '{{ element.image }}'
+                  operator: Equals
+                  value: ghcr.io/kedacore/http-add-on-operator:0.15.0
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: '{{ element.name }}'
+                        image: >-
+                          ghcr.io/kedacore/http-add-on-operator@sha256:d579b952ff0a0c3046a49d0e066bc06d33d1944b5f89b5fac5145d89f9f78959
+    - name: pin-http-add-on-interceptor-image
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              namespaces: [keda-system]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: interceptor
+                  app.kubernetes.io/instance: keda-http
+                  app.kubernetes.io/name: http-add-on
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers
+            preconditions:
+              all:
+                - key: '{{ element.name }}'
+                  operator: Equals
+                  value: keda-add-ons-http-interceptor
+                - key: '{{ element.image }}'
+                  operator: Equals
+                  value: ghcr.io/kedacore/http-add-on-interceptor:0.15.0
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: '{{ element.name }}'
+                        image: >-
+                          ghcr.io/kedacore/http-add-on-interceptor@sha256:4e88e7808652e7c438f66d67bc8a53ce6261b6081c81475bd4758602460af499
+    - name: pin-http-add-on-scaler-image
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              namespaces: [keda-system]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: scaler
+                  app.kubernetes.io/instance: keda-http
+                  app.kubernetes.io/name: http-add-on
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers
+            preconditions:
+              all:
+                - key: '{{ element.name }}'
+                  operator: Equals
+                  value: keda-add-ons-http-external-scaler
+                - key: '{{ element.image }}'
+                  operator: Equals
+                  value: ghcr.io/kedacore/http-add-on-scaler:0.15.0
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: '{{ element.name }}'
+                        image: >-
+                          ghcr.io/kedacore/http-add-on-scaler@sha256:f748178bc4af9e546d5da38c4e1b1d8d236a343bb30927b292131c6f4c978394
+  # LINT.ThenChange(//src/infra/argocd/components/keda_http/helm/values.yaml:keda-http-add-on-image-tag-contract)
