@@ -1,0 +1,29 @@
+# Kustomize entrypoint for external-secrets namespace, stores, and policies.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - application-identity.namespace.yaml
+  - application-oidc-rbac.yaml
+  - application-oidc.external-secret.yaml
+  - application-oidc.secret.yaml
+  - argocd-webhook.external-secret.yaml
+  - aws-secrets-manager.cluster-secret-store.yaml
+  - buildbuddy-auth.password.yaml
+  - cluster-secret-store.yaml
+  - coder-automation-token.external-secret.yaml
+  - coder-cell-kubeconfig-store.yaml
+  - coder-snapshot-oauth.secret.yaml
+  - coder-template-publication.external-secret.yaml
+  - coder-template-publication.secret.yaml
+  - dev-secrets.namespace.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - opencost-cloud-provider-api.secret.yaml
+  - secret-records-defaults.yaml
+  - secret-records-store.yaml
+  - secret-records.namespace.yaml
+  - self-subject-rules-reviewer.cluster-role.yaml
+  - system-namespaces-network-policy.yaml
+  # keep-sorted end

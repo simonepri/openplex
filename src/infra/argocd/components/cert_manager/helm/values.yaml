@@ -1,0 +1,94 @@
+# Helm values configuring cert-manager controller, CRDs, webhook, and CA injector.
+
+crds:
+  enabled: true
+  keep: true
+
+extraArgs:
+  # Keep DNS-01 self-checks on the cluster DNS path so NetworkPolicy does not
+  # need unrestricted direct egress to arbitrary authoritative DNS servers.
+  - --dns01-recursive-nameservers-only
+image:
+  tag: v1.21.1
+  digest: sha256:416a2d76870d996460e62bd7f521bf14fa017be9e3e904aab92163a331fcb61a
+resources:
+  requests: {cpu: 20m, memory: 64Mi}
+  limits: {cpu: 250m, memory: 256Mi}
+replicaCount: 2
+podDisruptionBudget: {enabled: true, minAvailable: 1}
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: controller
+              app.kubernetes.io/instance: cert-manager
+              app.kubernetes.io/name: cert-manager
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+topologySpreadConstraints: []
+podAnnotations:
+  signoz.io/path: /metrics
+  signoz.io/port: "9402"
+  signoz.io/scrape: "true"
+prometheus:
+  enabled: true
+
+webhook:
+  replicaCount: 2
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: webhook
+                app.kubernetes.io/instance: cert-manager
+                app.kubernetes.io/name: webhook
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints: []
+  image:
+    tag: v1.21.1
+    digest: sha256:d8b3961b51c8c7320633f8208dc46bf88aa13804d0f7cbe48a096b2c523cee42
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {cpu: 100m, memory: 128Mi}
+  livenessProbe:
+    timeoutSeconds: 5
+  readinessProbe:
+    timeoutSeconds: 5
+cainjector:
+  enabled: true
+  replicaCount: 2
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: cainjector
+                app.kubernetes.io/instance: cert-manager
+                app.kubernetes.io/name: cainjector
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints: []
+  image:
+    tag: v1.21.1
+    digest: sha256:ccf6b919ec0500745a47a910118f834f9636d0aac1ff221245cd2557ed8c7c98
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {cpu: 250m, memory: 256Mi}
+acmesolver:
+  image:
+    tag: v1.21.1
+    digest: sha256:dbc7cc1354f603918e7c5af7f55a0a620537394452c93a565bde75c6f48e8837
+
+startupapicheck:
+  # The chart models the check and its short-lived RBAC as separate PostSync
+  # hooks. Argo can delete the RBAC before a delayed Job starts; real
+  # Certificate issuance is the platform readiness contract instead.
+  enabled: false

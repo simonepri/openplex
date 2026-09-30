@@ -1,0 +1,29 @@
+# ClusterIssuer for public ACME DNS-01 certificate issuance on opted-in clusters.
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: public-acme
+  labels:
+    app.kubernetes.io/component: certificate-issuer
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: acme
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ""
+    privateKeySecretRef:
+      name: public-acme-account
+    solvers:
+      - dns01:
+          route53: {}
+        selector:
+          dnsZones: []
+      - dns01:
+          cnameStrategy: None
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+        selector:
+          dnsZones: []

@@ -1,0 +1,9 @@
+# Composes trust-manager local CA bundle and certificate synchronization resources.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - bundle.yaml
+  - storage-sync-bundle.yaml
+  # keep-sorted end

@@ -1,0 +1,11 @@
+# Kustomize base for cert-manager companions including local CA issuer and network policies.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - local-ca.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - trust-manager-network-policy.yaml
+  # keep-sorted end
