@@ -1,0 +1,11 @@
+# Composes Vertical Pod Autoscaler CRDs, webhooks, and admission policies.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  - ownership-policy.yaml
+  - vpa-v1-crd-gen.yaml
+  # keep-sorted end

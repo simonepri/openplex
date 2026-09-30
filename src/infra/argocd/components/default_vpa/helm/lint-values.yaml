@@ -1,0 +1,6 @@
+# Lint values for default-vpa chart validation.
+
+targets:
+  - name: sample-target
+  - name: sample-statefulset
+    kind: StatefulSet

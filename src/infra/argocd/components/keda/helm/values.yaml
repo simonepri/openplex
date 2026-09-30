@@ -1,0 +1,162 @@
+# Configures base Helm values for KEDA operator, metrics server, and webhooks across fleet clusters.
+
+crds:
+  install: true
+enableServiceLinks: false
+hashiCorpVault:
+  kubernetesAuth:
+    audience: ""
+http:
+  timeout: 30000
+env:
+  - name: KEDA_OPERATOR_LEADER_ELECTION_LEASE_DURATION
+    value: 60s
+  - name: KEDA_OPERATOR_LEADER_ELECTION_RENEW_DEADLINE
+    value: 45s
+  - name: KEDA_OPERATOR_LEADER_ELECTION_RETRY_PERIOD
+    value: 10s
+image:
+  keda:
+    tag: 2.20.2@sha256:fe74c7b8849586a67ad2201bcb89e7f5ac221ff90399ecaa8fd28427f1ef11e6
+  metricsApiServer:
+    tag: 2.20.2@sha256:27286536a8a775aeeee37a7e343f8ecebb27ebf680ee1181a4f99e82eefb253b
+  webhooks:
+    tag: 2.20.2@sha256:41f74102aba7959c6e8d08b433ab8a5fd6cae7c5646c78f7fe3de40a52df3439
+  pullPolicy: IfNotPresent
+permissions:
+  metricServer:
+    restrict:
+      secret: true
+  operator:
+    allowAllServiceAccountTokenCreation: false
+    restrict:
+      namesAllowList: []
+      secret: true
+      serviceAccountTokenCreationRoles: []
+operator:
+  replicaCount: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels: {app: keda-operator}
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+metricsServer:
+  replicaCount: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels: {app: keda-operator-metrics-apiserver}
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+webhooks:
+  enabled: true
+  replicaCount: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels: {app: keda-admission-webhooks}
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  failurePolicy: Fail
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+priorityClassName: cluster-operators
+upgradeStrategy:
+  operator:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  metricsApiServer:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  webhooks:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+podSecurityContext:
+  operator: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+  metricServer: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+  webhooks: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+securityContext:
+  operator: &restricted-security-context
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  metricServer: *restricted-security-context
+  webhooks: *restricted-security-context
+prometheus:
+  metricServer:
+    enabled: true
+    port: 8080
+  operator:
+    enabled: true
+    port: 8080
+  webhooks:
+    enabled: true
+    port: 8080
+podAnnotations:
+  keda:
+    signoz.io/path: /metrics
+    signoz.io/port: "8080"
+    signoz.io/scrape: "true"
+  metricsAdapter:
+    signoz.io/path: /metrics
+    signoz.io/port: "8080"
+    signoz.io/scrape: "true"
+  webhooks:
+    signoz.io/path: /metrics
+    signoz.io/port: "8080"
+    signoz.io/scrape: "true"
+resources:
+  metricServer:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+  operator:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+  webhooks:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+podDisruptionBudget:
+  operator: {minAvailable: 1}
+  metricServer: {minAvailable: 1}
+  webhooks: {minAvailable: 1}
+topologySpreadConstraints:
+  operator: []
+  metricsServer: []
+  webhooks: []

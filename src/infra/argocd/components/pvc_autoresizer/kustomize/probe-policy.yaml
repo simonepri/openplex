@@ -1,0 +1,53 @@
+# Mutates admission requests for PVC Autoresizer probe timing configurations.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pvc-autoresizer-probe-tolerance
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: tolerate-pvc-autoresizer-api-pressure
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              names: [pvc-autoresizer-controller]
+              namespaces: [pvc-autoresizer-system]
+              operations: [CREATE, UPDATE]
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers
+            preconditions:
+              all:
+                - key: '{{ element.name }}'
+                  operator: Equals
+                  value: pvc-autoresizer
+            patchStrategicMerge:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: '{{ element.name }}'
+                        startupProbe:
+                          httpGet: {path: /healthz, port: health}
+                          failureThreshold: 60
+                          periodSeconds: 10
+                          timeoutSeconds: 10
+                        livenessProbe:
+                          failureThreshold: 12
+                          periodSeconds: 30
+                          timeoutSeconds: 10
+                        readinessProbe:
+                          failureThreshold: 6
+                          periodSeconds: 10
+                          timeoutSeconds: 5

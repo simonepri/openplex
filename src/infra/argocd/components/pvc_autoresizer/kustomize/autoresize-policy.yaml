@@ -1,0 +1,67 @@
+# Applies bounded growth to CloudNativePG data and WAL volumes, as well as Trivy server cache volumes, created by operators that cannot carry PVC annotations through their Helm values.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: critical-pvc-autoresize
+  labels:
+    app.kubernetes.io/name: critical-pvc-autoresize
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  failurePolicy: Ignore
+  validationFailureAction: Audit
+  rules:
+    - name: annotate-new-cnpg-data-pvcs
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [PersistentVolumeClaim]
+              selector:
+                matchLabels:
+                  cnpg.io/pvcRole: PG_DATA
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations: &cnpgDataResizeAnnotations
+              resize.topolvm.io/enabled: "true"
+              resize.topolvm.io/increase: "20%"
+              +(resize.topolvm.io/storage_limit): 500Gi
+              resize.topolvm.io/threshold: "20%"
+    - name: annotate-new-cnpg-wal-pvcs
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [PersistentVolumeClaim]
+              selector:
+                matchLabels:
+                  cnpg.io/pvcRole: PG_WAL
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations: &cnpgWalResizeAnnotations
+              resize.topolvm.io/enabled: "true"
+              resize.topolvm.io/increase: "20%"
+              +(resize.topolvm.io/storage_limit): 100Gi
+              resize.topolvm.io/threshold: "20%"
+    - name: annotate-new-trivy-data-pvcs
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [PersistentVolumeClaim]
+              namespaces: [trivy-system]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: trivy
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations: &trivyDataResizeAnnotations
+              resize.topolvm.io/enabled: "true"
+              resize.topolvm.io/increase: "20%"
+              +(resize.topolvm.io/storage_limit): 50Gi
+              resize.topolvm.io/threshold: "20%"

@@ -1,0 +1,53 @@
+# Derived from cell topology records and scheduling-teams.json for Helm linting.
+
+clusterName: cell-eaws-lh1
+compute:
+  ceiling:
+    cpu: '6'
+    memory: 20Gi
+  cpu_capabilities: []
+  floors:
+    be:
+      cpu: '0'
+      memory: '0'
+    ha:
+      cpu: '4'
+      memory: 12Gi
+    ma:
+      cpu: '1'
+      memory: 6Gi
+    wa:
+      cpu: '1'
+      memory: 2Gi
+  gpu_classes: {}
+  tpu_classes: {}
+flavors:
+- name: on-demand
+  nodeLabels:
+    karpenter.sh/capacity-type: on-demand
+- name: spot
+  nodeLabels:
+    karpenter.sh/capacity-type: spot
+provider: floci
+role: cell
+teams:
+- quota:
+    classes:
+      be:
+        cpu: '0'
+        memory: '0'
+      ha:
+        cpu: '4'
+        memory: 12Gi
+      ma:
+        cpu: '1'
+        memory: 6Gi
+      wa:
+        cpu: '1'
+        memory: 2Gi
+  slug: examples
+topologies:
+- levels:
+  - topology.kubernetes.io/zone
+  - kubernetes.io/hostname
+  name: cell-topology

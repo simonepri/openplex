@@ -1,0 +1,43 @@
+# Configures base Helm values, controller concurrency, and metrics for PVC Autoresizer.
+
+fullnameOverride: pvc-autoresizer
+image:
+  repository: ghcr.io/topolvm/pvc-autoresizer
+  reference: 0.21.0@sha256:51343caa8edd3a6416a48b3d5694146d1bf8226c95f954a9d269620bb10afdf7
+controller:
+  args:
+    useK8sMetricsApi: true
+    # The chart renders this argument unconditionally; the controller ignores
+    # it when the Kubernetes metrics API client is selected.
+    prometheusURL: ""
+    interval: 1m
+  priorityClassName: system-cluster-critical
+  podAnnotations:
+    signoz.io/scrape: "true"
+    signoz.io/port: "8080"
+    signoz.io/path: /metrics
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    readOnlyRootFilesystem: true
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 250m, memory: 512Mi}
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: pvc-autoresizer
+                app.kubernetes.io/name: pvc-autoresizer
+            topologyKey: kubernetes.io/hostname
+  podDisruptionBudget: {enabled: true}
+webhook:
+  pvcMutatingWebhook: {enabled: false}
+podMonitor: {enabled: false}

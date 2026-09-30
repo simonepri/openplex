@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "enabled": { "type": "boolean" },
+    "updateMode": {
+      "type": "string",
+      "enum": ["Off", "Initial", "Recreate", "InPlaceOrRecreate", "InPlace", "Auto"],
+      "description": "Default VPA updateMode for Deployments and generic workloads (default: InPlace)."
+    },
+    "statefulSetUpdateMode": {
+      "type": "string",
+      "enum": ["Off", "InPlace"],
+      "description": "Default VPA updateMode for StatefulSets to prevent pod eviction (default: InPlace)."
+    },
+    "controlledValues": { "type": "string", "enum": ["RequestsAndLimits", "RequestsOnly"] },
+    "controlledResources": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["cpu", "memory"] }
+    },
+    "minAllowed": {
+      "type": "object",
+      "properties": {
+        "cpu": { "type": "string" },
+        "memory": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "apiVersion": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["Deployment", "StatefulSet", "DaemonSet"],
+            "description": "Target workload kind. Defaults to Deployment."
+          },
+          "name": { "type": "string" },
+          "updateMode": {
+            "type": "string",
+            "enum": ["Off", "Initial", "Recreate", "InPlaceOrRecreate", "InPlace", "Auto"],
+            "description": "VPA updateMode override for this target workload. StatefulSets require InPlace or Off."
+          },
+          "minAllowed": {
+            "type": "object",
+            "properties": {
+              "cpu": { "type": "string" },
+              "memory": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

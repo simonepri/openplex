@@ -1,0 +1,8 @@
+# Chart metadata for the cell-owned kueue-admission chart. Each `<cell>-kueue-admission` Application renders its provider-qualified queues and policies.
+
+apiVersion: v2
+name: kueue-admission
+description: Provider-qualified Kueue admission and queues.
+type: application
+version: 0.1.0
+appVersion: 0.19.3

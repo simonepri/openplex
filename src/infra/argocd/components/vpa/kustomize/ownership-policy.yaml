@@ -1,0 +1,41 @@
+# Enforces ValidatingAdmissionPolicy that HPA ScaledObject owner references use the native KEDA API and every VPA declares an explicit, supported updateMode.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: autoscaling-ownership
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [autoscaling]
+        apiVersions: [v2]
+        operations: [CREATE, UPDATE]
+        resources: [horizontalpodautoscalers]
+      - apiGroups: [autoscaling.k8s.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [verticalpodautoscalers]
+  validations:
+    - expression: >-
+        request.kind.group != 'autoscaling' || !has(object.metadata.ownerReferences) || object.metadata.ownerReferences.all(owner, owner.kind != 'ScaledObject' || owner.apiVersion == 'keda.sh/v1alpha1')
+      message: HPA ScaledObject owner references must use the native KEDA API
+    - expression: >-
+        request.kind.group != 'autoscaling.k8s.io' || (has(object.spec.updatePolicy) && has(object.spec.updatePolicy.updateMode) && object.spec.updatePolicy.updateMode in ['Off', 'Initial', 'Recreate', 'Auto', 'InPlaceOrRecreate', 'InPlace'])
+      message: VPA update mode must be explicit and supported by the native VPA API
+    - expression: >-
+        request.kind.group != 'autoscaling.k8s.io' || !has(object.spec.targetRef) || !has(object.spec.targetRef.kind) || object.spec.targetRef.kind != 'StatefulSet' || (has(object.spec.updatePolicy) && has(object.spec.updatePolicy.updateMode) && object.spec.updatePolicy.updateMode in ['InPlace', 'Initial', 'Off'])
+      message: StatefulSet VPA update mode must be InPlace, Initial, or Off to prevent pod evictions
+    - expression: >-
+        request.kind.group != 'autoscaling.k8s.io' || !has(object.spec.targetRef) || !has(object.spec.targetRef.kind) || object.spec.targetRef.kind != 'Deployment' || (has(object.spec.updatePolicy) && has(object.spec.updatePolicy.updateMode) && object.spec.updatePolicy.updateMode in ['InPlace', 'Initial', 'Off'])
+      message: Deployment VPA update mode must be InPlace, Initial, or Off to prevent pod evictions
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: autoscaling-ownership
+spec:
+  policyName: autoscaling-ownership
+  validationActions: [Deny]

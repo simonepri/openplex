@@ -1,0 +1,7 @@
+# Reusable Helm chart generating VerticalPodAutoscaler resources for fleet workloads.
+
+apiVersion: v2
+name: default-vpa
+version: 0.1.0
+description: Fleet-wide default VerticalPodAutoscaler resources
+type: application

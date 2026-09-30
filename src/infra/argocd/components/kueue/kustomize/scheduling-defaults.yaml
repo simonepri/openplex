@@ -1,0 +1,560 @@
+# Derives Kueue implementation fields from team scheduling labels at admission. The API server applies this policy to newly created workloads in managed namespaces.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: team-scheduling-defaults
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: team-governance
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: IfNeeded
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [batch]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [cronjobs]
+      - apiGroups: [batch]
+        apiVersions: [v1]
+        operations: [CREATE]
+        resources: [jobs]
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE]
+        resources: [pods]
+      - apiGroups: [apps]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [deployments, statefulsets]
+      - apiGroups: [ray.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [rayclusters, rayjobs, rayservices]
+  matchConditions:
+    # K3s uses per-controller ServiceAccounts; other distributions may use the
+    # shared kube-controller-manager client identity.
+    # LINT.IfChange(trusted_workload_controllers)
+    - name: workload-submission
+      expression: |-
+        !(request.userInfo.username in [
+          'system:kube-controller-manager',
+          'system:serviceaccount:cnpg-system:cloudnative-pg',
+          'system:serviceaccount:kube-system:cronjob-controller',
+          'system:serviceaccount:kube-system:generic-garbage-collector',
+          'system:serviceaccount:kube-system:job-controller',
+          'system:serviceaccount:kube-system:replicaset-controller',
+          'system:serviceaccount:kube-system:statefulset-controller',
+          'system:serviceaccount:kuberay-system:kuberay-operator'
+        ])
+    # LINT.ThenChange(//src/infra/argocd/components/kueue/kustomize/team-governance.yaml:trusted_workload_controllers)
+    - name: kueue-admission-update
+      expression: |-
+        !(request.operation == 'UPDATE' &&
+          object.kind == 'Pod' &&
+          request.userInfo.username == 'system:serviceaccount:kueue-system:kueue-controller-manager')
+    - name: queued-team-workload
+      expression: |-
+        !(object.kind == 'Deployment' && has(object.metadata.labels) &&
+          'app.kubernetes.io/managed-by' in object.metadata.labels &&
+          object.metadata.labels['app.kubernetes.io/managed-by'] == 'valkey-operator' &&
+          'valkey.io/cluster' in object.metadata.labels &&
+          object.metadata.labels['valkey.io/cluster'] == 'torch-compile-cache' &&
+          request.userInfo.username == 'system:serviceaccount:valkey-system:valkey-operator')
+    - name: conformance-workloads
+      expression: |-
+        request.namespace != 'conformance-workloads'
+    - name: supported-public-scheduling-intent
+      # LINT.IfChange(team_scheduling_classes)
+      expression: |-
+        has(object.metadata.labels) &&
+        'availability-class' in object.metadata.labels &&
+        object.metadata.labels['availability-class'] in ['ha', 'ma', 'wa', 'be'] &&
+        'latency-class' in object.metadata.labels &&
+        object.metadata.labels['latency-class'] in ['ls', 'lt']
+  variables:
+    - name: availability
+      expression: object.metadata.labels['availability-class']
+    - name: latency
+      expression: object.metadata.labels['latency-class']
+    - name: priorityClass
+      expression: variables.availability + '-' + variables.latency
+    - name: priority
+      expression: |-
+        {
+          'be-ls': 12,
+          'be-lt': 11,
+          'ha-ls': 42,
+          'ha-lt': 41,
+          'ma-ls': 32,
+          'ma-lt': 31,
+          'wa-ls': 22,
+          'wa-lt': 21
+        }[variables.priorityClass]
+    # LINT.ThenChange(//src/infra/argocd/components/kueue/kustomize/team-governance.yaml:team_scheduling_classes,//src/infra/argocd/components/kueue/kustomize/priorities.yaml:team_priority_class_ladder)
+    - name: podSpecs
+      expression: |-
+        object.kind == 'Pod' ? [object.spec] : object.kind in ['Deployment', 'StatefulSet', 'Job'] ? [object.spec.template.spec] : object.kind == 'CronJob' ? [object.spec.jobTemplate.spec.template.spec] : object.kind == 'RayJob' ?
+          (has(object.spec.submitterPodTemplate) ? [object.spec.submitterPodTemplate.spec] : []) +
+          [object.spec.rayClusterSpec.headGroupSpec.template.spec] +
+          object.spec.rayClusterSpec.workerGroupSpecs.map(group, group.template.spec) :
+        object.kind == 'RayCluster' ?
+          [object.spec.headGroupSpec.template.spec] +
+          object.spec.workerGroupSpecs.map(group, group.template.spec) :
+        object.kind == 'RayService' ?
+          [object.spec.rayClusterConfig.headGroupSpec.template.spec] +
+          object.spec.rayClusterConfig.workerGroupSpecs.map(group, group.template.spec) : []
+    - name: gpuClassKey
+      expression: "'gpu-class'"
+    - name: gpuToleration
+      expression: |-
+        {
+          'key': 'nvidia.com/gpu',
+          'operator': 'Equal',
+          'value': 'present',
+          'effect': 'NoSchedule'
+        }
+    - name: tpuClassKey
+      expression: "'tpu-class'"
+    - name: tpuToleration
+      expression: |-
+        {
+          'key': 'google.com/tpu',
+          'operator': 'Equal',
+          'value': 'present',
+          'effect': 'NoSchedule'
+        }
+  mutations:
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          !('kueue.x-k8s.io/queue-name' in object.metadata.labels) ?
+            [JSONPatch{
+              op: 'add',
+              path: '/metadata/labels/' + jsonpatch.escapeKey('kueue.x-k8s.io/queue-name'),
+              value: variables.availability
+            }] : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          (object.kind == 'Pod' && request.operation == 'CREATE') ?
+            (!has(object.spec.priorityClassName) ?
+              [JSONPatch{op: 'add', path: '/spec/priorityClassName', value: variables.priorityClass}] : []) +
+            ((!has(object.spec.priority) || object.spec.priority == 0) ?
+              [JSONPatch{op: 'add', path: '/spec/priority', value: variables.priority}] : []) :
+          (object.kind in ['Deployment', 'StatefulSet'] || (object.kind == 'Job' && request.operation == 'CREATE')) ?
+            (!has(object.spec.template.spec.priorityClassName) ?
+              [JSONPatch{op: 'add', path: '/spec/template/spec/priorityClassName', value: variables.priorityClass}] : []) :
+          object.kind == 'CronJob' ?
+            (!has(object.spec.jobTemplate.spec.template.spec.priorityClassName) ?
+              [JSONPatch{op: 'add', path: '/spec/jobTemplate/spec/template/spec/priorityClassName', value: variables.priorityClass}] : []) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayJob' ?
+            (has(object.spec.submitterPodTemplate) &&
+             !has(object.spec.submitterPodTemplate.spec.priorityClassName) ?
+              [JSONPatch{op: 'add', path: '/spec/submitterPodTemplate/spec/priorityClassName', value: variables.priorityClass}] : []) +
+            (!has(object.spec.rayClusterSpec.headGroupSpec.template.spec.priorityClassName) ?
+              [JSONPatch{op: 'add', path: '/spec/rayClusterSpec/headGroupSpec/template/spec/priorityClassName', value: variables.priorityClass}] : []) +
+            object.spec.rayClusterSpec.workerGroupSpecs.filter(group,
+              !has(group.template.spec.priorityClassName)).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterSpec/workerGroupSpecs/' + string(object.spec.rayClusterSpec.workerGroupSpecs.indexOf(group)) + '/template/spec/priorityClassName',
+                value: variables.priorityClass
+              }) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayCluster' ?
+            (!has(object.spec.headGroupSpec.template.spec.priorityClassName) ?
+              [JSONPatch{op: 'add', path: '/spec/headGroupSpec/template/spec/priorityClassName', value: variables.priorityClass}] : []) +
+            object.spec.workerGroupSpecs.filter(group,
+              !has(group.template.spec.priorityClassName)).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/workerGroupSpecs/' + string(object.spec.workerGroupSpecs.indexOf(group)) + '/template/spec/priorityClassName',
+                value: variables.priorityClass
+              }) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayService' ?
+            (!has(object.spec.rayClusterConfig.headGroupSpec.template.spec.priorityClassName) ?
+              [JSONPatch{op: 'add', path: '/spec/rayClusterConfig/headGroupSpec/template/spec/priorityClassName', value: variables.priorityClass}] : []) +
+            object.spec.rayClusterConfig.workerGroupSpecs.filter(group,
+              !has(group.template.spec.priorityClassName)).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterConfig/workerGroupSpecs/' + string(object.spec.rayClusterConfig.workerGroupSpecs.indexOf(group)) + '/template/spec/priorityClassName',
+                value: variables.priorityClass
+              }) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'Pod' && request.operation == 'CREATE' &&
+          has(object.spec.nodeSelector) &&
+          ((variables.gpuClassKey in object.spec.nodeSelector &&
+            (!has(object.spec.tolerations) ||
+             !object.spec.tolerations.exists(toleration,
+               toleration.key == 'nvidia.com/gpu' &&
+               toleration.operator == 'Equal' &&
+               toleration.value == 'present' &&
+               toleration.effect == 'NoSchedule'))) ||
+           (variables.tpuClassKey in object.spec.nodeSelector &&
+            (!has(object.spec.tolerations) ||
+             !object.spec.tolerations.exists(toleration,
+               toleration.key == 'google.com/tpu' &&
+               toleration.operator == 'Equal' &&
+               toleration.value == 'present' &&
+               toleration.effect == 'NoSchedule')))) ?
+            [JSONPatch{
+              op: 'add',
+              path: '/spec/tolerations',
+              value: (has(object.spec.tolerations) ? object.spec.tolerations : []) +
+                (variables.gpuClassKey in object.spec.nodeSelector &&
+                 (!has(object.spec.tolerations) ||
+                  !object.spec.tolerations.exists(toleration,
+                    toleration.key == 'nvidia.com/gpu' &&
+                    toleration.operator == 'Equal' &&
+                    toleration.value == 'present' &&
+                    toleration.effect == 'NoSchedule')) ? [variables.gpuToleration] : []) +
+                (variables.tpuClassKey in object.spec.nodeSelector &&
+                 (!has(object.spec.tolerations) ||
+                  !object.spec.tolerations.exists(toleration,
+                    toleration.key == 'google.com/tpu' &&
+                    toleration.operator == 'Equal' &&
+                    toleration.value == 'present' &&
+                    toleration.effect == 'NoSchedule')) ? [variables.tpuToleration] : [])
+            }] : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          (object.kind in ['Deployment', 'StatefulSet'] || (object.kind == 'Job' && request.operation == 'CREATE')) &&
+          has(object.spec.template.spec.nodeSelector) &&
+          ((variables.gpuClassKey in object.spec.template.spec.nodeSelector &&
+            (!has(object.spec.template.spec.tolerations) ||
+             !object.spec.template.spec.tolerations.exists(toleration,
+               toleration.key == 'nvidia.com/gpu' &&
+               toleration.operator == 'Equal' &&
+               toleration.value == 'present' &&
+               toleration.effect == 'NoSchedule'))) ||
+           (variables.tpuClassKey in object.spec.template.spec.nodeSelector &&
+            (!has(object.spec.template.spec.tolerations) ||
+             !object.spec.template.spec.tolerations.exists(toleration,
+               toleration.key == 'google.com/tpu' &&
+               toleration.operator == 'Equal' &&
+               toleration.value == 'present' &&
+               toleration.effect == 'NoSchedule')))) ?
+            [JSONPatch{
+              op: 'add',
+              path: '/spec/template/spec/tolerations',
+              value: (has(object.spec.template.spec.tolerations) ?
+                object.spec.template.spec.tolerations : []) +
+                (variables.gpuClassKey in object.spec.template.spec.nodeSelector &&
+                 (!has(object.spec.template.spec.tolerations) ||
+                  !object.spec.template.spec.tolerations.exists(toleration,
+                    toleration.key == 'nvidia.com/gpu' &&
+                    toleration.operator == 'Equal' &&
+                    toleration.value == 'present' &&
+                    toleration.effect == 'NoSchedule')) ? [variables.gpuToleration] : []) +
+                (variables.tpuClassKey in object.spec.template.spec.nodeSelector &&
+                 (!has(object.spec.template.spec.tolerations) ||
+                  !object.spec.template.spec.tolerations.exists(toleration,
+                    toleration.key == 'google.com/tpu' &&
+                    toleration.operator == 'Equal' &&
+                    toleration.value == 'present' &&
+                    toleration.effect == 'NoSchedule')) ? [variables.tpuToleration] : [])
+            }] :
+          object.kind == 'CronJob' &&
+          has(object.spec.jobTemplate.spec.template.spec.nodeSelector) &&
+          ((variables.gpuClassKey in object.spec.jobTemplate.spec.template.spec.nodeSelector &&
+            (!has(object.spec.jobTemplate.spec.template.spec.tolerations) ||
+             !object.spec.jobTemplate.spec.template.spec.tolerations.exists(toleration,
+               toleration.key == 'nvidia.com/gpu' &&
+               toleration.operator == 'Equal' &&
+               toleration.value == 'present' &&
+               toleration.effect == 'NoSchedule'))) ||
+           (variables.tpuClassKey in object.spec.jobTemplate.spec.template.spec.nodeSelector &&
+            (!has(object.spec.jobTemplate.spec.template.spec.tolerations) ||
+             !object.spec.jobTemplate.spec.template.spec.tolerations.exists(toleration,
+               toleration.key == 'google.com/tpu' &&
+               toleration.operator == 'Equal' &&
+               toleration.value == 'present' &&
+               toleration.effect == 'NoSchedule')))) ?
+            [JSONPatch{
+              op: 'add',
+              path: '/spec/jobTemplate/spec/template/spec/tolerations',
+              value: (has(object.spec.jobTemplate.spec.template.spec.tolerations) ?
+                object.spec.jobTemplate.spec.template.spec.tolerations : []) +
+                (variables.gpuClassKey in object.spec.jobTemplate.spec.template.spec.nodeSelector &&
+                 (!has(object.spec.jobTemplate.spec.template.spec.tolerations) ||
+                  !object.spec.jobTemplate.spec.template.spec.tolerations.exists(toleration,
+                    toleration.key == 'nvidia.com/gpu' &&
+                    toleration.operator == 'Equal' &&
+                    toleration.value == 'present' &&
+                    toleration.effect == 'NoSchedule')) ? [variables.gpuToleration] : []) +
+                (variables.tpuClassKey in object.spec.jobTemplate.spec.template.spec.nodeSelector &&
+                 (!has(object.spec.jobTemplate.spec.template.spec.tolerations) ||
+                  !object.spec.jobTemplate.spec.template.spec.tolerations.exists(toleration,
+                    toleration.key == 'google.com/tpu' &&
+                    toleration.operator == 'Equal' &&
+                    toleration.value == 'present' &&
+                    toleration.effect == 'NoSchedule')) ? [variables.tpuToleration] : [])
+            }] : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayJob' ?
+            (has(object.spec.submitterPodTemplate) &&
+             has(object.spec.submitterPodTemplate.spec.nodeSelector) &&
+             variables.gpuClassKey in object.spec.submitterPodTemplate.spec.nodeSelector &&
+             (!has(object.spec.submitterPodTemplate.spec.tolerations) ||
+              !object.spec.submitterPodTemplate.spec.tolerations.exists(toleration,
+                toleration.key == 'nvidia.com/gpu' &&
+                toleration.operator == 'Equal' &&
+                toleration.value == 'present' &&
+                toleration.effect == 'NoSchedule')) ?
+              [JSONPatch{
+                op: 'add',
+                path: '/spec/submitterPodTemplate/spec/tolerations',
+                value: (has(object.spec.submitterPodTemplate.spec.tolerations) ?
+                  object.spec.submitterPodTemplate.spec.tolerations : []) + [variables.gpuToleration]
+              }] : []) +
+            (has(object.spec.rayClusterSpec.headGroupSpec.template.spec.nodeSelector) &&
+             variables.gpuClassKey in object.spec.rayClusterSpec.headGroupSpec.template.spec.nodeSelector &&
+             (!has(object.spec.rayClusterSpec.headGroupSpec.template.spec.tolerations) ||
+              !object.spec.rayClusterSpec.headGroupSpec.template.spec.tolerations.exists(toleration,
+                toleration.key == 'nvidia.com/gpu' &&
+                toleration.operator == 'Equal' &&
+                toleration.value == 'present' &&
+                toleration.effect == 'NoSchedule')) ?
+              [JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterSpec/headGroupSpec/template/spec/tolerations',
+                value: (has(object.spec.rayClusterSpec.headGroupSpec.template.spec.tolerations) ?
+                  object.spec.rayClusterSpec.headGroupSpec.template.spec.tolerations : []) + [variables.gpuToleration]
+              }] : []) +
+            object.spec.rayClusterSpec.workerGroupSpecs.filter(group,
+              has(group.template.spec.nodeSelector) &&
+              variables.gpuClassKey in group.template.spec.nodeSelector &&
+              (!has(group.template.spec.tolerations) ||
+               !group.template.spec.tolerations.exists(toleration,
+                 toleration.key == 'nvidia.com/gpu' &&
+                 toleration.operator == 'Equal' &&
+                 toleration.value == 'present' &&
+                 toleration.effect == 'NoSchedule'))).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterSpec/workerGroupSpecs/' +
+                    string(object.spec.rayClusterSpec.workerGroupSpecs.indexOf(group)) +
+                    '/template/spec/tolerations',
+                  value: (has(group.template.spec.tolerations) ?
+                    group.template.spec.tolerations : []) + [variables.gpuToleration]
+                }) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayCluster' ?
+            (has(object.spec.headGroupSpec.template.spec.nodeSelector) &&
+             variables.gpuClassKey in object.spec.headGroupSpec.template.spec.nodeSelector &&
+             (!has(object.spec.headGroupSpec.template.spec.tolerations) ||
+              !object.spec.headGroupSpec.template.spec.tolerations.exists(toleration,
+                toleration.key == 'nvidia.com/gpu' &&
+                toleration.operator == 'Equal' &&
+                toleration.value == 'present' &&
+                toleration.effect == 'NoSchedule')) ?
+              [JSONPatch{
+                op: 'add',
+                path: '/spec/headGroupSpec/template/spec/tolerations',
+                value: (has(object.spec.headGroupSpec.template.spec.tolerations) ?
+                  object.spec.headGroupSpec.template.spec.tolerations : []) + [variables.gpuToleration]
+              }] : []) +
+            object.spec.workerGroupSpecs.filter(group,
+              has(group.template.spec.nodeSelector) &&
+              variables.gpuClassKey in group.template.spec.nodeSelector &&
+              (!has(group.template.spec.tolerations) ||
+               !group.template.spec.tolerations.exists(toleration,
+                 toleration.key == 'nvidia.com/gpu' &&
+                 toleration.operator == 'Equal' &&
+                 toleration.value == 'present' &&
+                 toleration.effect == 'NoSchedule'))).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/workerGroupSpecs/' +
+                    string(object.spec.workerGroupSpecs.indexOf(group)) + '/template/spec/tolerations',
+                  value: (has(group.template.spec.tolerations) ?
+                    group.template.spec.tolerations : []) + [variables.gpuToleration]
+                }) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayService' ?
+            (has(object.spec.rayClusterConfig.headGroupSpec.template.spec.nodeSelector) &&
+             variables.gpuClassKey in object.spec.rayClusterConfig.headGroupSpec.template.spec.nodeSelector &&
+             (!has(object.spec.rayClusterConfig.headGroupSpec.template.spec.tolerations) ||
+              !object.spec.rayClusterConfig.headGroupSpec.template.spec.tolerations.exists(toleration,
+                toleration.key == 'nvidia.com/gpu' &&
+                toleration.operator == 'Equal' &&
+                toleration.value == 'present' &&
+                toleration.effect == 'NoSchedule')) ?
+              [JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterConfig/headGroupSpec/template/spec/tolerations',
+                value: (has(object.spec.rayClusterConfig.headGroupSpec.template.spec.tolerations) ?
+                  object.spec.rayClusterConfig.headGroupSpec.template.spec.tolerations : []) +
+                  [variables.gpuToleration]
+              }] : []) +
+            object.spec.rayClusterConfig.workerGroupSpecs.filter(group,
+              has(group.template.spec.nodeSelector) &&
+              variables.gpuClassKey in group.template.spec.nodeSelector &&
+              (!has(group.template.spec.tolerations) ||
+               !group.template.spec.tolerations.exists(toleration,
+                 toleration.key == 'nvidia.com/gpu' &&
+                 toleration.operator == 'Equal' &&
+                 toleration.value == 'present' &&
+                 toleration.effect == 'NoSchedule'))).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterConfig/workerGroupSpecs/' +
+                    string(object.spec.rayClusterConfig.workerGroupSpecs.indexOf(group)) +
+                    '/template/spec/tolerations',
+                  value: (has(group.template.spec.tolerations) ?
+                    group.template.spec.tolerations : []) + [variables.gpuToleration]
+                }) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayJob' ?
+            (has(object.spec.submitterPodTemplate) &&
+             has(object.spec.submitterPodTemplate.spec.nodeSelector) &&
+             variables.tpuClassKey in object.spec.submitterPodTemplate.spec.nodeSelector &&
+             (!has(object.spec.submitterPodTemplate.spec.tolerations) ||
+              !object.spec.submitterPodTemplate.spec.tolerations.exists(toleration,
+                toleration.key == 'google.com/tpu' &&
+                toleration.operator == 'Equal' &&
+                toleration.value == 'present' &&
+                toleration.effect == 'NoSchedule')) ?
+              [JSONPatch{
+                op: 'add',
+                path: '/spec/submitterPodTemplate/spec/tolerations',
+                value: (has(object.spec.submitterPodTemplate.spec.tolerations) ?
+                  object.spec.submitterPodTemplate.spec.tolerations : []) + [variables.tpuToleration]
+              }] : []) +
+            (has(object.spec.rayClusterSpec.headGroupSpec.template.spec.nodeSelector) &&
+             variables.tpuClassKey in object.spec.rayClusterSpec.headGroupSpec.template.spec.nodeSelector &&
+             (!has(object.spec.rayClusterSpec.headGroupSpec.template.spec.tolerations) ||
+              !object.spec.rayClusterSpec.headGroupSpec.template.spec.tolerations.exists(toleration,
+                toleration.key == 'google.com/tpu' &&
+                toleration.operator == 'Equal' &&
+                toleration.value == 'present' &&
+                toleration.effect == 'NoSchedule')) ?
+              [JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterSpec/headGroupSpec/template/spec/tolerations',
+                value: (has(object.spec.rayClusterSpec.headGroupSpec.template.spec.tolerations) ?
+                  object.spec.rayClusterSpec.headGroupSpec.template.spec.tolerations : []) + [variables.tpuToleration]
+              }] : []) +
+            object.spec.rayClusterSpec.workerGroupSpecs.filter(group,
+              has(group.template.spec.nodeSelector) &&
+              variables.tpuClassKey in group.template.spec.nodeSelector &&
+              (!has(group.template.spec.tolerations) ||
+               !group.template.spec.tolerations.exists(toleration,
+                 toleration.key == 'google.com/tpu' &&
+                 toleration.operator == 'Equal' &&
+                 toleration.value == 'present' &&
+                 toleration.effect == 'NoSchedule'))).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterSpec/workerGroupSpecs/' +
+                    string(object.spec.rayClusterSpec.workerGroupSpecs.indexOf(group)) +
+                    '/template/spec/tolerations',
+                  value: (has(group.template.spec.tolerations) ?
+                    group.template.spec.tolerations : []) + [variables.tpuToleration]
+                }) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayCluster' ?
+            (has(object.spec.headGroupSpec.template.spec.nodeSelector) &&
+             variables.tpuClassKey in object.spec.headGroupSpec.template.spec.nodeSelector &&
+             (!has(object.spec.headGroupSpec.template.spec.tolerations) ||
+              !object.spec.headGroupSpec.template.spec.tolerations.exists(toleration,
+                toleration.key == 'google.com/tpu' &&
+                toleration.operator == 'Equal' &&
+                toleration.value == 'present' &&
+                toleration.effect == 'NoSchedule')) ?
+              [JSONPatch{
+                op: 'add',
+                path: '/spec/headGroupSpec/template/spec/tolerations',
+                value: (has(object.spec.headGroupSpec.template.spec.tolerations) ?
+                  object.spec.headGroupSpec.template.spec.tolerations : []) + [variables.tpuToleration]
+              }] : []) +
+            object.spec.workerGroupSpecs.filter(group,
+              has(group.template.spec.nodeSelector) &&
+              variables.tpuClassKey in group.template.spec.nodeSelector &&
+              (!has(group.template.spec.tolerations) ||
+               !group.template.spec.tolerations.exists(toleration,
+                 toleration.key == 'google.com/tpu' &&
+                 toleration.operator == 'Equal' &&
+                 toleration.value == 'present' &&
+                 toleration.effect == 'NoSchedule'))).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/workerGroupSpecs/' +
+                    string(object.spec.workerGroupSpecs.indexOf(group)) + '/template/spec/tolerations',
+                  value: (has(group.template.spec.tolerations) ?
+                    group.template.spec.tolerations : []) + [variables.tpuToleration]
+                }) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayService' ?
+            (has(object.spec.rayClusterConfig.headGroupSpec.template.spec.nodeSelector) &&
+             variables.tpuClassKey in object.spec.rayClusterConfig.headGroupSpec.template.spec.nodeSelector &&
+             (!has(object.spec.rayClusterConfig.headGroupSpec.template.spec.tolerations) ||
+              !object.spec.rayClusterConfig.headGroupSpec.template.spec.tolerations.exists(toleration,
+                toleration.key == 'google.com/tpu' &&
+                toleration.operator == 'Equal' &&
+                toleration.value == 'present' &&
+                toleration.effect == 'NoSchedule')) ?
+              [JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterConfig/headGroupSpec/template/spec/tolerations',
+                value: (has(object.spec.rayClusterConfig.headGroupSpec.template.spec.tolerations) ?
+                  object.spec.rayClusterConfig.headGroupSpec.template.spec.tolerations : []) +
+                  [variables.tpuToleration]
+              }] : []) +
+            object.spec.rayClusterConfig.workerGroupSpecs.filter(group,
+              has(group.template.spec.nodeSelector) &&
+              variables.tpuClassKey in group.template.spec.nodeSelector &&
+              (!has(group.template.spec.tolerations) ||
+               !group.template.spec.tolerations.exists(toleration,
+                 toleration.key == 'google.com/tpu' &&
+                 toleration.operator == 'Equal' &&
+                 toleration.value == 'present' &&
+                 toleration.effect == 'NoSchedule'))).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterConfig/workerGroupSpecs/' +
+                    string(object.spec.rayClusterConfig.workerGroupSpecs.indexOf(group)) +
+                    '/template/spec/tolerations',
+                  value: (has(group.template.spec.tolerations) ?
+                    group.template.spec.tolerations : []) + [variables.tpuToleration]
+                }) : []
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: team-scheduling-defaults
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: team-governance
+spec:
+  policyName: team-scheduling-defaults
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kueue.x-k8s.io/managed: "true"

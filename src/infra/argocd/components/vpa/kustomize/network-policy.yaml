@@ -1,0 +1,43 @@
+# Permits Kubernetes API server ingress to the Vertical Pod Autoscaler admission webhook.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vpa-admission-webhook
+  namespace: vpa-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: vertical-pod-autoscaler
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: admission-controller
+      app.kubernetes.io/instance: vpa
+      app.kubernetes.io/name: vertical-pod-autoscaler
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {protocol: TCP, port: 8000}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vpa-metrics
+  namespace: vpa-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: vertical-pod-autoscaler
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vertical-pod-autoscaler
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {protocol: TCP, port: 8942}
+        - {protocol: TCP, port: 8943}
+        - {protocol: TCP, port: 8944}

@@ -1,0 +1,27 @@
+{{- /* Defines cell-scoped portable compute capabilities ConfigMap consumed by admission. */ -}}
+
+{{- if eq .Values.role "cell" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: team-compute-capabilities
+  namespace: kueue-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: team-governance
+data:
+  {{- range .Values.compute.cpu_capabilities }}
+  {{ printf "cpu.%s" . }}: "true"
+  {{- end }}
+  {{- range $class, $offer := .Values.compute.gpu_classes }}
+  {{ printf "gpu.%s" $class }}: {{ $offer.max_count | quote }}
+  {{- end }}
+  {{- range $class, $offer := .Values.compute.tpu_classes }}
+  {{ printf "tpu.%s" $class }}: {{ $offer.max_count | quote }}
+  {{- end }}
+  {{- if and (eq (len .Values.compute.cpu_capabilities) 0) (eq (len .Values.compute.gpu_classes) 0) (eq (len .Values.compute.tpu_classes) 0) }}
+  {}
+  {{- end }}
+{{- end }}
