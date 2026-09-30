@@ -1,0 +1,17 @@
+{{- /* Shares gateway topology and provider endpoints with the URI resolver. */ -}}
+
+{{- include "s3-gateway.validate" . -}}
+{{- $topology := include "s3-gateway.activeTopology" . | fromJson -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: s3-resolver-topology
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: s3-resolver
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+data:
+  topology.json: |
+    {{- dict "targetCell" .Values.targetCell "cells" $topology.cells "global" $topology.global | toPrettyJson | nindent 4 }}

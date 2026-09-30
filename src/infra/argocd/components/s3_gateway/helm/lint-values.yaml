@@ -1,0 +1,80 @@
+# Exercises local and cross-region gateway routes with two registered cells.
+
+crossRegionListener: https
+flociS3Endpoint: http://floci.example.invalid:4566
+targetCell: cell-eaws-lh1
+registeredCells: [cell-aws-usw2, cell-eaws-lh1]
+writerCell: cell-eaws-lh1
+cellCatalog:
+  - name: cell-aws-usw2
+    provider: aws
+    region: us-west-2
+    virtualName: aws-usw2
+    crossRegionService: s3-gateway-cross-region-cell-aws-usw2
+    crossRegionServer: s3-gateway.cell-aws-usw2.example.invalid
+    gatewayRecord: s3-gateway-config-cell-aws-usw2
+    gatewaySecretStore: runtime-secrets
+    globalReplicatorIdentity: global-replicator
+    storageStatsIdentity: storage-stats
+    storageStatsService: s3-gateway-storage-stats-cross-region-configured
+    storageStatsServer: s3-gateway.cell-aws-usw2.example.invalid
+    buckets:
+      home: {account: "", name: cloud-cell-aws-usw2-home}
+      meta: {account: "", name: cloud-cell-aws-usw2-meta}
+      scratch: {account: "", name: cloud-cell-aws-usw2-scratch}
+      backups: {account: "", name: cloud-cell-aws-usw2-backups}
+      archive: {account: "", name: cloud-cell-aws-usw2-archive}
+    callers:
+      globalReplicator: {accessKeyId: "00000000000000000000"}
+      orgWorkspaceBackups: {accessKeyId: "11111111111111111111"}
+      storageStats: {accessKeyId: "22222222222222222222"}
+      teams:
+        examples: {accessKeyId: "33333333333333333333"}
+  - name: cell-gcp-euw4
+    provider: gcp
+    region: europe-west4
+    virtualName: gcp-euw4
+    crossRegionService: s3-gateway-cross-region-cell-gcp-euw4
+    crossRegionServer: s3-gateway.cell-gcp-euw4.example.invalid
+    gatewayRecord: s3-gateway-config-cell-gcp-euw4
+    gatewaySecretStore: runtime-secrets
+    globalReplicatorIdentity: global-replicator
+    storageStatsIdentity: storage-stats
+    storageStatsService: s3-gateway-storage-stats-cross-region-configured
+    storageStatsServer: s3-gateway.cell-gcp-euw4.example.invalid
+    buckets:
+      home: {account: "", name: cloud-cell-gcp-euw4-home}
+      meta: {account: "", name: cloud-cell-gcp-euw4-meta}
+      scratch: {account: "", name: cloud-cell-gcp-euw4-scratch}
+      backups: {account: "", name: cloud-cell-gcp-euw4-backups}
+      archive: {account: "", name: cloud-cell-gcp-euw4-archive}
+    callers:
+      globalReplicator: {accessKeyId: "00000000000000000000"}
+      orgWorkspaceBackups: {accessKeyId: "11111111111111111111"}
+      storageStats: {accessKeyId: "22222222222222222222"}
+      teams:
+        examples: {accessKeyId: "33333333333333333333"}
+  - name: cell-eaws-lh1
+    provider: floci
+    region: lh1
+    virtualName: eaws-lh1
+    crossRegionService: s3-gateway-cross-region-cell-eaws-lh1
+    crossRegionServer: s3-gateway.cell-eaws-lh1.example.invalid
+    gatewayRecord: s3-gateway-config-cell-eaws-lh1
+    gatewaySecretStore: local-secret-records
+    globalReplicatorIdentity: global-replicator
+    storageStatsIdentity: storage-stats
+    storageStatsService: s3-gateway-storage-stats-cross-region-configured
+    storageStatsServer: s3-gateway.cell-eaws-lh1.example.invalid
+    buckets:
+      home: {account: "", name: cloud-cell-eaws-lh1-home}
+      meta: {account: "", name: cloud-cell-eaws-lh1-meta}
+      scratch: {account: "", name: cloud-cell-eaws-lh1-scratch}
+      backups: {account: "", name: cloud-cell-eaws-lh1-backups}
+      archive: {account: "", name: cloud-cell-eaws-lh1-archive}
+    callers:
+      globalReplicator: {accessKeyId: "00000000000000000000"}
+      orgWorkspaceBackups: {accessKeyId: "11111111111111111111"}
+      storageStats: {accessKeyId: "22222222222222222222"}
+      teams:
+        examples: {accessKeyId: "33333333333333333333"}

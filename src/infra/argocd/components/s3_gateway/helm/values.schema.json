@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cellCatalog", "crossRegionListener", "registeredCells", "targetCell", "writerCell"],
+  "properties": {
+    "cellCatalog": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/cell" }
+    },
+    "crossRegionListener": { "enum": ["https", "s3-https"] },
+    "flociS3Endpoint": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^(?:|http://[^/?#]+(?::[0-9]{1,5})?)$"
+    },
+    "internalDomain": {
+      "type": "string"
+    },
+    "registeredCells": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/cellName" }
+    },
+    "targetCell": { "$ref": "#/$defs/cellName" },
+    "writerCell": { "$ref": "#/$defs/cellName" }
+  },
+  "$defs": {
+    "accessKeyId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]+$"
+    },
+    "bucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account", "name"],
+      "properties": {
+        "account": {
+          "type": "string",
+          "maxLength": 63,
+          "pattern": "^(?:|[a-z0-9][a-z0-9-]*[a-z0-9])$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 253,
+          "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+        }
+      }
+    },
+    "caller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accessKeyId"],
+      "properties": { "accessKeyId": { "$ref": "#/$defs/accessKeyId" } }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "buckets",
+        "callers",
+        "crossRegionServer",
+        "crossRegionService",
+        "gatewayRecord",
+        "gatewaySecretStore",
+        "globalReplicatorIdentity",
+        "name",
+        "provider",
+        "region",
+        "storageStatsIdentity",
+        "storageStatsServer",
+        "storageStatsService",
+        "virtualName"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/cellName" },
+        "provider": { "enum": ["aws", "floci", "gcp"] },
+        "region": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+        },
+        "virtualName": { "$ref": "#/$defs/virtualName" },
+        "crossRegionService": { "$ref": "#/$defs/dnsLabel" },
+        "crossRegionServer": { "$ref": "#/$defs/dnsName" },
+        "gatewayRecord": { "type": "string" },
+        "gatewaySecretStore": { "type": "string" },
+        "globalReplicatorIdentity": { "type": "string" },
+        "storageStatsIdentity": { "type": "string" },
+        "storageStatsService": { "$ref": "#/$defs/dnsLabel" },
+        "storageStatsServer": { "$ref": "#/$defs/dnsName" },
+        "buckets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["archive", "backups", "home", "meta", "scratch"],
+          "properties": {
+            "archive": { "$ref": "#/$defs/bucket" },
+            "backups": { "$ref": "#/$defs/bucket" },
+            "home": { "$ref": "#/$defs/bucket" },
+            "meta": { "$ref": "#/$defs/bucket" },
+            "scratch": { "$ref": "#/$defs/bucket" }
+          }
+        },
+        "callers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["globalReplicator", "orgWorkspaceBackups", "storageStats", "teams"],
+          "properties": {
+            "globalReplicator": { "$ref": "#/$defs/caller" },
+            "orgWorkspaceBackups": { "$ref": "#/$defs/caller" },
+            "storageStats": { "$ref": "#/$defs/caller" },
+            "teams": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": { "$ref": "#/$defs/team" },
+              "additionalProperties": { "$ref": "#/$defs/caller" }
+            }
+          }
+        }
+      }
+    },
+    "cellName": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^cell-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+    },
+    "dnsLabel": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+    },
+    "dnsName": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$"
+    },
+    "team": {
+      "type": "string",
+      "maxLength": 58,
+      "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+    },
+    "virtualName": {
+      "type": "string",
+      "maxLength": 58,
+      "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+    }
+  }
+}

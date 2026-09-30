@@ -1,0 +1,5 @@
+# Supplies persistent runtime-generated signing credentials for Floci's local S3 adapter.
+
+credentials:
+  useSecret: false
+

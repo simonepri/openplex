@@ -1,0 +1,272 @@
+# Materializes one team's rclone paths and credentials behind the shared Gateway.
+
+{{- if .Values.topology }}
+{{- $name := printf "s3-gateway-%s" .Values.team -}}
+# floci-divergence: Floci clusters reduce CPU request to 5m to fit local laptop resource limits.
+{{- $cpuRequest := ternary "5m" "50m" (eq .Values.provider "floci") -}}
+{{- $targetCount := 0 -}}
+{{- $target := dict -}}
+{{- $remoteCells := list -}}
+{{- range $cell := .Values.topology.cells -}}
+  {{- if eq $cell.name $.Values.targetCell -}}
+    {{- $targetCount = add1 $targetCount -}}
+    {{- $target = $cell -}}
+  {{- else -}}
+    {{- $remoteCells = append $remoteCells $cell -}}
+  {{- end -}}
+{{- end -}}
+{{- $teamCount := max 1 (len (dig "callers" "teams" (dict) $target)) -}}
+{{- $crossRegionLimit := div 1600000 $teamCount -}}
+{{- if ne $targetCount 1 -}}
+{{- fail "targetCell must identify exactly one topology cell" -}}
+{{- end -}}
+{{- if ne (default $name .Values.identity.serviceAccount) $name -}}
+{{- fail "gateway identity serviceAccount must derive as s3-gateway-<team>" -}}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: s3-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+    {{- if eq .Values.authAdapter "gcp" }}
+    iam.gke.io/gcp-service-account: {{ .Values.identity.serviceAccountEmail | quote }}
+    {{- end }}
+  labels:
+    app.kubernetes.io/component: storage-gateway
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-local" $name }}
+  namespace: s3-system
+  annotations: {argocd.argoproj.io/sync-wave: "1"}
+  labels:
+    app.kubernetes.io/component: storage-gateway
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+spec:
+  selector:
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/component: local-rclone
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+  ports: [{name: s3, port: 8080, protocol: TCP, targetPort: s3}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-cross-region" $name }}
+  namespace: s3-system
+  annotations: {argocd.argoproj.io/sync-wave: "1"}
+  labels:
+    app.kubernetes.io/component: storage-gateway
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+spec:
+  selector:
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/component: cross-region-rclone
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+  ports: [{name: s3, port: 8080, protocol: TCP, targetPort: s3}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ printf "%s-local" $name }}
+  namespace: s3-system
+  annotations:
+    ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+      Rclone team S3 gateway runs one process per credential scope so multipart state cannot move pods.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Rclone S3 gateway requires credentials via environment variables.
+  labels:
+    app.kubernetes.io/component: storage-gateway
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: s3-gateway
+      app.kubernetes.io/component: local-rclone
+      app.kubernetes.io/instance: {{ .Values.team | quote }}
+  template:
+    metadata:
+      annotations:
+        ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+          Rclone team S3 gateway runs one process per credential scope so multipart state cannot move pods.
+        ignore-check.kube-linter.io/read-secret-from-env-var: >-
+          Rclone S3 gateway requires credentials via environment variables.
+      labels:
+        app.kubernetes.io/name: s3-gateway
+        app.kubernetes.io/part-of: data-plane
+        app.kubernetes.io/component: local-rclone
+        app.kubernetes.io/instance: {{ .Values.team | quote }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      priorityClassName: node-agents
+      serviceAccountName: {{ $name }}
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: rclone
+          image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+          command: [rclone]
+          args: [serve, s3, "local:", "--addr=:8080", "--dir-cache-time=1s", "--log-format=json", "--poll-interval=0s", "--vfs-cache-mode=off"]
+          env:
+            - {name: RCLONE_CONFIG, value: /etc/s3-gateway/rclone.conf}
+            - {name: RCLONE_AUTH_KEY, value: '"$(S3_GATEWAY_ACCESS_KEY),$(S3_GATEWAY_SECRET_KEY)"'}
+            - name: S3_GATEWAY_ACCESS_KEY
+              valueFrom: {secretKeyRef: {key: {{ printf "%s-access-key-id" .Values.team }}, name: s3-gateway-credentials}}
+            - name: S3_GATEWAY_SECRET_KEY
+              valueFrom: {secretKeyRef: {key: {{ printf "%s-secret-access-key" .Values.team }}, name: s3-gateway-credentials}}
+{{ include "s3-gateway-team.secretEnv" (dict "remoteCells" $remoteCells "root" $) | nindent 12 }}
+          ports: [{containerPort: 8080, name: s3, protocol: TCP}]
+          startupProbe: {failureThreshold: 30, periodSeconds: 5, tcpSocket: {port: s3}}
+          readinessProbe: {periodSeconds: 10, tcpSocket: {port: s3}}
+          livenessProbe: {periodSeconds: 20, tcpSocket: {port: s3}}
+          resources: {requests: {cpu: {{ $cpuRequest }}, memory: 96Mi}, limits: {cpu: 500m, memory: 256Mi}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+          volumeMounts:
+            - {mountPath: /etc/s3-gateway/rclone.conf, name: config, readOnly: true, subPath: {{ printf "%s-rclone.conf" .Values.team }} }
+            - {mountPath: /tmp, name: temporary}
+      volumes:
+        - {emptyDir: {sizeLimit: 128Mi}, name: temporary}
+        - {name: config, configMap: {name: s3-gateway-rclone-config}}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ printf "%s-local" $name }}
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: storage-gateway
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ printf "%s-local" $name }}
+  updatePolicy: {updateMode: "InPlace"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: rclone
+        controlledValues: RequestsOnly
+        controlledResources: [cpu, memory]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ printf "%s-cross-region" $name }}
+  namespace: s3-system
+  annotations:
+    ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+      Rclone team S3 gateway runs one process per credential scope so multipart state cannot move pods.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Rclone S3 gateway requires credentials via environment variables.
+  labels:
+    app.kubernetes.io/component: cross-region-storage-gateway
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: s3-gateway
+      app.kubernetes.io/component: cross-region-rclone
+      app.kubernetes.io/instance: {{ .Values.team | quote }}
+  template:
+    metadata:
+      annotations:
+        ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+          Rclone team S3 gateway runs one process per credential scope so multipart state cannot move pods.
+        ignore-check.kube-linter.io/read-secret-from-env-var: >-
+          Rclone S3 gateway requires credentials via environment variables.
+      labels:
+        app.kubernetes.io/name: s3-gateway
+        app.kubernetes.io/part-of: data-plane
+        app.kubernetes.io/component: cross-region-rclone
+        app.kubernetes.io/instance: {{ .Values.team | quote }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      serviceAccountName: {{ $name }}
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: rclone
+          image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+          command: [rclone]
+          args: [serve, s3, "cross-region:", "--addr=:8080", "--bwlimit={{ $crossRegionLimit }}B", "--dir-cache-time=1s", "--log-format=json", "--poll-interval=0s", "--vfs-cache-mode=off"]
+          env:
+            - {name: RCLONE_AUTH_KEY, value: '"$(S3_GATEWAY_ACCESS_KEY),$(S3_GATEWAY_SECRET_KEY)"'}
+            - {name: RCLONE_CONFIG, value: /etc/s3-gateway/rclone.conf}
+            # floci-divergence: Floci clusters mount cluster-local-ca certificate for internal TLS validation.
+            {{- if eq .Values.provider "floci" }}
+            - {name: SSL_CERT_FILE, value: /etc/local-ca/ca.crt}
+            {{- end }}
+            - name: S3_GATEWAY_ACCESS_KEY
+              valueFrom: {secretKeyRef: {key: {{ printf "%s-access-key-id" .Values.team }}, name: s3-gateway-credentials}}
+            - name: S3_GATEWAY_SECRET_KEY
+              valueFrom: {secretKeyRef: {key: {{ printf "%s-secret-access-key" .Values.team }}, name: s3-gateway-credentials}}
+{{ include "s3-gateway-team.secretEnv" (dict "remoteCells" $remoteCells "root" $) | nindent 12 }}
+          ports: [{containerPort: 8080, name: s3, protocol: TCP}]
+          startupProbe: {failureThreshold: 30, periodSeconds: 5, tcpSocket: {port: s3}}
+          readinessProbe: {periodSeconds: 10, tcpSocket: {port: s3}}
+          livenessProbe: {periodSeconds: 20, tcpSocket: {port: s3}}
+          resources: {requests: {cpu: {{ $cpuRequest }}, memory: 96Mi}, limits: {cpu: 500m, memory: 256Mi}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+          volumeMounts:
+            # floci-divergence: Floci clusters mount local-ca volume for self-signed certificates.
+            {{- if eq .Values.provider "floci" }}
+            - {mountPath: /etc/local-ca, name: local-ca, readOnly: true}
+            {{- end }}
+            - {mountPath: /etc/s3-gateway/rclone.conf, name: config, readOnly: true, subPath: {{ printf "%s-rclone.conf" .Values.team }} }
+            - {mountPath: /tmp, name: temporary}
+      volumes:
+        - {emptyDir: {sizeLimit: 128Mi}, name: temporary}
+        - {name: config, configMap: {name: s3-gateway-rclone-config}}
+        # floci-divergence: Floci clusters define local-ca volume backed by cluster-local-ca ConfigMap.
+        {{- if eq .Values.provider "floci" }}
+        - {name: local-ca, configMap: {name: cluster-local-ca}}
+        {{- end }}
+{{- end }}

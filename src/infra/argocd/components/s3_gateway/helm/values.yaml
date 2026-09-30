@@ -1,0 +1,9 @@
+# Lists supported cell storage contracts. Registrations select active cells at deploy time.
+
+crossRegionListener: https
+flociS3Endpoint: ""
+internalDomain: ""
+targetCell: ""
+registeredCells: []
+writerCell: ""
+cellCatalog: []

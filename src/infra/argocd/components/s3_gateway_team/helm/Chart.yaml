@@ -1,0 +1,8 @@
+# Defines cell-local S3 gateway backend and credential projection for one platform team.
+
+apiVersion: v2
+name: s3-gateway-team
+description: Cell-local S3 gateway backend and credential projection for one platform team.
+type: application
+version: 0.1.0
+appVersion: 1.0.0
