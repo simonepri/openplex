@@ -1,0 +1,21 @@
+"""Define the Bazel credential helper that authenticates local builds to BuildBuddy."""
+
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
+
+# src/bazel/profiles/profiles.bazelrc registers the script by its workspace path; this target lints it.
+sh_binary(
+    name = "credential_helper",
+    srcs = ["credential_helper.sh"],
+)
+
+sh_test(
+    name = "credential_helper_test",
+    size = "small",
+    srcs = ["credential_helper_test.sh"],
+    args = ["$(rootpath :credential_helper)"],
+    data = [":credential_helper"],
+)

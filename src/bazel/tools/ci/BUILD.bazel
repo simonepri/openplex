@@ -1,0 +1,13 @@
+"""Define targets for continuous integration automation and authentication tooling."""
+
+load("@rules_python//python:defs.bzl", "py_binary")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package(default_visibility = ["//visibility:public"])
+
+package_sources()
+
+py_binary(
+    name = "auth",
+    srcs = ["auth.py"],
+)
