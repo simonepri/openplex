@@ -1,0 +1,19 @@
+"""Defines web source targets for the TypeScript S3 URI resolver client."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "WEB_SOURCE", "package_sources", "source_set")
+
+package(default_visibility = ["//visibility:public"])
+
+source_set(
+    name = "web_sources",
+    srcs = glob(
+        [
+            "**/*.ts",
+            "**/*.js",
+        ],
+        allow_empty = True,
+    ),
+    kind = WEB_SOURCE,
+)
+
+package_sources()
