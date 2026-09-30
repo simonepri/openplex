@@ -1,0 +1,14 @@
+"""Declares build graph coverage sources for GitHub Actions workflow definitions and automation configs."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "GITHUB_WORKFLOW", "package_sources", "source_set")
+
+source_set(
+    name = "workflows",
+    srcs = glob(
+        ["workflows/*.yml"],
+        allow_empty = True,
+    ),
+    kind = GITHUB_WORKFLOW,
+)
+
+package_sources(exclude = ["workflows/*.yml"])
