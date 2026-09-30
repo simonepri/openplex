@@ -1,0 +1,59 @@
+// Defines Headscale ACL policy tags, group ownerships, and egress access rules for local clusters.
+
+{
+  "tagOwners": {
+    "tag:k8s-operator": ["local@"],
+    "tag:k8s-egress": ["local@"],
+    "tag:k8s": ["tag:k8s-operator"],
+    "tag:subnet-router": ["local@"],
+    "tag:workspace": ["local@"],
+  },
+  "autoApprovers": {
+    "routes": {
+      "172.16.0.0/12": ["tag:k8s", "tag:subnet-router"],
+    },
+  },
+  "grants": [
+    {
+      "src": ["autogroup:member"],
+      "dst": ["autogroup:self"],
+      "ip": ["tcp:2222", "tcp:6767"],
+    },
+    {
+      "src": ["tag:workspace"],
+      "dst": ["tag:workspace"],
+      "ip": ["tcp:2222", "tcp:6767"],
+    },
+    // LINT.IfChange(local-cluster-ssh-member-access)
+    {
+      "src": ["autogroup:member"],
+      "dst": ["172.31.0.0/20", "172.31.16.0/20"],
+      "ip": ["tcp:2222"],
+    },
+    // LINT.ThenChange(//src/bazel/checks/network_exposure/check_network_exposure.py:local-cluster-ssh-member-access)
+    // LINT.IfChange(local-private-gateway-member-access)
+    {
+      "src": ["autogroup:member", "tag:workspace"],
+      "dst": ["172.31.0.11/32", "172.31.16.11/32"],
+      "ip": ["tcp:443"],
+    },
+    // LINT.ThenChange(//src/bazel/checks/network_exposure/check_network_exposure.py:local-private-gateway-member-access)
+    // LINT.IfChange(local-private-dns-member-access)
+    {
+      "src": ["autogroup:member", "tag:workspace"],
+      "dst": ["172.31.0.10/32", "172.31.16.10/32"],
+      "ip": ["tcp:53", "udp:53"],
+    },
+    // LINT.ThenChange(//src/bazel/checks/network_exposure/check_network_exposure.py:local-private-dns-member-access)
+    {
+      "src": ["autogroup:member", "tag:workspace"],
+      "dst": ["tag:subnet-router"],
+      "ip": ["tcp:8444"],
+    },
+    {
+      "src": ["tag:k8s-egress"],
+      "dst": ["172.31.0.11/32", "172.31.16.11/32"],
+      "ip": ["tcp:443"],
+    },
+  ],
+}

@@ -1,0 +1,287 @@
+# Defines Docker Compose services for the local AWS emulator and Git source repository.
+
+name: openplex-local
+
+services:
+  floci:
+    image: floci/floci:nightly@sha256:68508176a2991e91b601caf98f2eecd1724f5dfa7d01c4dcb65d055cebd7d118
+    container_name: openplex-local-floci
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 10m
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      # keep-sorted start
+      AWS_DEFAULT_REGION: us-west-2
+      FLOCI_BASE_URL: http://127.0.0.1:4566
+      FLOCI_DOCKER_RESOURCE_NAMESPACE: openplex-local
+      FLOCI_SECURITY_ALLOW_UNSAFE_NETWORK_EXPOSURE: "true"
+      FLOCI_SERVICES_DOCKER_NETWORK: openplex-local
+      FLOCI_SERVICES_ECR_ENABLED: "true"
+      FLOCI_SERVICES_ECR_KEEP_RUNNING_ON_SHUTDOWN: "true"
+      FLOCI_SERVICES_ECR_REGISTRY_BASE_PORT: "15100"
+      FLOCI_SERVICES_ECR_REGISTRY_MAX_PORT: "15100"
+      FLOCI_SERVICES_ECR_URI_STYLE: path
+      FLOCI_SERVICES_EKS_API_SERVER_BASE_PORT: "6500"
+      FLOCI_SERVICES_EKS_API_SERVER_MAX_PORT: "6510"
+      FLOCI_SERVICES_EKS_DATA_PATH: /app/data/eks
+      # LINT.IfChange(floci-k3s-version)
+      FLOCI_SERVICES_EKS_DEFAULT_IMAGE: &k3s-runtime-image cluster/k3s-runtime:v1.36.1-runtime7
+      # LINT.ThenChange(//src/third_party/k3s-io/k3s/images.toml:floci-k3s-version)
+      FLOCI_SERVICES_EKS_DISABLE_CNI: "false"
+      FLOCI_SERVICES_EKS_DOCKER_NETWORK: openplex-local
+      FLOCI_SERVICES_EKS_ECR_REGISTRY_MIRROR: "true"
+      FLOCI_SERVICES_EKS_ENDPOINT_MODE: host
+      FLOCI_SERVICES_EKS_IAM_AUTH_WEBHOOK: "true"
+      FLOCI_SERVICES_EKS_IMAGE_TEMPLATE: *k3s-runtime-image
+      FLOCI_SERVICES_EKS_KEEP_RUNNING_ON_SHUTDOWN: "true"
+      FLOCI_SERVICES_EKS_MOCK: "false"
+      FLOCI_SERVICES_EKS_VPC_ROUTE_PROGRAMMING: "true"
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+      FLOCI_STORAGE_PRUNE_VOLUMES_ON_DELETE: "false"
+      FLOCI_TLS_CERT_PATH: /etc/floci/tls/tls.crt
+      FLOCI_TLS_ENABLED: "true"
+      FLOCI_TLS_KEY_PATH: /etc/floci/tls/tls.key
+      QUARKUS_HTTP_HOST: 0.0.0.0
+      # keep-sorted end
+    networks:
+      default:
+        # LINT.IfChange(local_floci_address)
+        ipv4_address: 172.19.0.2
+        # LINT.ThenChange(//src/infra/terraform/deployments/local/deployment.yaml:local_floci_address,//src/infra/terraform/deployments/local/deployment.yaml:local_floci_address)
+    ports:
+      - "127.0.0.1:4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ../../../../../.tmp/state/floci/tls
+        target: /etc/floci/tls
+        read_only: true
+        bind:
+          create_host_path: true
+      - state:/app/data
+
+  git:
+    image: local/git-daemon:2.49.1
+    container_name: openplex-local-git
+    cap_drop:
+      - ALL
+    command:
+      - -c
+      - safe.directory=*
+      - daemon
+      - --base-path=/srv/git
+      - --export-all
+      - --informative-errors
+      - --listen=0.0.0.0
+      - --port=9418
+      - --reuseaddr
+      - /srv/git
+    healthcheck:
+      test: ["CMD-SHELL", "git ls-remote git://127.0.0.1:9418/openplex.git HEAD >/dev/null"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 1s
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 10m
+    networks:
+      default:
+        ipv4_address: 172.19.255.21
+    ports:
+      - "127.0.0.1:9418:9418"
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    user: "65534:65534"
+    volumes:
+      - type: bind
+        source: ../../../../../.git
+        target: /srv/git/openplex.git
+        read_only: true
+        bind:
+          create_host_path: false
+
+  git-http:
+    image: local/git-daemon:2.49.1
+    container_name: openplex-local-git-http
+    cap_drop:
+      - ALL
+    entrypoint: [busybox-extras, httpd]
+    command: [-f, -p, "9419", -h, /srv/http]
+    stop_signal: SIGKILL
+    depends_on:
+      git:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test: ["CMD-SHELL", "git ls-remote http://127.0.0.1:9419/cgi-bin/git/openplex.git HEAD >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+      start_period: 1s
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 10m
+    network_mode: service:git
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    user: "65534:65534"
+    volumes:
+      - type: bind
+        source: ../../../../../.git
+        target: /srv/git/openplex.git
+        read_only: true
+        bind:
+          create_host_path: false
+
+  git-watcher:
+    image: curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+    container_name: openplex-local-git-watcher
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      git-http:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - |
+        ip route add 172.31.0.0/20 via 172.19.255.10 2>/dev/null || true
+        LAST=""
+        while true; do
+          REF_LINE=$$(cat /srv/git/.git/HEAD 2>/dev/null)
+          case "$$REF_LINE" in
+            ref:*)
+              REF="$${REF_LINE#ref: }"
+              CURRENT=$$(cat "/srv/git/.git/$$REF" 2>/dev/null)
+              if [ -z "$$CURRENT" ] && [ -f /srv/git/.git/packed-refs ]; then
+                CURRENT=$$(awk -v ref="$$REF" '$$2 == ref { print $$1; exit }' /srv/git/.git/packed-refs)
+              fi
+              DEFAULT_BRANCH="$${REF#refs/heads/}"
+              ;;
+            *)
+              REF="HEAD"
+              CURRENT="$$REF_LINE"
+              DEFAULT_BRANCH="HEAD"
+              ;;
+          esac
+          if [ -n "$$CURRENT" ] && [ "$$CURRENT" != "$$LAST" ]; then
+            JSON_REF=$$(printf '%s' "$$REF" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            JSON_BRANCH=$$(printf '%s' "$$DEFAULT_BRANCH" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            # LINT.IfChange(webhook-repository)
+            REPOSITORY="http://172.19.255.21:9419/cgi-bin/git/openplex.git"
+            # LINT.ThenChange(//src/infra/terraform/deployments/local/variables.tf:webhook-repository)
+            STATUS=$$(curl -k --silent --show-error --fail --connect-timeout 3 --max-time 10 \
+                -o /dev/null -w '%{http_code}' -X POST https://argocd.c.corp.local.internal/api/webhook \
+                --resolve argocd.c.corp.local.internal:443:172.31.0.11 \
+                -H "X-GitHub-Event: push" \
+                -H "Content-Type: application/json" \
+                -d "{\"ref\":\"$$JSON_REF\",\"after\":\"$$CURRENT\",\"repository\":{\"html_url\":\"$$REPOSITORY\",\"default_branch\":\"$$JSON_BRANCH\"}}") || STATUS=failed
+            case "$$STATUS" in
+              2??)
+                LAST="$$CURRENT"
+                printf 'Git webhook delivered for %s\n' "$$CURRENT"
+                ;;
+              *) printf 'Git webhook delivery failed (%s); retrying\n' "$$STATUS" >&2 ;;
+            esac
+          fi
+          sleep 1
+        done
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /srv/git/.git/HEAD"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 10m
+    networks:
+      default:
+        ipv4_address: 172.19.255.24
+    read_only: true
+    restart: unless-stopped
+    user: "0:0"
+    volumes:
+      - type: bind
+        source: ../../../../../.git
+        target: /srv/git/.git
+        read_only: true
+        bind:
+          create_host_path: false
+
+  headscale:
+    image: ghcr.io/juanfont/headscale:0.29.4@sha256:8833f828b414c0907b7e5c71da76473216fe17cce0818a166b536ec552c0903f
+    container_name: openplex-local-headscale
+    command:
+      - serve
+    healthcheck:
+      test: ["CMD", "/ko-app/headscale", "health"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 1s
+    logging:
+      driver: json-file
+      options:
+        max-file: "3"
+        max-size: 10m
+    networks:
+      default:
+        ipv4_address: 172.19.255.23
+    ports:
+      - "127.0.0.1:8443:443"
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ./headscale/config.yaml
+        target: /etc/headscale/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./headscale/policy.hujson
+        target: /etc/headscale/policy.hujson
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./headscale/derp.yaml
+        target: /etc/headscale/derp.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../../../../.tmp/state/headscale/tls
+        target: /etc/headscale/tls
+        read_only: true
+        bind:
+          create_host_path: true
+      - headscale_state:/var/lib/headscale
+
+# Floci's children share these resources, so their lifetime spans replacements.
+networks:
+  default:
+    name: openplex-local
+    external: true
+volumes:
+  headscale_state:
+    name: openplex-local-headscale-data
+    external: true
+  state:
+    name: openplex-local-floci-data
+    external: true
