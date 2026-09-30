@@ -1,0 +1,34 @@
+"""Builds OpenTelemetry tracing helper library and unit tests for Python workloads."""
+
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+py_library(
+    name = "python",
+    srcs = ["tracer.py"],
+    imports = ["../../../.."],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@python_deps//opentelemetry_api",
+        "@python_deps//opentelemetry_exporter_otlp_proto_http",
+        "@python_deps//opentelemetry_sdk",
+    ],
+)
+
+alias(
+    name = "otel_tracing",
+    actual = ":python",
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "tracer_test",
+    size = "small",
+    srcs = ["tracer_test.py"],
+    deps = [
+        "//src/infra/tools/otel_tracing/python",
+        "@python_deps//opentelemetry_sdk",
+    ],
+)
+
+package_sources()

@@ -1,0 +1,19 @@
+"""Builds the snapshot manifest and lineage tree data models."""
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "model",
+    srcs = [
+        "lineage_tree.go",
+        "snapshot.go",
+    ],
+    importpath = "go.invalid/internal/tools/coder_snapshot_portal/pkg/model",
+    visibility = ["//:__subpackages__"],
+)
+
+go_test(
+    name = "model_test",
+    srcs = ["lineage_tree_test.go"],
+    embed = [":model"],
+)

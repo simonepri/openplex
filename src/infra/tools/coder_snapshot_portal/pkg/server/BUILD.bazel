@@ -1,0 +1,30 @@
+"""Builds the HTTP server and request handlers for the snapshot portal."""
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "server",
+    srcs = [
+        "handlers.go",
+        "server.go",
+    ],
+    importpath = "go.invalid/internal/tools/coder_snapshot_portal/pkg/server",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//src/infra/tools/coder_snapshot_portal/pkg/auth",
+        "//src/infra/tools/coder_snapshot_portal/pkg/model",
+        "//src/infra/tools/coder_snapshot_portal/pkg/storage",
+        "//src/infra/tools/coder_snapshot_portal/web",
+    ],
+)
+
+go_test(
+    name = "server_test",
+    srcs = ["server_test.go"],
+    embed = [":server"],
+    deps = [
+        "//src/infra/tools/coder_snapshot_portal/pkg/auth",
+        "//src/infra/tools/coder_snapshot_portal/pkg/model",
+        "//src/infra/tools/coder_snapshot_portal/pkg/storage",
+    ],
+)

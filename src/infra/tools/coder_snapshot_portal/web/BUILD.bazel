@@ -1,0 +1,15 @@
+"""Embeds static web assets and HTML templates for the snapshot portal."""
+
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "web",
+    srcs = ["web.go"],
+    embedsrcs = [
+        "static/favicon.svg",
+        "static/styles.css",
+        "templates/catalog.html.tmpl",
+    ],
+    importpath = "go.invalid/internal/tools/coder_snapshot_portal/web",
+    visibility = ["//:__subpackages__"],
+)
