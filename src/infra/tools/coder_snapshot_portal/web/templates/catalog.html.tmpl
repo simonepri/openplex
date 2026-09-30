@@ -1,0 +1,588 @@
+<!-- Renders the workspace snapshot catalog, lineage views, and copy modals. -->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workspace Snapshots | Coder</title>
+  <link rel="stylesheet" href="/static/styles.css?v=9">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+</head>
+<body>
+  <main class="shell">
+    <!-- Page Header -->
+    <header class="page-header">
+      <div class="header-titles">
+        <p class="eyebrow">Workspace Recovery</p>
+        <h1>Workspace Snapshots</h1>
+        {{if .HasWorkspaceContext}}
+        <p class="lede">Restoring into <strong>{{.Workspace}}</strong>. Choose a verified point in time to roll back your workspace.</p>
+        {{else}}
+        <p class="lede">Choose a verified point in time to restore into a Coder development workspace.</p>
+        {{end}}
+      </div>
+
+      {{if .User}}
+      <div class="user-profile" aria-label="Signed in user profile">
+        <div class="user-avatar" title="{{.User.Username}}">
+          {{if .User.Username}}{{slice .User.Username 0 1}}{{else}}U{{end}}
+        </div>
+        <div class="user-info">
+          <span class="user-name">{{.User.Username}}</span>
+          <span class="user-email">{{.User.Email}}</span>
+        </div>
+        <div class="user-actions">
+          {{if .HasWorkspaceContext}}
+          <a class="btn-secondary" href="{{.WorkspaceParametersURL}}" title="Return to {{.Workspace}} Parameters">
+            {{.Workspace}} Parameters <span aria-hidden="true">&#8599;</span>
+          </a>
+          {{end}}
+          <a class="btn-secondary" href="{{.CoderURL}}" target="_blank" rel="noopener noreferrer" title="Open Coder Dashboard">
+            Coder <span aria-hidden="true">&#8599;</span>
+          </a>
+          <a class="btn-secondary" href="/logout" title="Sign out of snapshot portal">
+            Sign Out
+          </a>
+        </div>
+      </div>
+      {{end}}
+    </header>
+
+    {{if .Nodes}}
+    <!-- Metrics and Filter Toolbar -->
+    <div class="summary-bar">
+      <div class="metrics">
+        <span><strong>{{.SnapshotCount}}</strong> {{if eq .SnapshotCount 1}}snapshot{{else}}snapshots{{end}}</span>
+        <span class="metric-sep" aria-hidden="true">&middot;</span>
+        <span><strong>{{len .AllLineages}}</strong> {{if eq (len .AllLineages) 1}}lineage{{else}}lineages{{end}}</span>
+        <span class="metric-sep" aria-hidden="true">&middot;</span>
+        <span title="Uncompressed logical volume files sum"><strong>{{.TotalSizeFormatted}}</strong> logical</span>
+        <span class="metric-sep" aria-hidden="true">&middot;</span>
+        <span title="Deduplicated and compressed physical repository storage ({{.DedupSavingsPercent}} savings, {{.DedupRatio}} ratio)"><strong>{{.TotalPhysicalFormatted}}</strong> physical ({{.PhysicalPercent}})</span>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+          </svg>
+          <input type="search" id="search-input" class="search-input" placeholder="Search snapshots..." oninput="handleSearchFilter()">
+        </div>
+
+        <select id="lineage-select" class="select-filter" onchange="handleSearchFilter()" aria-label="Filter by lineage">
+          <option value="">All Lineages</option>
+          {{range .AllLineages}}
+          <option value="{{.}}" {{if eq . $.SelectedLineage}}selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+      </div>
+    </div>
+
+    <!-- Connected SVG Lineage Git-Rail Graph -->
+    <section class="lineage-graph" aria-label="Connected Lineage Git-Rail Graph">
+      <header class="graph-header">
+        <div>
+          <p class="graph-label">Lineage Graph</p>
+          <h2>Connected Lineage Topology</h2>
+        </div>
+        <span class="graph-hint">Click a snapshot dot to highlight it in the timeline</span>
+      </header>
+
+      <div class="dag-graph-wrapper">
+        <svg class="dag-svg" width="{{.SVGWidth}}" height="{{.SVGHeight}}" viewBox="0 0 {{.SVGWidth}} {{.SVGHeight}}">
+          <!-- Directed Rail Edges -->
+          <g class="dag-edges">
+            {{range .Edges}}
+            <path class="dag-edge" d="{{.Path}}" stroke="{{.Color}}" data-from="{{.From.Snapshot.Selector}}" data-to="{{.To.Snapshot.Selector}}" data-from-lineage="{{.From.Snapshot.LineageToken}}" data-to-lineage="{{.To.Snapshot.LineageToken}}" onclick="handleEdgeClick(this)">
+              <title>Lineage: {{.To.Snapshot.LineageToken}}</title>
+            </path>
+            {{end}}
+          </g>
+
+          <!-- DAG Commit Dots -->
+          <g class="dag-nodes">
+            {{range .Nodes}}
+            <g class="dag-node{{if eq .Snapshot.Selector $.LatestSelector}} active-node{{end}}" id="dag-node-{{.Snapshot.Selector}}" data-selector="{{.Snapshot.Selector}}" data-lineage="{{.Snapshot.LineageToken}}" transform="translate({{.X}}, {{.Y}})" onclick="scrollToSnapshot('{{.Snapshot.Selector}}')">
+              <title>{{if .Snapshot.Display}}{{.Snapshot.Display}}{{else}}{{.Snapshot.Selector}}{{end}}&#10;Selector: {{.Snapshot.Selector}}&#10;Lineage: {{.Snapshot.LineageToken}}&#10;Time: {{formatExactTime .Snapshot.Time}}</title>
+
+              <!-- Active pulse halo -->
+              {{if eq .Snapshot.Selector $.LatestSelector}}
+              <circle cx="0" cy="0" r="14" class="dag-dot-halo" style="stroke: {{.Color}};" />
+              {{end}}
+
+              <!-- Outer selection ring for hover/active -->
+              <circle cx="0" cy="0" r="11" class="dag-dot-ring" />
+
+              <!-- Main Commit Dot -->
+              <circle cx="0" cy="0" r="7" fill="{{.Color}}" stroke="{{.BorderColor}}" stroke-width="2.5" class="dag-dot" />
+
+              <!-- Root badge: centered white dot -->
+              {{if .IsRoot}}
+              <circle cx="0" cy="0" r="2.5" fill="#ffffff" />
+              {{end}}
+
+              <!-- Time label below dot -->
+              <text class="dag-dot-time" x="0" y="20" text-anchor="middle">{{formatRelativeTimeShort .Snapshot.Time}}</text>
+            </g>
+            {{end}}
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <!-- Chronological Timeline List -->
+    <section class="timeline-section" aria-label="Snapshots Timeline">
+      <header class="timeline-section-header">
+        <div>
+          <p class="section-label">Snapshot History</p>
+          <h2 class="timeline-heading">Timeline</h2>
+        </div>
+        <div class="timeline-group-controls">
+          <span class="group-control-label">Group by:</span>
+          <div class="btn-group" role="group" aria-label="Group timeline">
+            <a href="?group=day{{if $.HasWorkspaceContext}}&owner={{$.Owner}}&workspace={{$.Workspace}}{{end}}{{if $.SelectedLineage}}&lineage={{$.SelectedLineage}}{{end}}" class="group-toggle-btn {{if eq .GroupMode "day"}}active{{end}}" id="btn-group-day">Day</a>
+            <a href="?group=week{{if $.HasWorkspaceContext}}&owner={{$.Owner}}&workspace={{$.Workspace}}{{end}}{{if $.SelectedLineage}}&lineage={{$.SelectedLineage}}{{end}}" class="group-toggle-btn {{if eq .GroupMode "week"}}active{{end}}" id="btn-group-week">Week</a>
+            <a href="?group=lineage{{if $.HasWorkspaceContext}}&owner={{$.Owner}}&workspace={{$.Workspace}}{{end}}{{if $.SelectedLineage}}&lineage={{$.SelectedLineage}}{{end}}" class="group-toggle-btn {{if eq .GroupMode "lineage"}}active{{end}}" id="btn-group-lineage">Lineage</a>
+          </div>
+        </div>
+      </header>
+
+      {{range .Groups}}
+      <div class="timeline-group" id="group-{{.Key}}">
+        <div class="timeline-group-header">
+          <h3 class="timeline-group-title">{{.Label}}</h3>
+          <div class="timeline-group-badges">
+            <span class="badge badge-group-count">{{.Count}} {{if eq .Count 1}}snapshot{{else}}snapshots{{end}}</span>
+            <span class="timeline-group-size">{{formatBytes .TotalSize}}</span>
+          </div>
+        </div>
+        <ol class="timeline">
+          {{range .Nodes}}
+          <li class="snapshot timeline-item {{if eq .Snapshot.Selector $.LatestSelector}}is-latest{{end}}" id="snapshot-{{.Snapshot.Selector}}" data-selector="{{.Snapshot.Selector}}" data-lineage="{{.Snapshot.LineageToken}}" style="--lineage-color: {{.Color}}; --lineage-border: {{.BorderColor}}; --lineage-bg: {{.BgColor}};" data-search="{{.Snapshot.Display}} {{.Snapshot.Selector}} {{.Snapshot.LineageToken}} {{.Snapshot.Cell}} {{.Snapshot.Team}}">
+            <div class="timeline-time">{{formatRelativeTime .Snapshot.Time}}</div>
+            <div class="timeline-rail">
+              <div class="timeline-line"></div>
+              <div class="timeline-dot{{if eq .Snapshot.Selector $.LatestSelector}} is-latest{{end}}"></div>
+            </div>
+            <article class="snapshot-card">
+              <header class="snapshot-card-header">
+                <div class="snapshot-title-group">
+                  <h3 class="workspace-title">{{formatSnapshotTitle .Snapshot.Display .Snapshot.Selector}}</h3>
+                  {{if eq .Snapshot.Selector $.LatestSelector}}<span class="badge badge-latest" style="background: {{.BgColor}}; color: {{.Color}}; border-color: {{.BorderColor}};">Active</span>{{end}}
+                  {{if .IsRoot}}<span class="badge badge-root">Root</span>{{else if .IsBranchRoot}}<span class="badge badge-fork">Fork</span>{{end}}
+                </div>
+                <time class="snapshot-exact-time" datetime="{{.Snapshot.Time}}" title="{{formatExactTime .Snapshot.Time}}">
+                  {{formatExactTime .Snapshot.Time}}
+                </time>
+              </header>
+
+              <div class="snapshot-card-body">
+                <dl class="details">
+                  <div class="details-row">
+                    <div class="details-item">
+                      <dt>Selector</dt>
+                      <dd class="selector-value">
+                        <code>{{.Snapshot.Selector}}</code>
+                        <button type="button" class="btn-inline-copy" onclick="copyInline('{{.Snapshot.Selector}}', this)" title="Copy selector ID" aria-label="Copy selector ID">
+                          <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13" aria-hidden="true">
+                            <path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12a1.5 1.5 0 01.439 1.061V16.5A1.5 1.5 0 0115.5 18h-7A1.5 1.5 0 017 16.5v-13z" />
+                            <path d="M4 6.5A1.5 1.5 0 015.5 5H6v10.5A2.5 2.5 0 008.5 18H14v.5a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 014 18.5v-12z" />
+                          </svg>
+                        </button>
+                      </dd>
+                    </div>
+                    <div class="details-item">
+                      <dt>Size</dt>
+                      <dd>{{formatBytes .Snapshot.SizeBytes}}</dd>
+                    </div>
+                    <div class="details-item">
+                      <dt>Files</dt>
+                      <dd>{{formatNumber .Snapshot.FilesCount}}</dd>
+                    </div>
+                  </div>
+                  <div class="details-row">
+                    <div class="details-item">
+                      <dt>Lineage</dt>
+                      <dd><code class="badge-lineage-code" title="{{.Snapshot.LineageToken}}" style="background: {{.BgColor}}; color: {{.Color}}; border: 1px solid {{.BorderColor}};">{{.Snapshot.LineageToken}}</code></dd>
+                    </div>
+                    {{if .Parent}}
+                    <div class="details-item">
+                      <dt>Parent</dt>
+                      <dd><a href="#snapshot-{{.Parent.Snapshot.Selector}}" onclick="scrollToSnapshot('{{.Parent.Snapshot.Selector}}')"><code>{{shortSelector .Parent.Snapshot.Selector}}</code></a></dd>
+                    </div>
+                    {{else if .Snapshot.ParentSnapshot}}
+                    <div class="details-item">
+                      <dt>Parent</dt>
+                      <dd><a href="#snapshot-{{.Snapshot.ParentSnapshot}}" onclick="scrollToSnapshot('{{.Snapshot.ParentSnapshot}}')"><code>{{shortSelector .Snapshot.ParentSnapshot}}</code></a></dd>
+                    </div>
+                    {{end}}
+                    {{if .Snapshot.Cell}}
+                    <div class="details-item">
+                      <dt>Cell</dt>
+                      <dd><code>{{.Snapshot.Cell}}</code></dd>
+                    </div>
+                    {{end}}
+                    {{if .Snapshot.Team}}
+                    <div class="details-item">
+                      <dt>Team</dt>
+                      <dd><code>{{.Snapshot.Team}}</code></dd>
+                    </div>
+                    {{end}}
+                  </div>
+                </dl>
+
+                <!-- Use Snapshot Button in bottom-right -->
+                <div class="snapshot-actions">
+                  <button type="button" class="btn-use-snapshot" onclick="openSelectorModal('{{.Snapshot.Selector}}', '{{formatSnapshotTitle .Snapshot.Display .Snapshot.Selector}}', '{{formatRelativeTime .Snapshot.Time}}')" aria-label="Use snapshot {{.Snapshot.Selector}} in Coder">
+                    <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+                      <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                      <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                    </svg>
+                    Use Snapshot
+                  </button>
+                </div>
+              </div>
+            </article>
+          </li>
+          {{end}}
+        </ol>
+      </div>
+      {{end}}
+
+      <div id="no-search-results" class="empty-filter-state" style="display: none;">
+        <p>No snapshots match your filter criteria.</p>
+      </div>
+    </section>
+
+    <!-- Selector Copy Popup Modal -->
+    <div id="selector-modal" class="modal-backdrop" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="modal-title" onclick="handleBackdropClick(event)">
+      <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div class="modal-icon-success">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <h3 id="modal-title" class="modal-title">Backup Selector Copied!</h3>
+          </div>
+          <button type="button" class="btn-modal-close" onclick="closeSelectorModal()" aria-label="Close dialog">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <p class="modal-instructions">
+            The selector ID is now copied to your clipboard. Return to your Coder workspace form and paste it into the <strong>Restore from backup</strong> field.
+          </p>
+
+          <div class="selector-display-box">
+            <input type="text" id="modal-selector-input" class="selector-input" readonly value="" onclick="this.select()">
+            <button type="button" class="btn-copy-action" id="modal-copy-btn" onclick="copyModalSelector()" title="Copy selector again">
+              <span id="modal-copy-label">Copy</span>
+            </button>
+          </div>
+
+          <div class="modal-meta-info" id="modal-snapshot-meta"></div>
+        </div>
+
+        <div class="modal-footer">
+          {{if .HasWorkspaceContext}}
+          <a id="modal-settings-link" href="{{.WorkspaceParametersURL}}" class="btn-modal-primary" target="_self">
+            Go to {{.Workspace}} Parameters &nearr;
+          </a>
+          <button type="button" class="btn-modal-secondary" onclick="closeSelectorModal()">
+            Done &bull; Close
+          </button>
+          {{else}}
+          <button type="button" class="btn-modal-primary" onclick="returnToCoder()">
+            Done &bull; Return to Coder
+          </button>
+          <a id="modal-new-workspace-link" href="#" class="modal-fallback-link" target="_blank" rel="noopener">
+            Or create a brand-new workspace with this backup &rarr;
+          </a>
+          {{end}}
+        </div>
+      </div>
+    </div>
+
+    {{else}}
+    <!-- Empty State -->
+    <section class="empty-state">
+      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+      </svg>
+      <h2>No restorable snapshots found</h2>
+      <p>Snapshots will appear here once verified backup jobs run on your workspaces.</p>
+    </section>
+    {{end}}
+  </main>
+
+  <script>
+    function openSelectorModal(selector, display, time) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(selector).catch(() => {});
+      }
+      const modal = document.getElementById('selector-modal');
+      const input = document.getElementById('modal-selector-input');
+      const meta = document.getElementById('modal-snapshot-meta');
+      const newWsLink = document.getElementById('modal-new-workspace-link');
+      const copyLabel = document.getElementById('modal-copy-label');
+
+      if (input) input.value = selector;
+      if (copyLabel) copyLabel.textContent = 'Copied!';
+      if (newWsLink) newWsLink.href = '/restore?selector=' + encodeURIComponent(selector);
+      if (meta) {
+        meta.innerHTML = '<span><strong>Snapshot:</strong> ' + escapeHTML(display || selector) + '</span>' +
+          (time ? ' <span class="metric-sep">·</span> <span>' + escapeHTML(time) + '</span>' : '');
+      }
+      if (modal) {
+        modal.style.display = 'flex';
+      }
+    }
+
+    function closeSelectorModal() {
+      const modal = document.getElementById('selector-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function handleBackdropClick(e) {
+      if (e.target && e.target.id === 'selector-modal') {
+        closeSelectorModal();
+      }
+    }
+
+    function copyModalSelector() {
+      const input = document.getElementById('modal-selector-input');
+      const copyLabel = document.getElementById('modal-copy-label');
+      if (input) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(input.value).then(() => {
+            if (copyLabel) {
+              copyLabel.textContent = 'Copied!';
+              setTimeout(() => { copyLabel.textContent = 'Copy'; }, 2000);
+            }
+          }).catch(() => {});
+        }
+        input.select();
+      }
+    }
+
+    function copyInline(text, btn) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          const originalTitle = btn.getAttribute('title') || '';
+          btn.classList.add('copied');
+          btn.setAttribute('title', 'Copied!');
+          setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.setAttribute('title', originalTitle);
+          }, 1500);
+        }).catch(() => {});
+      }
+    }
+
+    function returnToCoder() {
+      if (window.opener) {
+        window.close();
+        return;
+      }
+      if (window.history.length > 1) {
+        window.history.back();
+        return;
+      }
+      closeSelectorModal();
+    }
+
+    function escapeHTML(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function centerGraphOnNode(selector, behavior = 'auto') {
+      const node = document.getElementById('dag-node-' + selector);
+      const wrapper = document.querySelector('.dag-graph-wrapper');
+      if (node && wrapper) {
+        document.querySelectorAll('.dag-node').forEach(n => n.classList.remove('active-highlight'));
+        node.classList.add('active-highlight');
+        const nodeRect = node.getBoundingClientRect();
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const scrollOffsetX = nodeRect.left - wrapperRect.left + wrapper.scrollLeft - (wrapper.clientWidth / 2) + (nodeRect.width / 2);
+        const scrollOffsetY = nodeRect.top - wrapperRect.top + wrapper.scrollTop - (wrapper.clientHeight / 2) + (nodeRect.height / 2);
+        wrapper.scrollTo({
+          left: Math.max(0, scrollOffsetX),
+          top: Math.max(0, scrollOffsetY),
+          behavior: behavior
+        });
+      }
+    }
+
+    function scrollGraphToRight() {
+      const wrapper = document.querySelector('.dag-graph-wrapper');
+      if (wrapper) {
+        wrapper.scrollLeft = wrapper.scrollWidth;
+      }
+    }
+
+    function scrollToSnapshot(selector) {
+      const node = document.getElementById('dag-node-' + selector);
+      const el = document.getElementById('snapshot-' + selector);
+      const targetLineage = node?.dataset.lineage || el?.dataset.lineage;
+      const lineageSelect = document.getElementById('lineage-select');
+
+      let filterChanged = false;
+      if (lineageSelect && targetLineage && lineageSelect.value && lineageSelect.value !== targetLineage) {
+        lineageSelect.value = targetLineage;
+        filterChanged = true;
+      }
+
+      const searchInput = document.getElementById('search-input');
+      if (searchInput && searchInput.value && (!el || el.style.display === 'none')) {
+        searchInput.value = '';
+        filterChanged = true;
+      }
+
+      if (filterChanged) {
+        handleSearchFilter(false);
+      }
+
+      const targetEl = document.getElementById('snapshot-' + selector);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetEl.classList.add('highlighted');
+        setTimeout(() => targetEl.classList.remove('highlighted'), 2000);
+      }
+      centerGraphOnNode(selector, 'smooth');
+    }
+
+    function handleEdgeClick(edge) {
+      const lineage = edge.dataset.toLineage || edge.dataset.fromLineage;
+      const lineageSelect = document.getElementById('lineage-select');
+      if (lineageSelect && lineage && lineageSelect.value !== lineage) {
+        lineageSelect.value = lineage;
+        handleSearchFilter(false);
+      }
+      const toSel = edge.dataset.to || edge.dataset.from;
+      if (toSel) {
+        scrollToSnapshot(toSel);
+      }
+    }
+
+    function handleSearchFilter(autoCenter = false) {
+      const query = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
+      const selectedLineage = document.getElementById('lineage-select')?.value || '';
+
+      const items = document.querySelectorAll('.snapshot');
+      let visibleCount = 0;
+      let firstVisibleSelector = '';
+      items.forEach(item => {
+        const searchText = (item.dataset.search || '').toLowerCase();
+        const itemLineage = item.dataset.lineage || '';
+        const matchesQuery = !query || searchText.includes(query);
+        const matchesLineage = !selectedLineage || itemLineage === selectedLineage;
+
+        if (matchesQuery && matchesLineage) {
+          item.style.display = '';
+          visibleCount++;
+          if (!firstVisibleSelector) {
+            firstVisibleSelector = item.dataset.selector || '';
+          }
+        } else {
+          item.style.display = 'none';
+        }
+      });
+
+      // Hide empty groups
+      document.querySelectorAll('.timeline-group').forEach(group => {
+        const visibleItems = group.querySelectorAll('.snapshot:not([style*="display: none"])');
+        group.style.display = visibleItems.length > 0 ? '' : 'none';
+      });
+
+      // Toggle no-results message
+      const noResults = document.getElementById('no-search-results');
+      if (noResults) {
+        noResults.style.display = (visibleCount === 0 && items.length > 0) ? 'block' : 'none';
+      }
+
+      // Highlight/dim DAG nodes and edges
+      document.querySelectorAll('.dag-node').forEach(node => {
+        const selector = node.dataset.selector || '';
+        const card = document.getElementById('snapshot-' + selector);
+        const isVisible = card && card.style.display !== 'none';
+        node.style.opacity = isVisible ? '1' : '0.2';
+      });
+
+      document.querySelectorAll('.dag-edge').forEach(edge => {
+        const fromSel = edge.dataset.from || '';
+        const toSel = edge.dataset.to || '';
+        const fromCard = document.getElementById('snapshot-' + fromSel);
+        const toCard = document.getElementById('snapshot-' + toSel);
+        const fromVis = fromCard && fromCard.style.display !== 'none';
+        const toVis = toCard && toCard.style.display !== 'none';
+        edge.style.opacity = (fromVis && toVis) ? '0.85' : '0.15';
+      });
+
+      // Synchronize URL search params
+      const params = new URLSearchParams(window.location.search);
+      if (query) {
+        params.set('q', query);
+      } else {
+        params.delete('q');
+      }
+      if (selectedLineage) {
+        params.set('lineage', selectedLineage);
+      } else {
+        params.delete('lineage');
+      }
+      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+      window.history.replaceState(null, '', newUrl);
+
+      if (autoCenter && firstVisibleSelector) {
+        centerGraphOnNode(firstVisibleSelector, 'smooth');
+      }
+    }
+
+    // Auto-center graph on active snapshot and apply filters on load
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get('q');
+      const lineageParam = params.get('lineage') || '{{.SelectedLineage}}';
+      if (q) {
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) { searchInput.value = q; }
+      }
+      if (lineageParam) {
+        const lineageSelect = document.getElementById('lineage-select');
+        if (lineageSelect) { lineageSelect.value = lineageParam; }
+      }
+      handleSearchFilter(false);
+
+      const targetSelector = '{{.ActiveSelector}}' || '{{.LatestSelector}}';
+      if (targetSelector && document.getElementById('dag-node-' + targetSelector)) {
+        centerGraphOnNode(targetSelector, 'auto');
+      } else {
+        scrollGraphToRight();
+      }
+
+      // Preserve search filters across group mode switching
+      document.querySelectorAll('.group-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const url = new URL(btn.href, window.location.href);
+          const searchVal = document.getElementById('search-input')?.value;
+          const lineageVal = document.getElementById('lineage-select')?.value;
+          if (searchVal) url.searchParams.set('q', searchVal);
+          if (lineageVal) url.searchParams.set('lineage', lineageVal);
+          btn.href = url.toString();
+        });
+      });
+
+      // Close modal on Escape
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeSelectorModal();
+      });
+    });
+
+    window.addEventListener('load', scrollGraphToRight);
+  </script>
+</body>
+</html>

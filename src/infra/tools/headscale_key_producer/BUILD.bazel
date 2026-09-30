@@ -1,0 +1,112 @@
+"""Builds the Headscale pre-auth record producer and its preloaded OCI image."""
+
+load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_load")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# gazelle:prefix go.invalid/internal/tools/headscale_key_producer
+
+package(default_visibility = ["//visibility:public"])
+
+platform(
+    name = "linux_amd64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+)
+
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
+)
+
+go_library(
+    name = "headscale_key_producer_lib",
+    srcs = ["main.go"],
+    importpath = "go.invalid/internal/tools/headscale_key_producer",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "headscale_key_producer",
+    embed = [":headscale_key_producer_lib"],
+    pure = "on",
+)
+
+go_test(
+    name = "headscale_key_producer_test",
+    srcs = ["main_test.go"],
+    embed = [":headscale_key_producer_lib"],
+)
+
+pkg_files(
+    name = "producer_file",
+    srcs = [":headscale_key_producer"],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/ko-app",
+    renames = {"headscale_key_producer": "headscale-key-producer"},
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "producer_layer",
+    srcs = [":producer_file"],
+)
+
+platform_transition_filegroup(
+    name = "producer_layer_linux_amd64",
+    srcs = [":producer_layer"],
+    target_platform = ":linux_amd64",
+)
+
+platform_transition_filegroup(
+    name = "producer_layer_linux_arm64",
+    srcs = [":producer_layer"],
+    target_platform = ":linux_arm64",
+)
+
+oci_image(
+    name = "image_linux_amd64",
+    base = "@headscale_base_linux_amd64",
+    entrypoint = ["/ko-app/headscale-key-producer"],
+    tars = [":producer_layer_linux_amd64"],
+    user = "1000:1000",
+)
+
+oci_image(
+    name = "image_linux_arm64",
+    base = "@headscale_base_linux_arm64_v8",
+    entrypoint = ["/ko-app/headscale-key-producer"],
+    tars = [":producer_layer_linux_arm64"],
+    user = "1000:1000",
+)
+
+oci_image_index(
+    name = "image_multiarch",
+    images = [
+        ":image_linux_amd64",
+        ":image_linux_arm64",
+    ],
+)
+
+oci_load(
+    name = "preload",
+    format = "oci",
+    image = ":image_multiarch",
+    repo_tags = ["docker.io/infra/headscale-key-producer:v0.29.3-r1"],
+)
+
+filegroup(
+    name = "preload_archive",
+    srcs = [":preload"],
+    output_group = "tarball",
+)
+
+package_sources()

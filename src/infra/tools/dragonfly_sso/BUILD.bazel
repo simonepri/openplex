@@ -1,0 +1,96 @@
+"""Builds and tests the constrained Dragonfly Console SSO bridge."""
+
+# gazelle:resolve py sso //src/infra/tools/dragonfly_sso:dragonfly_sso
+
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_load")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/oci:defs.bzl", "oci_workload_publish")
+
+package(default_visibility = ["//visibility:public"])
+
+py_test(
+    name = "sso_test",
+    srcs = ["sso_test.py"],
+    imports = ["."],
+    # keep
+    deps = ["//src/infra/tools/dragonfly_sso"],
+)
+
+py_binary(
+    name = "sso",
+    srcs = ["sso.py"],
+    visibility = ["//src:__subpackages__"],
+)
+
+py_library(
+    name = "dragonfly_sso",
+    srcs = ["sso.py"],
+    imports = ["../../.."],
+    visibility = ["//src:__subpackages__"],
+)
+
+pkg_files(
+    name = "program_file",
+    srcs = ["sso.py"],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/opt/dragonfly-sso",
+)
+
+pkg_tar(
+    name = "program_layer",
+    srcs = [":program_file"],
+)
+
+oci_image(
+    name = "image_linux_amd64",
+    base = "@dragonfly_sso_base_linux_amd64",
+    entrypoint = [
+        "python3",
+        "/opt/dragonfly-sso/sso.py",
+    ],
+    tars = [":program_layer"],
+    user = "65532:65532",
+)
+
+oci_image(
+    name = "image_linux_arm64",
+    base = "@dragonfly_sso_base_linux_arm64_v8",
+    entrypoint = [
+        "python3",
+        "/opt/dragonfly-sso/sso.py",
+    ],
+    tars = [":program_layer"],
+    user = "65532:65532",
+)
+
+oci_image_index(
+    name = "image_multiarch",
+    images = [
+        ":image_linux_amd64",
+        ":image_linux_arm64",
+    ],
+)
+
+oci_load(
+    name = "preload",
+    format = "oci",
+    image = ":image_multiarch",
+    repo_tags = ["docker.io/cluster/dragonfly-sso:v2.5.1-r2"],
+)
+
+oci_workload_publish(
+    name = "publish",
+    image = ":image_multiarch",
+    publication_mode = "digest",
+)
+
+filegroup(
+    name = "preload_archive",
+    srcs = [":preload"],
+    output_group = "tarball",
+)
+
+package_sources()

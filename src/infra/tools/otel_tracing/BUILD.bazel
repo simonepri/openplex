@@ -1,0 +1,11 @@
+"""Defines build targets and aliases for OpenTelemetry tracing tooling."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+alias(
+    name = "otel_tracing",
+    actual = "//src/infra/tools/otel_tracing/python",
+    visibility = ["//visibility:public"],
+)
+
+package_sources()
