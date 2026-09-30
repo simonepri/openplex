@@ -1,0 +1,12 @@
+"""Build targets for src/infra/argocd."""
+
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
+
+sh_test(
+    name = "lfs_guard_test",
+    srcs = ["lfs_guard_test.sh"],
+    tags = ["no-sandbox"],
+)

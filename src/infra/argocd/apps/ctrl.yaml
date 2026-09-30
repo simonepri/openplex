@@ -1,0 +1,2131 @@
+# ApplicationSet dispatching foundational control plane applications on the ctrl cluster.
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: ctrl-apps
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  goTemplate: true
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: tier
+              operator: In
+              values: [substrate]
+          maxUpdate: 100%
+        - matchExpressions:
+            - key: tier
+              operator: In
+              values: [fleet]
+          maxUpdate: 100%
+  syncPolicy:
+    applicationsSync: sync
+  generators:
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        role: ctrl
+                - git:
+                    repoURL: '{{ index .metadata.annotations "git-repo-url" }}'
+                    revision: HEAD
+                    pathParamPrefix: profileSource
+                    files:
+                      - path: src/infra/argocd/apps/profiles.yaml
+          - list:
+              elements:
+                # Component waves follow the latest API or resource each one consumes,
+                # never the kind of thing it is. Capacity provisioning and cluster DNS
+                # run at wave 5 so every later wave can be scheduled onto Karpenter nodes.
+                # Wave 10: Bootstrap contracts and admission
+                - component: cert-manager
+                  tier: substrate
+                  path: src/infra/argocd/components/cert_manager/kustomize
+                  namespace: cert-manager-system
+                  wave: "10"
+                  chart: cert-manager
+                  chartRepo: https://charts.jetstack.io
+                  chartVersion: v1.21.2
+                  vpa:
+                    targets:
+                      - cert-manager
+                      - cert-manager-cainjector
+                      - cert-manager-webhook
+                - component: external-secrets
+                  tier: substrate
+                  path: src/infra/argocd/components/external_secrets/kustomize
+                  namespace: external-secrets-system
+                  wave: "10"
+                  chart: external-secrets
+                  chartRepo: https://charts.external-secrets.io
+                  chartVersion: 2.11.0
+                  ignoreDifferences:
+                    - group: ""
+                      kind: Secret
+                      namespace: application-identity
+                      name: coder-snapshot-oauth
+                      jsonPointers: [/data]
+                    - group: ""
+                      kind: Secret
+                      namespace: application-identity
+                      name: coder-template-publication
+                      jsonPointers:
+                        - /data
+                        - /metadata/annotations
+                        - /metadata/labels
+                  vpa:
+                    targets:
+                      - external-secrets
+                      - external-secrets-cert-controller
+                      - external-secrets-webhook
+                - component: kyverno
+                  tier: substrate
+                  path: src/infra/argocd/components/kyverno/kustomize
+                  namespace: kyverno-system
+                  wave: "10"
+                  chart: kyverno
+                  chartRepo: https://kyverno.github.io/kyverno
+                  # LINT.IfChange(kyverno-chart-version)
+                  chartVersion: 3.9.1
+                  # LINT.ThenChange(//src/infra/argocd/apps/cells.yaml:kyverno-chart-version,//src/bazel/module_deps/vendor_helm_charts.MODULE.bazel:kyverno-chart-version,//src/infra/argocd/components/kyverno/helm/values.yaml:kyverno-chart-version)
+                  vpa:
+                    targets:
+                      - kyverno-admission-controller
+                      - kyverno-background-controller
+                      - kyverno-cleanup-controller
+                      - kyverno-reports-controller
+                  ignoreDifferences:
+                    - group: apiextensions.k8s.io
+                      kind: CustomResourceDefinition
+                      jsonPointers:
+                        - /metadata/labels
+                      jqPathExpressions:
+                        - .metadata.labels
+                    - group: flowcontrol.apiserver.k8s.io
+                      kind: FlowSchema
+                      jqPathExpressions:
+                        - .spec.rules[].resourceRules[].namespaces
+                    - group: kyverno.io
+                      kind: ClusterPolicy
+                      jsonPointers:
+                        - /spec/admission
+                        - /spec/background
+                        - /spec/emitWarning
+                        - /spec/validationFailureAction
+                      jqPathExpressions:
+                        - .spec.rules[].skipBackgroundRequests
+                        - .spec.rules[].validate.allowExistingViolations
+                        - .spec.rules[].validate.failureAction
+                - component: scheduling-priorities
+                  tier: substrate
+                  path: src/infra/argocd/components/scheduling_priorities/kustomize
+                  namespace: kube-system
+                  wave: "10"
+                - component: trust-manager
+                  tier: substrate
+                  path: src/infra/argocd/components/trust_manager/kustomize
+                  namespace: cert-manager-system
+                  wave: "10"
+                  chart: trust-manager
+                  chartRepo: quay.io/jetstack/charts
+                  chartVersion: v0.25.0
+
+                - component: vpa
+                  tier: substrate
+                  path: src/infra/argocd/components/vpa/kustomize
+                  namespace: vpa-system
+                  wave: "10"
+                  chart: vertical-pod-autoscaler
+                  chartRepo: https://kubernetes.github.io/autoscaler
+                  chartVersion: 0.13.0
+                  vpa:
+                    targets:
+                      - vpa-admission-controller
+                      - vpa-recommender
+                      - vpa-updater
+
+                # Wave 20: Operators and foundational services
+                - component: barman-cloud
+                  tier: fleet
+                  path: src/infra/argocd/components/barman_cloud/kustomize
+                  namespace: cnpg-system
+                  wave: "20"
+                  chart: plugin-barman-cloud
+                  chartRepo: https://cloudnative-pg.github.io/charts
+                  chartVersion: 0.8.0
+                  vpa:
+                    targets:
+                      - barman-cloud-plugin-barman-cloud
+                - component: clickhouse-operator
+                  tier: fleet
+                  path: src/infra/argocd/components/clickhouse_operator/kustomize
+                  namespace: clickhouse-system
+                  wave: "20"
+                  chart: altinity-clickhouse-operator
+                  chartRepo: https://helm.altinity.com
+                  chartVersion: 0.27.4
+                - component: cloudnative-pg
+                  tier: fleet
+                  path: src/infra/argocd/components/cloudnative_pg/kustomize
+                  namespace: cnpg-system
+                  wave: "20"
+                  chart: cloudnative-pg
+                  chartRepo: https://cloudnative-pg.github.io/charts
+                  chartVersion: 0.29.1
+                - component: envoy-gateway
+                  tier: fleet
+                  path: src/infra/argocd/components/envoy_gateway/helm
+                  namespace: envoy-gateway-system
+                  wave: "20"
+                  chart: gateway-helm
+                  chartRepo: registry-1.docker.io/envoyproxy
+                  chartVersion: 1.9.2
+                - component: keda
+                  tier: fleet
+                  path: src/infra/argocd/components/keda/kustomize
+                  namespace: keda-system
+                  wave: "20"
+                  chart: keda
+                  chartRepo: https://kedacore.github.io/charts
+                  chartVersion: 2.21.0
+                  vpa:
+                    targets:
+                      - keda-operator
+                      - keda-operator-metrics-apiserver
+                      - keda-admission-webhooks
+                - component: keda-http
+                  tier: fleet
+                  path: src/infra/argocd/components/keda_http/helm
+                  namespace: keda-system
+                  wave: "20"
+                  chart: keda-add-ons-http
+                  chartRepo: https://kedacore.github.io/charts
+                  chartVersion: 0.16.0
+                  vpa:
+                    targets:
+                      - keda-add-ons-http-controller-manager
+                      - keda-add-ons-http-external-scaler
+                      - keda-add-ons-http-interceptor
+                  ignoreDifferences:
+                    - group: apps
+                      kind: Deployment
+                      jsonPointers:
+                        - /spec/template/spec/containers/0/image
+                      jqPathExpressions:
+                        - .spec.template.spec.containers[0].image
+                - component: k8s-cleaner
+                  tier: fleet
+                  path: src/infra/argocd/components/k8s_cleaner/kustomize
+                  namespace: k8s-cleaner-system
+                  wave: "20"
+                  chart: k8s-cleaner
+                  chartRepo: ghcr.io/gianlucam76/charts
+                  chartVersion: 0.24.0
+                  ignoreDifferences:
+                    - group: apps
+                      kind: Deployment
+                      name: k8s-cleaner
+                      jsonPointers:
+                        - /spec/template/spec/containers/0/env/0/valueFrom/resourceFieldRef/divisor
+                        - /spec/template/spec/containers/0/env/1/valueFrom/resourceFieldRef/divisor
+                      jqPathExpressions:
+                        - .spec.template.spec.containers[0].env[]?.valueFrom.resourceFieldRef.divisor
+                - component: pvc-autoresizer
+                  tier: fleet
+                  path: src/infra/argocd/components/pvc_autoresizer/kustomize
+                  namespace: pvc-autoresizer-system
+                  wave: "20"
+                  chart: pvc-autoresizer
+                  chartRepo: https://topolvm.github.io/pvc-autoresizer
+                  chartVersion: 0.20.0
+                  vpa:
+                    targets:
+                      - pvc-autoresizer-controller
+                - component: signoz-operator
+                  tier: fleet
+                  path: src/infra/argocd/components/signoz/helm
+                  namespace: signoz-operator-system
+                  wave: "20"
+                  chart: signoz-operator
+                  chartRepo: https://charts.signoz.io
+                  chartVersion: 0.0.1
+                  helmValues: src/infra/argocd/components/signoz/helm/operator-values.yaml
+                - component: storage-classes
+                  tier: substrate
+                  path: src/infra/argocd/components/storage_classes/helm
+                  namespace: kube-system
+                  wave: "20"
+                  helmValues: values.yaml
+                - component: valkey-operator
+                  tier: fleet
+                  path: src/infra/argocd/components/valkey_operator/kustomize
+                  namespace: valkey-system
+                  wave: "20"
+                  chart: valkey-operator
+                  chartRepo: https://valkey.io/valkey-helm
+                  chartVersion: 0.7.0
+                # Wave 30: Stateful stores and ingress routing
+                - component: clickhouse
+                  tier: fleet
+                  path: src/infra/argocd/components/clickhouse/kustomize
+                  namespace: signoz
+                  wave: "30"
+                  vpa: custom
+                - component: clickhouse-coordinator
+                  tier: fleet
+                  path: src/infra/argocd/components/clickhouse_coordinator/kustomize
+                  namespace: signoz
+                  wave: "30"
+                - component: dragonfly-manager
+                  tier: fleet
+                  flociBridgeImage: localhost:15100/000000000000/us-east-1/src/infra/tools/dragonfly_sso@sha256:3c8348905cdc2305293468b185e3e0d3d9fc9ebb5922342e75e6031e10b2b7d9
+                  cloudBridgeDigest: sha256:3c8348905cdc2305293468b185e3e0d3d9fc9ebb5922342e75e6031e10b2b7d9
+                  path: src/infra/argocd/components/dragonfly_manager/kustomize
+                  namespace: dragonfly-system
+                  wave: "30"
+                  chart: dragonfly
+                  chartRepo: https://dragonflyoss.github.io/helm-charts
+                  chartVersion: 1.8.5
+                  vpa:
+                    targets:
+                      - dragonfly-manager
+                      - dragonfly-sso
+                      - valkey-dragonfly-metadata-0-0
+                  ignoreDifferences:
+                    - group: apps
+                      kind: Deployment
+                      name: dragonfly-manager
+                      jsonPointers:
+                        - /metadata/generation
+                        - /spec/template/spec/containers/0/livenessProbe
+                        - /spec/template/spec/containers/0/readinessProbe
+                      jqPathExpressions:
+                        - .metadata.generation
+                        - .spec.template.spec.containers[0].livenessProbe
+                        - .spec.template.spec.containers[0].readinessProbe
+                    - group: ""
+                      kind: Service
+                      jsonPointers:
+                        - /spec/clusterIP
+                        - /spec/clusterIPs
+                      jqPathExpressions:
+                        - .spec.clusterIP
+                        - .spec.clusterIPs
+                - component: envoy-gateway-instance
+                  tier: fleet
+                  path: src/infra/argocd/components/envoy_gateway_instance/helm
+                  namespace: envoy-gateway-system
+                  wave: "30"
+                  vpa:
+                    targets:
+                      - private-access-gateway
+                  helmValues: values.yaml
+                  helmValuesObject:
+                    foundation:
+                      manageNamespace: true
+                      namespaceLabels:
+                        cost-center: shared-infrastructure
+                        environment: production
+                        pod-security.kubernetes.io/audit: restricted
+                        pod-security.kubernetes.io/audit-version: latest
+                        pod-security.kubernetes.io/enforce: restricted
+                        pod-security.kubernetes.io/enforce-version: latest
+                        pod-security.kubernetes.io/warn: restricted
+                        pod-security.kubernetes.io/warn-version: latest
+                        ray-dashboard-routes: "true"
+                    gateway:
+                      enabled: true
+                      canonicalScheme: https
+                      name: private-access
+                      namespace: envoy-gateway-system
+                      className: envoy-gateway-private-access
+                      aliasDomain: corp.local.internal
+                      allowedNamespaces:
+                        # keep-sorted start
+                        - argo
+                        - argocd
+                        - atlantis
+                        - buildbuddy
+                        - coder
+                        - dex
+                        - dragonfly-system
+                        - envoy-gateway-system
+                        - headlamp
+                        - homer
+                        - kargo
+                        - keda-system
+                        - kube-oidc-proxy-system
+                        - kube-system
+                        - kuberhealthy
+                        - opencost
+                        - parca
+                        - s3-system
+                        - signoz
+                        - velero-system
+                        # keep-sorted end
+                      listeners:
+                        coderApps:
+                          enabled: true
+                          hostname: "*.coder.c.corp.local.internal"
+                          certificateSecret: private-access-coder-apps-tls
+                        dragonflyManagerTls:
+                          enabled: true
+                          hostname: dragonfly-manager.c.corp.local.internal
+                        http: {enabled: true, redirectToHTTPS: true}
+                        https:
+                          enabled: true
+                          hostname: "*.c.corp.local.internal"
+                          certificateSecret: private-access-tls
+                          aliasCertificateSecret: private-access-alias-tls
+                    certificate:
+                      enabled: true
+                      issuerRef: {group: cert-manager.io, kind: ClusterIssuer, name: cluster-local-ca}
+                      caIssuer: {enabled: false}
+                    proxy:
+                      autoscaling:
+                        prometheus:
+                          cluster: ""
+                      deployment:
+                        name: private-access-gateway
+                      service:
+                        name: private-access-gateway
+                        type: ClusterIP
+                        clusterIPv4: 172.31.0.11
+                        loadBalancerClass: ""
+                        annotations: {}
+                        externalTrafficPolicy: Cluster
+                        ipFamilyPolicy: SingleStack
+                        ipFamilies: [IPv4]
+                        loadBalancerSourceRanges: []
+                        nodePorts: {http: 0, tls: 0}
+                  acmeOverrides:
+                    certificate:
+                      issuerRef:
+                        group: cert-manager.io
+                        kind: ClusterIssuer
+                        name: public-acme
+                - component: envoy-gateway-instance-public-hooks
+                  tier: fleet
+                  path: src/infra/argocd/components/envoy_gateway_instance/helm
+                  namespace: envoy-gateway-system
+                  wave: "30"
+                  vpa:
+                    targets:
+                      - public-hooks-gateway
+                  helmValues: values.yaml
+                  helmValuesObject:
+                    foundation:
+                      manageNamespace: false
+                    gateway:
+                      enabled: true
+                      canonicalScheme: https
+                      name: public-hooks
+                      namespace: envoy-gateway-system
+                      className: envoy-gateway-public-hooks
+                      aliasDomain: ""
+                      allowedNamespaces:
+                        # keep-sorted start
+                        - argocd
+                        - atlantis
+                        - envoy-gateway-system
+                        # keep-sorted end
+                      listeners:
+                        atlantisWebhookHttps:
+                          enabled: true
+                          hostname: hooks.corp.local.internal
+                          certificateSecret: public-hooks-atlantis-webhook-tls
+                    certificate:
+                      enabled: true
+                      issuerRef: {group: cert-manager.io, kind: ClusterIssuer, name: cluster-local-ca}
+                      caIssuer: {enabled: false}
+                    proxy:
+                      autoscaling:
+                        prometheus:
+                          cluster: ""
+                      deployment:
+                        name: public-hooks-gateway
+                      service:
+                        name: public-hooks-gateway
+                        type: LoadBalancer
+                        loadBalancerClass: service.k8s.aws/nlb
+                        annotations:
+                          service.beta.kubernetes.io/aws-load-balancer-ip-address-type: dualstack
+                          service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+                          service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+                        externalTrafficPolicy: Local
+                        ipFamilyPolicy: PreferDualStack
+                        ipFamilies: [IPv6, IPv4]
+                        # LINT.IfChange(github-webhook-cidrs)
+                        loadBalancerSourceRanges:
+                          # keep-sorted start
+                          - 140.82.112.0/20
+                          - 143.55.64.0/20
+                          - 185.199.108.0/22
+                          - 192.30.252.0/22
+                          - 2606:50c0::/32
+                          - 2a0a:a440::/29
+                          # keep-sorted end
+                        # LINT.ThenChange(//src/infra/argocd/components/routing_registry/helm/routes.yaml:github-webhook-cidrs)
+                        nodePorts: {http: 0, tls: 0}
+                  acmeOverrides:
+                    certificate:
+                      issuerRef:
+                        group: cert-manager.io
+                        kind: ClusterIssuer
+                        name: public-acme
+                - component: kube-oidc-proxy
+                  tier: fleet
+                  path: src/infra/argocd/components/kube_oidc_proxy/kustomize
+                  namespace: kube-oidc-proxy-system
+                  wave: "30"
+                  vpa: custom
+                - component: routing-registry
+                  tier: fleet
+                  path: src/infra/argocd/components/routing_registry/helm
+                  namespace: envoy-gateway-system
+                  wave: "30"
+                  helmValues: values.yaml
+                  helmValueFiles:
+                    - routes.yaml
+                  injectClusterProvider: true
+                  helmValuesObject:
+                    phase: all
+                    exposure: private
+                    capabilities:
+                      buildbuddy: true
+                    atlantisEnabled: true
+                    gatewayOIDC:
+                      version: 1
+                      issuer: https://dex.corp.local.internal
+                      jwksUri: https://dex.corp.local.internal/keys
+                      scopes:
+                        - openid
+                        - profile
+                        - email
+                        - groups
+                      groupsClaim: groups
+                      clients:
+                        buildbuddy:
+                          clientId: buildbuddy
+                          callbackUri: https://buildbuddy.corp.local.internal/oauth2/callback
+                          aliasCallbackUri: https://buildbuddy.corp.local.internal/oauth2/callback
+                        parca:
+                          clientId: parca
+                          callbackUri: https://parca.corp.local.internal/oauth2/callback
+                          aliasCallbackUri: https://parca.corp.local.internal/oauth2/callback
+                        signoz:
+                          clientId: signoz
+                          callbackUri: https://signoz.corp.local.internal/oauth2/callback
+                          aliasCallbackUri: https://signoz.corp.local.internal/oauth2/callback
+                    gateway:
+                      aliasDomain: corp.local.internal
+                      canonicalScheme: https
+                      httpRedirect: true
+                      name: private-access
+                      namespace: envoy-gateway-system
+                - component: routing-registry-public
+                  tier: fleet
+                  path: src/infra/argocd/components/routing_registry/helm
+                  namespace: envoy-gateway-system
+                  wave: "30"
+                  helmValues: values.yaml
+                  helmValueFiles:
+                    - routes.yaml
+                  injectClusterProvider: true
+                  helmValuesObject:
+                    phase: application
+                    exposure: public
+                    capabilities:
+                      buildbuddy: false
+                    atlantisEnabled: true
+                    gatewayOIDC: {}
+                    gateway:
+                      aliasDomain: ""
+                      baseDomain: ""
+                      canonicalScheme: https
+                      httpRedirect: false
+                      name: public-hooks
+                      namespace: envoy-gateway-system
+                      routeSections:
+                        atlantis-webhook: atlantis-webhook-https
+
+                # Wave 40: Platform services and telemetry
+                - component: atlantis
+                  tier: fleet
+                  path: src/infra/argocd/components/atlantis/kustomize
+                  namespace: atlantis
+                  wave: "40"
+                  chart: atlantis
+                  chartRepo: https://runatlantis.github.io/helm-charts
+                  chartVersion: 6.16.0
+                  vpa: custom
+                - component: coder
+                  tier: fleet
+                  path: src/infra/argocd/components/coder/kustomize
+                  namespace: coder
+                  wave: "40"
+                  chart: coder
+                  chartRepo: https://helm.coder.com/v2
+                  chartVersion: 2.37.2
+                  vpa:
+                    targets:
+                      - coder-oidc-entrypoint
+                - component: dex
+                  tier: fleet
+                  path: src/infra/argocd/components/dex/kustomize
+                  namespace: dex
+                  wave: "40"
+                  chart: dex
+                  chartRepo: https://charts.dexidp.io
+                  chartVersion: 0.24.1
+                - component: headlamp
+                  tier: fleet
+                  path: src/infra/argocd/components/headlamp/kustomize
+                  namespace: headlamp
+                  wave: "40"
+                  chart: headlamp
+                  chartRepo: https://kubernetes-sigs.github.io/headlamp
+                  chartVersion: 0.45.0
+                  vpa: custom
+                - component: homer
+                  tier: fleet
+                  path: src/infra/argocd/components/homer/kustomize
+                  namespace: homer
+                  wave: "40"
+                - component: kargo
+                  tier: fleet
+                  path: src/infra/argocd/components/kargo/kustomize
+                  namespace: kargo
+                  wave: "40"
+                  chart: kargo
+                  chartRepo: ghcr.io/akuity/kargo-charts
+                  chartVersion: 1.11.5
+                  vpa:
+                    targets:
+                      - kargo-api
+                      - kargo-controller
+                      - kargo-management-controller
+                      - kargo-webhooks-server
+                      - origin-registry-tls-proxy
+                - component: kuberhealthy
+                  tier: fleet
+                  path: src/infra/argocd/components/kuberhealthy/kustomize
+                  namespace: kuberhealthy
+                  wave: "40"
+                  chart: kuberhealthy
+                  chartRepo: https://kuberhealthy.github.io/kuberhealthy/helm-repos
+                  chartVersion: "100"
+                  ignoreDifferences:
+                    - group: apiextensions.k8s.io
+                      kind: CustomResourceDefinition
+                      jsonPointers:
+                        - /spec/preserveUnknownFields
+                - component: oauth2-proxy
+                  tier: fleet
+                  path: src/infra/argocd/components/oauth2_proxy/helm
+                  namespace: oauth2-proxy-system
+                  wave: "40"
+                  helmValues: values.yaml
+                - component: observability
+                  tier: fleet
+                  path: src/infra/definitions/observability
+                  namespace: signoz
+                  wave: "40"
+                  ignoreDifferences:
+                    - group: resources.signoz.io
+                      kind: AlertRule
+                      jsonPointers:
+                        - /metadata/annotations/resources.signoz.io~1create-attempt
+                        - /status
+                      jqPathExpressions:
+                        - .metadata.annotations["resources.signoz.io/create-attempt"]
+                        - .status
+                    - group: resources.signoz.io
+                      kind: Dashboard
+                      jsonPointers:
+                        - /metadata/annotations/resources.signoz.io~1create-attempt
+                        - /status
+                      jqPathExpressions:
+                        - .metadata.annotations["resources.signoz.io/create-attempt"]
+                        - .status
+                    - group: resources.signoz.io
+                      kind: Rule
+                      jsonPointers:
+                        - /metadata/annotations/resources.signoz.io~1create-attempt
+                        - /status
+                      jqPathExpressions:
+                        - .metadata.annotations["resources.signoz.io/create-attempt"]
+                        - .status
+                    - group: resources.signoz.io
+                      kind: SavedView
+                      jsonPointers:
+                        - /metadata/annotations/resources.signoz.io~1create-attempt
+                        - /status
+                      jqPathExpressions:
+                        - .metadata.annotations["resources.signoz.io/create-attempt"]
+                        - .status
+                - component: opencost
+                  tier: fleet
+                  path: src/infra/argocd/components/opencost/kustomize
+                  namespace: opencost
+                  wave: "40"
+                  chart: opencost
+                  chartRepo: https://opencost.github.io/opencost-helm-chart
+                  chartVersion: 2.5.32
+                  vpa:
+                    targets:
+                      - opencost
+                      - opencost-auth-proxy
+                - component: otel-collector
+                  tier: fleet
+                  path: src/infra/argocd/components/otel_collector/kustomize
+                  namespace: otel-system
+                  wave: "40"
+                  chart: opentelemetry-collector
+                  chartRepo: https://open-telemetry.github.io/opentelemetry-helm-charts
+                  chartVersion: 0.173.1
+                  injectClusterName: true
+                  vpa: custom
+                - component: parca
+                  tier: fleet
+                  path: src/infra/argocd/components/parca/kustomize
+                  namespace: parca
+                  wave: "40"
+                  vpa: custom
+                  ignoreDifferences:
+                    - group: ""
+                      kind: PersistentVolumeClaim
+                      name: parca-data
+                      jsonPointers:
+                        - /spec/resources/requests/storage
+                - component: parca-agent
+                  tier: fleet
+                  path: src/infra/argocd/components/parca_agent/kustomize
+                  namespace: parca
+                  wave: "40"
+                  vpa:
+                    targets:
+                      - name: parca-agent
+                        kind: DaemonSet
+                        updateMode: Initial
+                      - name: parca-agent-gpu
+                        kind: DaemonSet
+                        updateMode: Initial
+                - component: node-problem-detector
+                  tier: fleet
+                  path: src/infra/argocd/components/node_problem_detector/kustomize
+                  namespace: node-problem-detector
+                  wave: "40"
+                  vpa: custom
+                - component: prometheus-api-bridge
+                  tier: fleet
+                  path: src/infra/argocd/components/prometheus_api_bridge/kustomize
+                  namespace: signoz
+                  wave: "40"
+                  chart: prometheus-api-bridge
+                  chartRepo: ghcr.io/simonepri/charts
+                  chartVersion: 0.3.0
+                  injectClusterName: true
+                  vpa:
+                    targets:
+                      - prometheus-api-bridge
+                      - prometheus-api-bridge-collector
+                      - prometheus-api-bridge-kube-state-metrics
+                  ignoreDifferences:
+                    - group: apps
+                      kind: Deployment
+                      name: prometheus-api-bridge
+                      jsonPointers:
+                        - /metadata/generation
+                        - /spec/replicas
+                      jqPathExpressions:
+                        - .metadata.generation
+                        - .spec.replicas
+                - component: signoz
+                  tier: fleet
+                  path: src/infra/argocd/components/signoz/kustomize
+                  namespace: signoz
+                  wave: "40"
+                  chart: signoz
+                  chartRepo: https://charts.signoz.io
+                  chartVersion: 0.143.0
+                  injectClusterName: true
+                  vpa: custom
+                  ignoreDifferences:
+                    - group: ""
+                      kind: Namespace
+                      name: signoz
+                      jsonPointers:
+                        - /metadata/annotations
+                        - /metadata/labels
+                      jqPathExpressions:
+                        - .metadata.annotations
+                        - .metadata.labels
+                    - group: apps
+                      kind: Deployment
+                      name: signoz-otel-collector
+                      jsonPointers:
+                        - /metadata/generation
+                        - /spec/replicas
+                      jqPathExpressions:
+                        - .metadata.generation
+                        - .spec.replicas
+                    - group: apps
+                      kind: StatefulSet
+                      jsonPointers:
+                        - /spec/volumeClaimTemplates/0/status
+                        - /spec/volumeClaimTemplates/0/apiVersion
+                        - /spec/volumeClaimTemplates/0/kind
+                        - /spec/volumeClaimTemplates/0/spec/volumeMode
+                      jqPathExpressions:
+                        - .spec.volumeClaimTemplates[0].status
+                        - .spec.volumeClaimTemplates[0].apiVersion
+                        - .spec.volumeClaimTemplates[0].kind
+                        - .spec.volumeClaimTemplates[0].spec.volumeMode
+                - component: tailscale-access
+                  tier: fleet
+                  path: src/infra/argocd/components/tailscale_access/helm
+                  namespace: tailscale-system
+                  wave: "40"
+                  ignoreDifferences:
+                    # The Tailscale operator points egress Services at its generated proxy Service.
+                    - group: ""
+                      kind: Service
+                      namespace: tailscale-system
+                      name: active-ctrl-private-access
+                      jsonPointers: [/spec/externalName]
+                  helmValues: values.yaml
+                  helmValuesObject:
+                    mode: local-router
+                    clusterName: ""
+                    serviceCIDR: ""
+                    internalDomain: ""
+                    resolverRoutes: []
+                    egress:
+                      enabled: true
+                      gatewayIPv4: ""
+                      kubernetesAPIs: {}
+                    cloud:
+                      secretStoreName: runtime-secrets
+                      oauthRemoteKey: ""
+                    local:
+                      loginServer: ""
+                      authSecretName: headscale-preauth
+                      recordName: ""
+                      runtimeForwardTarget: ""
+                      secretStoreName: local-secret-records
+                - component: velero
+                  tier: fleet
+                  path: src/infra/argocd/components/velero/helm
+                  helmValueOverridesByProvider:
+                    floci: [src/infra/argocd/components/velero/helm/providers/floci.yaml]
+                  namespace: velero-system
+                  wave: "40"
+                  chart: velero
+                  chartRepo: https://vmware-tanzu.github.io/helm-charts
+                  chartVersion: 12.2.0
+                  vpa:
+                    targets:
+                      - name: velero
+                        kind: Deployment
+                      - name: node-agent
+                        kind: DaemonSet
+                        updateMode: Initial
+                - component: velero-ui
+                  tier: fleet
+                  path: src/infra/argocd/components/velero_ui/kustomize
+                  namespace: velero-system
+                  wave: "40"
+                  chart: velero-ui
+                  chartRepo: https://helm.otwld.com
+                  chartVersion: 0.16.0
+
+                # Wave 41: Snapshot browsing
+                - component: coder-snapshot-portal
+                  tier: fleet
+                  # LINT.IfChange(snapshot-portal-image)
+                  flociPortalImage: localhost:15100/000000000000/us-east-1/src/infra/tools/coder_snapshot_portal@sha256:156d1b3edb4b5bb8bcc013d2fa500b4e3b3b9bccf92cd1ae03f8d7bc439ac089
+                  cloudPortalDigest: sha256:156d1b3edb4b5bb8bcc013d2fa500b4e3b3b9bccf92cd1ae03f8d7bc439ac089
+                  # LINT.ThenChange(//src/infra/argocd/components/coder_snapshot_portal/helm/values.yaml:snapshot-portal-image)
+                  path: src/infra/argocd/components/coder_snapshot_portal/helm
+                  namespace: coder-workspace-backup-system
+                  wave: "41"
+                  helmValues: values.yaml
+                  ignoreDifferences:
+                    - group: apps
+                      kind: Deployment
+                      namespace: coder-workspace-backup-system
+                      name: coder-snapshot-portal
+                      jsonPointers: [/spec/template/metadata/annotations/coder.openplex.dev~1oauth-version]
+
+                # Wave 50: Security, compliance, and network policies
+                - component: cluster-access
+                  tier: fleet
+                  path: src/infra/argocd/components/cluster_access/kustomize
+                  namespace: argocd
+                  wave: "50"
+                - component: falco
+                  tier: fleet
+                  path: src/infra/argocd/components/falco/kustomize
+                  namespace: falco
+                  wave: "50"
+                  chart: falco
+                  chartRepo: https://falcosecurity.github.io/charts
+                  chartVersion: 9.2.0
+                  vpa: custom
+                - component: kubescape-operator
+                  tier: fleet
+                  path: src/infra/argocd/components/kubescape_operator/kustomize
+                  namespace: kubescape-system
+                  wave: "50"
+                  chart: kubescape-operator
+                  chartRepo: https://kubescape.github.io/helm-charts
+                  chartVersion: 1.40.4
+                  vpa:
+                    targets:
+                      - kubescape
+                      - operator
+                      - prometheus-exporter
+                      - storage
+                  ignoreDifferences:
+                    - group: apps
+                      kind: Deployment
+                      jsonPointers:
+                        - /spec/template/spec/containers/0/livenessProbe
+                        - /spec/template/spec/containers/0/readinessProbe
+                  helmValuesObject:
+                    kubescapeScheduler:
+                      scanSchedule: "7 1,9,17 * * *"
+                - component: network-isolation
+                  tier: fleet
+                  path: src/infra/argocd/components/network_isolation/helm
+                  namespace: kube-system
+                  wave: "50"
+                  helmValues: values.yaml
+                  helmValuesObject:
+                    namespaces:
+                      # keep-sorted start
+                      - argocd
+                      - atlantis
+                      - buildbuddy
+                      - cert-manager-system
+                      - clickhouse-system
+                      - cnpg-system
+                      - coder
+                      - coder-workspace-backup-system
+                      - dex
+                      - dragonfly-system
+                      - envoy-gateway-system
+                      - external-secrets-system
+                      - falco
+                      - headlamp
+                      - homer
+                      - k8s-cleaner-system
+                      - kargo
+                      - keda-system
+                      - kubescape-system
+                      - kyverno-system
+                      - node-problem-detector
+                      - opencost
+                      - otel-system
+                      - parca
+                      - prowler
+                      - pvc-autoresizer-system
+                      - signoz
+                      - signoz-operator-system
+                      - tailscale-system
+                      - trivy-system
+                      - valkey-system
+                      - velero-system
+                      - vpa-system
+                      # keep-sorted end
+                - component: prowler
+                  tier: fleet
+                  path: src/infra/argocd/components/prowler/kustomize
+                  namespace: prowler
+                  wave: "50"
+                - component: trivy-operator
+                  tier: fleet
+                  path: src/infra/argocd/components/trivy_operator/kustomize
+                  namespace: trivy-system
+                  wave: "50"
+                  chart: trivy-operator
+                  chartRepo: https://aquasecurity.github.io/helm-charts
+                  chartVersion: 0.36.0
+                - component: trivy-server
+                  tier: fleet
+                  path: src/infra/argocd/components/trivy_server/kustomize
+                  namespace: trivy-system
+                  wave: "50"
+                  chart: trivy
+                  chartRepo: https://aquasecurity.github.io/helm-charts
+                  chartVersion: 0.26.0
+                  vpa: custom
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        provider: aws
+                        role: ctrl
+                - git:
+                    repoURL: '{{ index .metadata.annotations "git-repo-url" }}'
+                    revision: HEAD
+                    pathParamPrefix: profileSource
+                    files:
+                      - path: src/infra/argocd/apps/profiles.yaml
+          - list:
+              elements:
+                - component: karpenter-aws
+                  tier: substrate
+                  path: src/infra/argocd/components/karpenter_aws/kustomize/overlays/ctrl
+                  namespace: karpenter-system
+                  wave: "5"
+                  chart: karpenter
+                  chartRepo: public.ecr.aws/karpenter
+                  chartVersion: 1.14.0
+                  vpa:
+                    targets:
+                      - karpenter-aws
+                - component: aws-load-balancer-controller
+                  tier: fleet
+                  path: src/infra/argocd/components/aws_load_balancer_controller/helm
+                  namespace: kube-system
+                  wave: "20"
+                  vpa: true
+                  chart: aws-load-balancer-controller
+                  chartRepo: https://aws.github.io/eks-charts
+                  chartVersion: 3.5.0
+                - component: external-dns
+                  tier: fleet
+                  path: src/infra/argocd/components/external_dns/kustomize
+                  namespace: external-dns-system
+                  wave: "30"
+                  chart: external-dns
+                  chartRepo: https://kubernetes-sigs.github.io/external-dns
+                  chartVersion: 1.22.0
+                - component: tailscale-operator
+                  tier: fleet
+                  path: src/infra/argocd/components/tailscale_operator/helm
+                  namespace: tailscale-system
+                  wave: "20"
+                  chart: tailscale-operator
+                  chartRepo: https://pkgs.tailscale.com/helmcharts
+                  chartVersion: 1.102.4
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        provider: gcp
+                        role: ctrl
+                - git:
+                    repoURL: '{{ index .metadata.annotations "git-repo-url" }}'
+                    revision: HEAD
+                    pathParamPrefix: profileSource
+                    files:
+                      - path: src/infra/argocd/apps/profiles.yaml
+          - list:
+              elements:
+                - component: external-dns
+                  tier: fleet
+                  path: src/infra/argocd/components/external_dns/kustomize
+                  namespace: external-dns-system
+                  wave: "30"
+                  chart: external-dns
+                  chartRepo: https://kubernetes-sigs.github.io/external-dns
+                  chartVersion: 1.22.0
+                - component: tailscale-operator
+                  tier: fleet
+                  path: src/infra/argocd/components/tailscale_operator/helm
+                  namespace: tailscale-system
+                  wave: "20"
+                  chart: tailscale-operator
+                  chartRepo: https://pkgs.tailscale.com/helmcharts
+                  chartVersion: 1.102.4
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        provider: floci
+                        role: ctrl
+                - git:
+                    repoURL: '{{ index .metadata.annotations "git-repo-url" }}'
+                    revision: HEAD
+                    pathParamPrefix: profileSource
+                    files:
+                      - path: src/infra/argocd/apps/profiles.yaml
+          - list:
+              elements:
+                - component: coredns
+                  tier: substrate
+                  path: src/infra/argocd/components/coredns/helm
+                  namespace: kube-system
+                  wave: "5"
+                  vpa: true
+                  helmValues: values.yaml
+                  injectClusterDomain: true
+                  helmValuesObject:
+                    provider: floci
+                    cluster: {name: "", role: ctrl}
+                    accessAliasDomain: ""
+                    control:
+                      name: ""
+                      gatewayIPv4: ""
+                      headscaleIPv4: ""
+                      originRegistryIPv4: ""
+                    internalDomain: ""
+                    cellDomains: {}
+                    cellIPv4s: {}
+                    privateAccess:
+                      baseDomain: ""
+                      coderAppsWildcard: true
+                      gatewayIPv4: ""
+                      recordLabels: [argocd, atlantis, buildbuddy, clickhouse, coder, coder-access, coder-snapshots, dex, dragonfly, dragonfly-manager, headlamp, home, kargo, kubescape-ui, observability, opencost, parca, prowler, ray, signoz, snapshots, svelte-web, velero-ui]
+                    rewrites: {}
+                - component: local-runtime-tls
+                  tier: fleet
+                  path: src/infra/argocd/components/local_runtime_tls/helm
+                  namespace: cert-manager-system
+                  wave: "15"
+                  injectClusterDomain: true
+                  # floci-divergence: The emulator serves the seeded registry and local AWS API regions.
+                  helmValuesObject:
+                    endpointRegions:
+                      ecr: [us-east-1, us-west-2, local]
+                      s3: [us-west-2]
+                    local:
+                      control:
+                        record: ""
+                      network:
+                        services:
+                          floci: 172.19.0.2
+                          headscale: 172.19.255.23
+                          origin_registry: 172.19.255.22
+                  helmValueFiles:
+                    - values.yaml
+                - component: rawfile-localpv
+                  tier: substrate
+                  path: src/infra/argocd/components/rawfile_localpv/kustomize
+                  namespace: kube-system
+                  wave: "20"
+                  chart: rawfile-localpv
+                  chartRepo: https://openebs.github.io/rawfile-localpv
+                  chartVersion: 0.15.3
+                  helmValuesObject:
+                    image:
+                      registry: localhost:15100
+                      repository: 000000000000/us-east-1/src/third_party/openebs/rawfile-localpv
+                      tag: v0.15.3-r1@sha256:d7498ff0f5380f745f740164640e042c6b2f87174f2f7a6299d43c67c75f8ff4
+                  vpa:
+                    targets:
+                      - name: rawfile-localpv-controller
+                        kind: Deployment
+                      - name: rawfile-localpv-node
+                        kind: DaemonSet
+                        updateMode: Initial
+    # Public ACME is opt-in. The cluster registration contract must carry this
+    # label only after the deployment has real ACME and DNS credentials.
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        acme-dns01: enabled
+                        role: ctrl
+                - git:
+                    repoURL: '{{ index .metadata.annotations "git-repo-url" }}'
+                    revision: HEAD
+                    pathParamPrefix: profileSource
+                    files:
+                      - path: src/infra/argocd/apps/profiles.yaml
+          - list:
+              elements:
+                - component: acme
+                  tier: fleet
+                  path: src/infra/argocd/components/acme/kustomize
+                  namespace: cert-manager-system
+                  wave: "15"
+    # BuildBuddy in-cluster community server is only dispatched when mode is not cloud.
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        role: ctrl
+                      matchExpressions:
+                        - key: buildbuddy.io/mode
+                          operator: NotIn
+                          values:
+                            - cloud
+                - git:
+                    repoURL: '{{ index .metadata.annotations "git-repo-url" }}'
+                    revision: HEAD
+                    pathParamPrefix: profileSource
+                    files:
+                      - path: src/infra/argocd/apps/profiles.yaml
+          - list:
+              elements:
+                - component: buildbuddy
+                  tier: fleet
+                  path: src/infra/argocd/components/buildbuddy/kustomize
+                  namespace: buildbuddy
+                  wave: "40"
+                  domainUrlPatch:
+                    target:
+                      group: apps
+                      version: v1
+                      kind: Deployment
+                      name: buildbuddy
+                    path: /spec/template/spec/containers/0/env/1/value
+                    prefix: https://buildbuddy.
+  template:
+    metadata:
+      name: '{{ .nameNormalized }}-{{ .component }}'
+      namespace: argocd
+      annotations:
+        # keep-sorted start
+        argocd.argoproj.io/compare-options: IncludeMutationWebhook=true
+        argocd.argoproj.io/sync-wave: '{{ .wave }}'
+        # keep-sorted end
+      labels:
+        # keep-sorted start
+        cluster: '{{ .nameNormalized }}'
+        role: ctrl
+        team: global
+        tier: '{{ .tier }}'
+        wave: '{{ .wave }}'
+        # keep-sorted end
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: cluster-ctrl
+      destination:
+        server: '{{ .server }}'
+        namespace: '{{ .namespace }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        # LINT.IfChange(sync-retry)
+        # Bounded so a persistently failing sync (including hooks) ends as Failed and alerts, while ~25 minutes of
+        # backoff still covers bootstrap ordering across sync waves.
+        retry:
+          limit: 10
+          refresh: true
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
+        # LINT.ThenChange(//src/infra/argocd/apps/cells.yaml:sync-retry,//src/infra/argocd/apps/teams.yaml:sync-retry)
+        syncOptions:
+          # keep-sorted start
+          - CreateNamespace=true
+          - IncludeMutationWebhook=true
+          - RespectIgnoreDifferences=true
+          - ServerSideApply=true
+          # keep-sorted end
+  templatePatch: |
+    {{- $provider := default "" (index .metadata.labels "provider") }}
+    # floci-divergence: Local development clusters default to the minimal resource profile to fit host resources.
+    {{- $profileName := default (ternary "minimal" "production" (eq $provider "floci")) (index .metadata.labels "profile") }}
+    {{- if not (hasKey .profiles $profileName) }}
+    {{- fail (printf "unknown availability profile %q" $profileName) }}
+    {{- end }}
+    {{- $profile := index .profiles $profileName }}
+    {{- $componentProfile := default dict (index $profile.components .component) }}
+    {{- $helmValues := mergeOverwrite (deepCopy (default dict $componentProfile.helmValues)) (default dict .helmValuesObject) }}
+    {{- if and (eq .component "network-isolation") (or (eq $provider "aws") (eq $provider "gcp")) }}
+    {{- $namespaces := default list (index $helmValues "namespaces") }}
+    {{- $namespaces = append $namespaces "external-dns-system" }}
+    {{- if eq $provider "aws" }}
+    {{- if ne (default "" (index .metadata.labels "karpenter")) "disabled" }}
+    {{- $namespaces = append $namespaces "karpenter-system" }}
+    {{- end }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "namespaces" $namespaces) }}
+    {{- end }}
+    {{- if .injectClusterName }}
+    {{- if eq .component "otel-collector" }}
+    {{- $extraEnvs := default list (index (default dict .helmValuesObject) "extraEnvs") }}
+    {{- $extraEnvs = concat (list (dict "name" "K8S_CLUSTER_NAME" "value" .nameNormalized)) $extraEnvs }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "extraEnvs" $extraEnvs) }}
+    {{- else if eq .component "signoz" }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "otelCollector" (dict "additionalEnvs" (dict "K8S_CLUSTER_NAME" .nameNormalized))) }}
+    {{- else }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "clusterName" .nameNormalized) }}
+    {{- end }}
+    {{- end }}
+    {{- $annotations := default dict .metadata.annotations }}
+    {{- $repoURL := index $annotations "git-repo-url" }}
+    {{- $gitTransportURL := index $annotations "git-transport-url" | default $repoURL }}
+    {{- $publicDomain := default "local.internal" (index $annotations "public-domain") }}
+    {{- $intranetDomain := default (printf "corp.%s" $publicDomain) (or (index $annotations "intranet-domain") (index $annotations "domain")) }}
+    {{- $clusterDomain := default (printf "c.%s" $intranetDomain) (or (index $annotations "cluster-domain") (index $annotations "access-domain")) }}
+    {{- $accessDomain := $clusterDomain }}
+    {{- $baseDomain := printf "%s.c.%s" .nameNormalized $intranetDomain }}
+    {{- $registeredCells := list }}
+    {{- with or (index $annotations "registered-cells") (index $annotations "registered-cell") }}
+    {{- range $c := splitList "," . }}
+    {{- $trimmed := trim $c }}
+    {{- if ne $trimmed "" }}
+    {{- $registeredCells = append $registeredCells $trimmed }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- $operatorGroupEmail := coalesce (index $annotations "operator-group-email") (index $annotations "operator-group") (printf "operators@%s" $publicDomain) }}
+    {{- $googleAdminEmail := coalesce (index $annotations "google-admin-email") (index $annotations "admin-email") (printf "admin@%s" $publicDomain) }}
+    {{- $hostedDomains := default (list $publicDomain) }}
+    {{- with index $annotations "hosted-domains" }}
+    {{- $hostedDomains = splitList "," . }}
+    {{- end }}
+    {{- $operatorEmails := list }}
+    {{- with or (index $annotations "operator-emails") (index $annotations "operator-email") }}
+    {{- range $e := splitList "," . }}
+    {{- $trimmed := trim $e }}
+    {{- if ne $trimmed "" }}
+    {{- $operatorEmails = append $operatorEmails $trimmed }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- $operatorGroups := list "operators" }}
+    # floci-divergence: Local clusters do not have Google Workspace directory groups.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- if not (has $operatorGroupEmail $operatorGroups) }}
+    {{- $operatorGroups = append $operatorGroups $operatorGroupEmail }}
+    {{- end }}
+    {{- range $d := $hostedDomains }}
+    {{- $domainGroup := printf "operators@%s" $d }}
+    {{- if not (has $domainGroup $operatorGroups) }}
+    {{- $operatorGroups = append $operatorGroups $domainGroup }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if .injectClusterDomain }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "publicDomain" $publicDomain "accessAliasDomain" $clusterDomain "internalDomain" $clusterDomain) }}
+    {{- end }}
+    {{- if eq .component "opencost" }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "opencost" (dict "exporter" (dict "defaultClusterId" .nameNormalized))) }}
+    {{- $cloudCostEnabled := eq (toString (coalesce (index $annotations "opencost-cloud-cost-reader") (index (default dict .metadata.labels) "opencost-cloud-cost-reader") "")) "true" }}
+    {{- if and (or (eq $provider "aws") (eq $provider "gcp")) $cloudCostEnabled }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "opencost" (dict "cloudCost" (dict "enabled" true) "customPricing" (dict "enabled" true))) }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "tailscale-access" }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "clusterName" .nameNormalized "internalDomain" $clusterDomain) }}
+    # floci-divergence: Floci clusters run with local router tailnet mode vs cloud connector.
+    {{- if ne $provider "floci" }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "mode" "cloud-connector") }}
+    {{- $resolverRoutes := list }}
+    {{- if eq $provider "aws" }}
+    {{- $resolverRoutes = list "10.0.0.2/32" }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "cloud" (dict "secretStoreName" "aws-secrets-manager")) }}
+    {{- else if eq $provider "gcp" }}
+    {{- $resolverRoutes = list "169.254.169.254/32" }}
+    {{- end }}
+    {{- with (index $annotations "resolver-routes") }}
+    {{- $resolverRoutes = splitList "," . }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "resolverRoutes" $resolverRoutes) }}
+    {{- else }}
+    # floci-divergence: Floci local clusters route internally through local Headscale and gateway.
+    {{- $flociGateway := coalesce (index (default dict (index .helmValuesObject "egress")) "gatewayIPv4") (index $annotations "control-gateway-ipv4") "172.31.16.11" }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "internalDomain" $clusterDomain "egress" (dict "gatewayIPv4" $flociGateway) "local" (dict "recordName" (printf "headscale-preauth-%s" .nameNormalized) "loginServer" (printf "https://headscale.%s" $clusterDomain))) }}
+    {{- end }}
+    {{- $defaultTailscaleKey := printf "%s-tailscale-operator-oauth" .nameNormalized }}
+    {{- $tailscaleKey := default $defaultTailscaleKey (index $annotations "tailscale-oauth-key") }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "cloud" (dict "oauthRemoteKey" $tailscaleKey)) }}
+    {{- with (index $annotations "service-cidr") }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "serviceCIDR" .) }}
+    {{- end }}
+    # floci-divergence: The local control router preserves its configured cell gateway destination.
+    {{- if ne $provider "floci" }}
+    {{- with (index $annotations "control-gateway-ipv4") }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "egress" (dict "gatewayIPv4" .)) }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "coredns" }}
+    # floci-divergence: Floci local clusters route through deterministic control gateway IP.
+    {{- $controlGatewayIPv4 := default (ternary "172.31.0.11" "" (eq $provider "floci")) (index $annotations "control-gateway-ipv4") }}
+    {{- $cellDomains := deepCopy (default dict (index $helmValues "cellDomains")) }}
+    {{- if eq (len $cellDomains) 0 }}
+    {{- range $c := $registeredCells }}
+    {{- $_ := set $cellDomains $c $clusterDomain }}
+    {{- end }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "provider" $provider "cluster" (dict "name" .nameNormalized "role" "ctrl") "accessAliasDomain" $clusterDomain "internalDomain" $clusterDomain "control" (dict "name" .nameNormalized "gatewayIPv4" $controlGatewayIPv4) "cellDomains" $cellDomains "privateAccess" (dict "baseDomain" $baseDomain "gatewayIPv4" $controlGatewayIPv4)) }}
+    # floci-divergence: Floci local clusters inject local headscale and registry IPs.
+    {{- if eq $provider "floci" }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "control" (dict "headscaleIPv4" (default "172.19.255.23" (index $annotations "headscale-ipv4")) "originRegistryIPv4" (default "172.19.255.22" (index $annotations "origin-registry-ipv4")))) }}
+    # floci-divergence: Local cell API hostnames resolve through the in-cluster tailnet egress service.
+    {{- $rewrites := deepCopy (default dict (index $helmValues "rewrites")) }}
+    {{- range $cell, $domain := $cellDomains }}
+    {{- $_ := set $rewrites (printf "kube-oidc-proxy.%s.%s" $cell $domain) "active-cell-private-access.tailscale-system.svc.cluster.local" }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "rewrites" $rewrites) }}
+    {{- else }}
+    # floci-divergence: Upstream Route 53 resolver rules resolve private domains identically on Floci; cloud clusters use Tailscale SaaS without a local Headscale endpoint.
+    {{- $helmValues = mergeOverwrite $helmValues (dict "control" (dict "headscaleIPv4" "")) }}
+    {{- end }}
+    {{- with (index $annotations "control-gateway-ipv4") }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "control" (dict "gatewayIPv4" .)) }}
+    {{- end }}
+    {{- with (index $annotations "service-cidr") }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "serviceCIDR" .) }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "local-runtime-tls" }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "local" (dict "control" (dict "record" .nameNormalized))) }}
+    {{- end }}
+    {{- if eq .component "storage-classes" }}
+    {{- $storageProvider := ternary "aws" (ternary "gcp" "local" (eq $provider "gcp")) (eq $provider "aws") }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "provider" $storageProvider) }}
+    {{- end }}
+    {{- if eq .component "k8s-cleaner" }}
+    # floci-divergence: Floci clusters run with 1-hour PV retention for fast local cleanup.
+    {{- $isLocal := eq $provider "floci" }}
+    {{- $reclaimerValues := dict "pvReclaimer" (dict "ttlSeconds" (ternary 3600 2592000 $isLocal) "schedule" (ternary "0 * * * *" "0 3 * * *" $isLocal)) }}
+    {{- $helmValues = mergeOverwrite $helmValues $reclaimerValues }}
+    {{- end }}
+    {{- if eq .component "karpenter-aws" }}
+    {{- $interruptionQueue := printf "%s-karpenter" .nameNormalized }}
+    {{- $karpenterAwsValues := dict "settings" (dict "clusterName" .nameNormalized "interruptionQueue" $interruptionQueue) }}
+    # floci-divergence: Floci emulates AWS EC2/SQS via local Floci endpoint.
+    {{- if eq $provider "floci" }}
+    {{- $karpenterAwsValues = mergeOverwrite $karpenterAwsValues (dict "controller" (dict "env" (list (dict "name" "AWS_REGION" "value" "us-east-1") (dict "name" "AWS_DEFAULT_REGION" "value" "us-east-1") (dict "name" "AWS_ENDPOINT_URL" "value" (index $annotations "s3-endpoint"))))) }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues $karpenterAwsValues }}
+    {{- end }}
+    {{- if eq .component "aws-load-balancer-controller" }}
+    {{- $awsRegion := default "configured-by-applicationset" (coalesce (index $annotations "aws-region") (index $annotations "region") (index (default dict .metadata.labels) "region")) }}
+    {{- $awsVpcId := default "configured-by-applicationset" (coalesce (index $annotations "aws-vpc-id") (index $annotations "vpc-id")) }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "clusterName" .nameNormalized "region" $awsRegion "vpcId" $awsVpcId) }}
+    {{- end }}
+    {{- if eq .component "external-dns" }}
+    {{- $dnsProvider := ternary "aws" (ternary "google" "floci" (eq $provider "gcp")) (eq $provider "aws") }}
+    {{- $extDnsValues := dict "provider" $dnsProvider "txtOwnerId" .nameNormalized "domainFilters" (list $accessDomain $intranetDomain $publicDomain) }}
+    {{- if eq $provider "gcp" }}
+    {{- $gcpProject := default "configured-by-applicationset" (coalesce (index $annotations "gcp-project-id") (index $annotations "project-id") (index (default dict .metadata.labels) "project")) }}
+    {{- $extDnsSa := printf "%s-external-dns@%s.iam.gserviceaccount.com" .nameNormalized $gcpProject }}
+    {{- $extDnsValues = mergeOverwrite $extDnsValues (dict "serviceAccount" (dict "annotations" (dict "iam.gke.io/gcp-service-account" $extDnsSa))) }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues $extDnsValues }}
+    {{- end }}
+    {{- if eq .component "atlantis" }}
+    {{- $atlantisUrl := printf "https://atlantis.%s" $accessDomain }}
+    {{- $orgAllowlist := default "" (index $annotations "atlantis-org-allowlist") }}
+    {{- if eq $orgAllowlist "" }}
+    {{- if contains "github.com" $repoURL }}
+    {{- $orgAllowlist = regexReplaceAll "^(?:https?://|git@|git://)?github\\.com[:/]([^/]+/[^/.]+)(?:\\.git)?$" $repoURL "github.com/${1}" }}
+    {{- else }}
+    {{- $orgAllowlist = "github.com/simonepri/openplex" }}
+    {{- end }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "atlantisUrl" $atlantisUrl "orgAllowlist" $orgAllowlist) }}
+    {{- end }}
+    {{- if eq .component "kargo" }}
+    {{- $kargoHost := printf "kargo.%s" $accessDomain }}
+    {{- $kargoIssuer := printf "https://dex.%s" $intranetDomain }}
+    {{- $kargoClaims := dict "groups" $operatorGroups }}
+    {{- if gt (len $operatorEmails) 0 }}
+    {{- $kargoClaims = mergeOverwrite $kargoClaims (dict "email" $operatorEmails) }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "api" (dict "host" $kargoHost "oidc" (dict "issuerURL" $kargoIssuer "admins" (dict "claims" $kargoClaims)))) }}
+    {{- end }}
+    {{- if eq .component "coder-snapshot-portal" }}
+    {{- $accessHost := printf "coder-snapshots.%s" $baseDomain }}
+    {{- $coderUrl := printf "https://coder.%s" $intranetDomain }}
+    {{- $resourcePrefix := default "corp" (coalesce (index $annotations "resource-prefix") (index $annotations "storage-prefix")) }}
+    {{- $awsRegion := default "configured-by-applicationset" (coalesce (index $annotations "aws-region") (index $annotations "region") (index (default dict .metadata.labels) "region")) }}
+    {{- $backupBucket := coalesce (index $annotations "backups-bucket") (printf "%s-%s-backups" $resourcePrefix .nameNormalized) }}
+    {{- $s3Bucket := $backupBucket }}
+    {{- $s3Endpoint := default "" (index $annotations "s3-endpoint") }}
+    # floci-divergence: Floci runs S3 locally in us-east-1 LocalStack zone.
+    {{- $s3Region := ternary "us-east-1" $awsRegion (eq $provider "floci") }}
+    # floci-divergence: Local Floci clusters route snapshot portal traffic through deterministic control gateway.
+    {{- $controlGatewayIPv4 := default (ternary "172.31.0.11" "" (eq $provider "floci")) (index $annotations "control-gateway-ipv4") }}
+    {{- $portalValues := dict "cell" .nameNormalized "access" (dict "hostname" $accessHost "gatewayIPv4" $controlGatewayIPv4) "coder" (dict "url" $coderUrl) "s3" (dict "bucket" $s3Bucket "endpoint" $s3Endpoint "region" $s3Region) }}
+    {{- $portalImageRef := "" }}
+    # floci-divergence: Floci pulls the portal image from its seeded origin registry; cloud clusters use the ECR infrastructure image.
+    {{- if eq $provider "floci" }}
+    {{- $portalImageRef = .flociPortalImage }}
+    {{- else if ne $provider "" }}
+    {{- $ecrRegistry := coalesce (index $annotations "ecr-registry") (index $annotations "workload-registry") }}
+    {{- if not $ecrRegistry }}{{ fail (printf "%s requires ecr-registry or workload-registry annotation on %s" .component $provider) }}{{- end }}
+    {{- $portalImageRef = printf "%s/%s/infrastructure:coder-snapshot-portal@%s" $ecrRegistry .nameNormalized .cloudPortalDigest }}
+    {{- end }}
+    {{- if $portalImageRef }}
+    {{- $portalImage := splitList "@" $portalImageRef }}
+    {{- $portalValues = mergeOverwrite $portalValues (dict "image" (dict "repository" (index $portalImage 0) "digest" (index $portalImage 1))) }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues $portalValues }}
+    {{- end }}
+    {{- if eq .component "envoy-gateway-instance" }}
+    {{- $dragonflyManagerHost := printf "dragonfly-manager.%s" $accessDomain }}
+    {{- $wildcardHost := printf "*.%s" $baseDomain }}
+    {{- $coderAppsHost := printf "*.coder.%s" $baseDomain }}
+    {{- $envoyValues := dict "gateway" (dict "aliasDomain" $intranetDomain "baseDomain" $baseDomain "listeners" (dict "dragonflyManagerTls" (dict "hostname" $dragonflyManagerHost) "coderApps" (dict "hostname" $coderAppsHost) "https" (dict "hostname" $wildcardHost))) "proxy" (dict "autoscaling" (dict "prometheus" (dict "cluster" .nameNormalized))) }}
+    # floci-divergence: Cloud clusters dynamically allocate Envoy Gateway service IP from provider CIDRs.
+    {{- if ne $provider "floci" }}
+    {{- $envoyValues = mergeOverwrite $envoyValues (dict "proxy" (dict "service" (dict "clusterIPv4" ""))) }}
+    {{- end }}
+    {{- $helmValues = mergeOverwrite $helmValues $envoyValues }}
+    {{- end }}
+    {{- if eq .component "envoy-gateway-instance-public-hooks" }}
+    {{- $hooksHost := printf "hooks.%s" $publicDomain }}
+    {{- $envoyValues := dict "gateway" (dict "baseDomain" $publicDomain "listeners" (dict "atlantisWebhookHttps" (dict "hostname" $hooksHost))) "proxy" (dict "autoscaling" (dict "prometheus" (dict "cluster" .nameNormalized))) }}
+    {{- $helmValues = mergeOverwrite $helmValues $envoyValues }}
+    {{- end }}
+    {{- if eq .component "routing-registry" }}
+    # floci-divergence: Floci local clusters read API key secrets from the Kubernetes-backed secret store.
+    {{- $secretStore := default (ternary "local-secret-records" "runtime-secrets" (eq $provider "floci")) (index $annotations "secret-store") }}
+    {{- $dexHost := printf "dex.%s" $intranetDomain }}
+    {{- $gatewayOIDC := dict "version" 1 "issuer" (printf "https://%s" $dexHost) "jwksUri" (printf "https://%s/keys" $dexHost) "scopes" (list "openid" "profile" "email" "groups") "groupsClaim" "groups" "operatorGroups" $operatorGroups "operatorEmails" $operatorEmails "clients" (dict "buildbuddy" (dict "clientId" "buildbuddy" "callbackUri" (printf "https://buildbuddy.%s/oauth2/callback" $intranetDomain) "aliasCallbackUri" (printf "https://buildbuddy.%s/oauth2/callback" $intranetDomain)) "kuberhealthy" (dict "clientId" "kuberhealthy" "callbackUri" (printf "https://kuberhealthy.%s/oauth2/callback" $intranetDomain) "aliasCallbackUri" (printf "https://kuberhealthy.%s/oauth2/callback" $intranetDomain)) "parca" (dict "clientId" "parca" "callbackUri" (printf "https://parca.%s/oauth2/callback" $intranetDomain) "aliasCallbackUri" (printf "https://parca.%s/oauth2/callback" $intranetDomain)) "signoz" (dict "clientId" "signoz" "callbackUri" (printf "https://signoz.%s/oauth2/callback" $intranetDomain) "aliasCallbackUri" (printf "https://signoz.%s/oauth2/callback" $intranetDomain))) }}
+    {{- $apiKeyRecordSources := dict }}
+    {{- $routingValues := dict "gateway" (dict "aliasDomain" $intranetDomain "baseDomain" $baseDomain) "gatewayOIDC" $gatewayOIDC "apiKeySecretStore" $secretStore "apiKeyRecordSources" $apiKeyRecordSources }}
+    {{- $helmValues = mergeOverwrite $helmValues $routingValues }}
+    {{- end }}
+    {{- if eq .component "routing-registry-public" }}
+    {{- $routingValues := dict "gateway" (dict "aliasDomain" "" "baseDomain" $publicDomain "name" "public-hooks" "routeSections" (dict "atlantis-webhook" "atlantis-webhook-https")) }}
+    {{- $helmValues = mergeOverwrite $helmValues $routingValues }}
+    {{- end }}
+    {{- if eq .component "velero" }}
+    {{- $resourcePrefix := default "corp" (coalesce (index $annotations "resource-prefix") (index $annotations "storage-prefix")) }}
+    {{- $backupBucket := coalesce (index $annotations "backups-bucket") (printf "%s-%s-backups" $resourcePrefix .nameNormalized) }}
+    {{- if eq $provider "aws" }}
+    {{- $awsRegion := default "configured-by-applicationset" (coalesce (index $annotations "aws-region") (index $annotations "region") (index (default dict .metadata.labels) "region")) }}
+    {{- $veleroAwsValues := dict "credentials" (dict "useSecret" false) "configuration" (dict "backupStorageLocation" (list (dict "name" "default" "provider" "aws" "bucket" $backupBucket "config" (dict "region" $awsRegion)))) }}
+    {{- $helmValues = mergeOverwrite $helmValues $veleroAwsValues }}
+    {{- else if eq $provider "gcp" }}
+    {{- $gcpProject := default "configured-by-applicationset" (coalesce (index $annotations "gcp-project-id") (index $annotations "project-id") (index (default dict .metadata.labels) "project")) }}
+    {{- $veleroSa := printf "%s-velero@%s.iam.gserviceaccount.com" .nameNormalized $gcpProject }}
+    {{- $veleroGcpValues := dict "credentials" (dict "useSecret" false) "serviceAccount" (dict "server" (dict "annotations" (dict "iam.gke.io/gcp-service-account" $veleroSa))) "configuration" (dict "backupStorageLocation" (list (dict "name" "default" "provider" "gcp" "bucket" $backupBucket))) }}
+    {{- $helmValues = mergeOverwrite $helmValues $veleroGcpValues }}
+    {{- else }}
+    # LINT.IfChange(velero-floci-storage)
+    # floci-divergence: Local backup storage uses the registered foundation bucket and endpoint.
+    {{- $backupBucket := index $annotations "backups-bucket" }}
+    {{- if not $backupBucket }}{{ fail "Floci Velero requires the backups-bucket cluster annotation" }}{{- end }}
+    {{- $veleroFlociValues := dict "configuration" (dict "backupStorageLocation" (list (dict "name" "default" "provider" "aws" "bucket" $backupBucket "prefix" "backups/cluster" "config" (dict "region" "us-east-1" "s3ForcePathStyle" "true" "s3Url" (index $annotations "s3-endpoint"))))) }}
+    {{- $helmValues = mergeOverwrite $helmValues $veleroFlociValues }}
+    # LINT.ThenChange(//src/infra/argocd/apps/cells.yaml:velero-floci-storage)
+    {{- end }}
+    {{- end }}
+    {{- $patches := concat (default list $profile.patches) (default list $componentProfile.patches) (default list .patches) }}
+    {{- if eq .component "opencost" }}
+    {{- if eq $provider "aws" }}
+    {{- $athenaBucket := default (printf "%s-billing-reports" .nameNormalized) (index $annotations "athena-bucket") }}
+    {{- $athenaDatabase := default (replace "-" "_" (printf "%s_cur" .nameNormalized)) (index $annotations "athena-database") }}
+    {{- $athenaWorkgroup := default (printf "%s-opencost" .nameNormalized) (index $annotations "athena-workgroup") }}
+    {{- $athenaRegion := default "us-west-2" (coalesce (index $annotations "aws-region") (index $annotations "region")) }}
+    {{- $opencostCloudConfig := printf "{\n  \"aws\": [\n    {\n      \"athenaBucketName\": \"s3://%s\",\n      \"athenaRegion\": %q,\n      \"athenaDatabase\": %q,\n      \"athenaTable\": %q,\n      \"athenaWorkgroup\": %q\n    }\n  ]\n}" $athenaBucket $athenaRegion $athenaDatabase $athenaDatabase $athenaWorkgroup }}
+    {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "Secret" "name" "opencost-cloud-integration") "patch" (printf "- op: replace\n  path: /stringData/cloud-integration.json\n  value: %q" $opencostCloudConfig)) }}
+    {{- end }}
+    {{- if eq $provider "gcp" }}
+    {{- $gcpProject := default "configured-by-applicationset" (coalesce (index $annotations "gcp-project-id") (index $annotations "project-id") (index (default dict .metadata.labels) "project")) }}
+    {{- $billingDataset := default (replace "-" "_" (printf "%s_billing_export" .nameNormalized)) (coalesce (index $annotations "gcp-billing-dataset") (index $annotations "billing-dataset")) }}
+    {{- $opencostCloudConfig := printf "{\n  \"gcp\": [\n    {\n      \"projectID\": %q,\n      \"billingDataDataset\": %q\n    }\n  ]\n}" $gcpProject $billingDataset }}
+    {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "Secret" "name" "opencost-cloud-integration") "patch" (printf "- op: replace\n  path: /stringData/cloud-integration.json\n  value: %q" $opencostCloudConfig)) }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "atlantis" }}
+    {{- $secretStore := index $annotations "secret-store" }}
+    {{- if not $secretStore }}{{ fail "Atlantis requires the registered secret-store annotation" }}{{- end }}
+    {{- range $name := list "atlantis-github-app" "atlantis-runtime-environment" }}
+    {{- $patch := dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "name" $name) "patch" (toYaml (list (dict "op" "replace" "path" "/spec/secretStoreRef/name" "value" $secretStore))) }}
+    {{- $patches = append $patches $patch }}
+    {{- end }}
+    # floci-divergence: Cloud clusters sync production atlantis-github-app credentials from the cloud secret store.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $atlantisSecretStore := default "aws-secrets-manager" (index $annotations "secret-store-cloud") }}
+    {{- $atlantisRemoteKey := default (printf "%s-atlantis-github-app" .nameNormalized) (index $annotations "atlantis-github-app-key") }}
+    {{- $atlantisPatchOps := list (dict "op" "replace" "path" "/spec/secretStoreRef/name" "value" $atlantisSecretStore) (dict "op" "replace" "path" "/spec/data/0/remoteRef/key" "value" $atlantisRemoteKey) (dict "op" "replace" "path" "/spec/data/1/remoteRef/key" "value" $atlantisRemoteKey) }}
+    {{- $patches = append $patches (dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "name" "atlantis-github-app") "patch" (toYaml $atlantisPatchOps)) }}
+    {{- end }}
+    {{- end }}
+    {{- $backupDatabase := default "" (index (dict "buildbuddy" "buildbuddy-postgres" "coder" "coder-postgres" "dragonfly-manager" "dragonfly-postgres" "signoz" "signoz-postgres") .component) }}
+    # floci-divergence: Floci emulates AWS S3 database backups with Pod Identity.
+    {{- if and (or (eq $provider "aws") (eq $provider "floci")) (ne $backupDatabase "") }}
+    {{- $backupBucket := index $annotations "backups-bucket" }}
+    {{- if not $backupBucket }}{{ fail (printf "%s database backups require the registered backups-bucket" .component) }}{{- end }}
+    {{- $backupStorePatch := dict "target" (dict "group" "barmancloud.cnpg.io" "version" "v1" "kind" "ObjectStore" "name" (printf "%s-backups" $backupDatabase)) "patch" (printf "- op: replace\n  path: /spec/configuration/destinationPath\n  value: s3://%s/backups/databases\n- op: replace\n  path: /spec/configuration/s3Credentials\n  value:\n    inheritFromIAMRole: true" $backupBucket) }}
+    {{- if ne $backupDatabase "signoz-postgres" }}
+    {{- $backupSecretPatch := dict "target" (dict "version" "v1" "kind" "Secret" "name" (printf "%s-backup-s3" $backupDatabase)) "patch" (printf "apiVersion: v1\nkind: Secret\nmetadata:\n  name: %s-backup-s3\n$patch: delete" $backupDatabase) }}
+    {{- $patches = concat $patches (list $backupStorePatch $backupSecretPatch) }}
+    {{- else }}
+    {{- $patches = append $patches $backupStorePatch }}
+    {{- end }}
+    {{- end }}
+    {{- if and (eq $provider "gcp") (ne $backupDatabase "") }}
+    {{- $backupBucket := index $annotations "backups-bucket" }}
+    {{- if not $backupBucket }}{{ fail (printf "%s database backups require the registered backups-bucket" .component) }}{{- end }}
+    {{- $backupStorePatch := dict "target" (dict "group" "barmancloud.cnpg.io" "version" "v1" "kind" "ObjectStore" "name" (printf "%s-backups" $backupDatabase)) "patch" (printf "- op: replace\n  path: /spec/configuration/destinationPath\n  value: gs://%s/backups/databases\n- op: add\n  path: /spec/configuration/googleCredentials\n  value:\n    gkeEnvironment: true\n- op: remove\n  path: /spec/configuration/s3Credentials" $backupBucket) }}
+    {{- $backupSecretPatch := dict "target" (dict "version" "v1" "kind" "Secret" "name" (printf "%s-backup-s3" $backupDatabase)) "patch" (printf "apiVersion: v1\nkind: Secret\nmetadata:\n  name: %s-backup-s3\n$patch: delete" $backupDatabase) }}
+    {{- $patches = concat $patches (list $backupStorePatch $backupSecretPatch) }}
+    {{- end }}
+    # floci-divergence: Local ClickHouse backups route to Floci S3 emulator.
+    {{- if and (eq $provider "floci") (eq .component "clickhouse") }}
+    {{- $backupBucket := index $annotations "backups-bucket" }}
+    {{- if not $backupBucket }}{{ fail "local clickhouse backups require the registered backups-bucket" }}{{- end }}
+    {{- $backupEndpoint := index $annotations "s3-endpoint" }}
+    {{- if not $backupEndpoint }}{{ fail "local clickhouse backups require the registered s3-endpoint" }}{{- end }}
+    {{- $clickhouseBackupPatch := dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "signoz-clickhouse-backup-provider") "patch" (printf "- op: replace\n  path: /data/AWS_ENDPOINT_URL_S3\n  value: %s\n- op: replace\n  path: /data/BACKUP_BUCKET\n  value: %s\n- op: replace\n  path: /data/CLICKHOUSE_BACKUP_URL\n  value: %s/%s/backups/telemetry/clickhouse/" $backupEndpoint $backupBucket $backupEndpoint $backupBucket) }}
+    {{- $patches = append $patches $clickhouseBackupPatch }}
+    {{- $storageEndpoint := $backupEndpoint }}
+    {{- $manifestSources := list }}
+    {{- range $cell := $registeredCells }}
+    {{- range $bucket := (list "home" "scratch" "meta" "backups" "archive") }}
+    {{- $manifestSources = append $manifestSources (printf "%s|floci||%s||%s|%s/cloud-%s-meta/inventory/%s/%s/{date}/manifest.json" $cell $bucket $bucket $storageEndpoint $cell $cell $bucket) }}
+    {{- end }}
+    {{- end }}
+    {{- $inventoryEnabled := ternary "true" "false" (gt (len $manifestSources) 0) }}
+    {{- $storageStatsPatch := dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "signoz-clickhouse-storage-stats-provider") "patch" (toYaml (list (dict "op" "replace" "path" "/data/INVENTORY_ENABLED" "value" $inventoryEnabled) (dict "op" "replace" "path" "/data/INVENTORY_MANIFEST_SOURCES" "value" (join "\n" $manifestSources)))) }}
+    {{- $patches = append $patches $storageStatsPatch }}
+    {{- end }}
+    {{- if and (eq $provider "aws") (eq .component "clickhouse") }}
+    {{- $backupBucket := index $annotations "backups-bucket" }}
+    {{- if not $backupBucket }}{{ fail "AWS clickhouse backups require the registered backups-bucket" }}{{- end }}
+    {{- $storageEndpoint := coalesce (index $annotations "storage-endpoint") (index $annotations "s3-endpoint") (printf "s3.%s.amazonaws.com" (coalesce (index $annotations "aws-region") (index $annotations "region") (index (default dict .metadata.labels) "region") "us-west-2")) }}
+    {{- $clickhouseBackupPatch := dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "signoz-clickhouse-backup-provider") "patch" (printf "- op: replace\n  path: /data/BACKUP_BUCKET\n  value: %s\n- op: replace\n  path: /data/CLICKHOUSE_BACKUP_URL\n  value: https://%s/%s/backups/telemetry/clickhouse/" $backupBucket $storageEndpoint $backupBucket) }}
+    {{- $patches = append $patches $clickhouseBackupPatch }}
+    {{- end }}
+    {{- if and (eq $provider "gcp") (eq .component "clickhouse") }}
+    {{- $backupBucket := index $annotations "backups-bucket" }}
+    {{- if not $backupBucket }}{{ fail "GCP clickhouse backups require the registered backups-bucket" }}{{- end }}
+    {{- $storageEndpoint := coalesce (index $annotations "storage-endpoint") "storage.googleapis.com" }}
+    {{- $clickhouseBackupPatch := dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "signoz-clickhouse-backup-provider") "patch" (printf "- op: replace\n  path: /data/BACKUP_ENGINE\n  value: GCS\n- op: replace\n  path: /data/BACKUP_BUCKET\n  value: %s\n- op: replace\n  path: /data/CLICKHOUSE_BACKUP_URL\n  value: https://%s/%s/backups/telemetry/clickhouse/" $backupBucket $storageEndpoint $backupBucket) }}
+    {{- $patches = append $patches $clickhouseBackupPatch }}
+    {{- end }}
+    {{- if eq .component "clickhouse" }}
+    {{- $clickhouseCellPatch := dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "signoz-clickhouse-backup-provider") "patch" (printf "- op: replace\n  path: /data/BACKUP_CELL\n  value: %s" .nameNormalized) }}
+    {{- $patches = append $patches $clickhouseCellPatch }}
+    {{- end }}
+    {{- if eq .component "headlamp" }}
+    # floci-divergence: Local cell serving certificates chain to the imported cell CA.
+    {{- if eq $provider "floci" }}
+    {{- $headlampCaPatch := dict "target" (dict "group" "trust.cert-manager.io" "version" "v1alpha1" "kind" "Bundle" "name" "headlamp-cluster-ca") "patch" "- op: add\n  path: /spec/sources/-\n  value:\n    secret:\n      name: cell-cluster-ca\n      key: ca.crt" }}
+    {{- $patches = append $patches $headlampCaPatch }}
+    {{- end }}
+    # floci-divergence: Floci local clusters use a local CA bundle rather than the system trust store.
+    {{- $headlampCaPath := ternary "/etc/ssl/local-ca/ca.crt" "/etc/ssl/certs/ca-certificates.crt" (eq $provider "floci") }}
+    {{- $clusters := list (dict "name" .nameNormalized "cluster" (dict "server" "https://kube-oidc-proxy.kube-oidc-proxy-system.svc" "certificate-authority" "/etc/ssl/local-ca/ca.crt")) }}
+    {{- $contexts := list (dict "name" .nameNormalized "context" (dict "cluster" .nameNormalized "user" "dex")) }}
+    {{- range $c := $registeredCells }}
+    {{- $clusters = append $clusters (dict "name" $c "cluster" (dict "server" (printf "https://kube-oidc-proxy.%s.%s" $c $accessDomain) "certificate-authority" $headlampCaPath)) }}
+    {{- $contexts = append $contexts (dict "name" $c "context" (dict "cluster" $c "user" "dex")) }}
+    {{- end }}
+    {{- $headlampConfig := dict "apiVersion" "v1" "kind" "Config" "preferences" (dict) "clusters" $clusters "contexts" $contexts "current-context" .nameNormalized "users" (list (dict "name" "dex" "user" (dict "auth-provider" (dict "name" "oidc" "config" (dict "client-id" "{{ .headlamp_client_id }}" "client-secret" "{{ .headlamp_client_secret }}" "idp-issuer-url" "{{ .issuer }}" "scope" "{{ printf \"%s,offline_access\" .scopes }}"))))) }}
+    {{- $headlampPatch := dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "name" "headlamp-oidc") "patch" (printf "apiVersion: external-secrets.io/v1\nkind: ExternalSecret\nmetadata:\n  name: headlamp-oidc\nspec:\n  target:\n    template:\n      data:\n        config: |-\n%s" (indent 10 (toYaml $headlampConfig))) }}
+    {{- $patches = append $patches $headlampPatch }}
+    {{- end }}
+    {{- if eq .component "cert-manager" }}
+    {{- $caPatch := list (dict "target" (dict "group" "cert-manager.io" "version" "v1" "kind" "Certificate" "name" "cluster-local-ca") "patch" (printf "- op: replace\n  path: /spec/commonName\n  value: %s-local-ca" .nameNormalized)) }}
+    {{- $patches = concat $patches $caPatch }}
+    {{- end }}
+    {{- if eq .component "karpenter-aws" }}
+    {{- $instanceProfile := default (printf "KarpenterNodeInstanceProfile-%s" .nameNormalized) (coalesce (index $annotations "aws-instance-profile") (index $annotations "instance-profile")) }}
+    {{- $karpenterDiscoveryPatch := printf "- op: replace\n  path: /spec/instanceProfile\n  value: %s\n- op: replace\n  path: /spec/subnetSelectorTerms/0/tags/karpenter.sh~1discovery\n  value: %s\n- op: replace\n  path: /spec/securityGroupSelectorTerms/0/tags/karpenter.sh~1discovery\n  value: %s\n- op: replace\n  path: /spec/tags/cluster\n  value: %s\n- op: replace\n  path: /spec/tags/karpenter.sh~1discovery\n  value: %s" $instanceProfile .nameNormalized .nameNormalized .nameNormalized .nameNormalized }}
+    # floci-divergence: Floci EC2 emulator requires AL2023 AMI family selector.
+    {{- if eq $provider "floci" }}
+    {{- $karpenterDiscoveryPatch = printf "%s\n- op: replace\n  path: /spec/amiSelectorTerms\n  value:\n    - name: \"*al2023*\"\n- op: add\n  path: /spec/amiFamily\n  value: AL2023" $karpenterDiscoveryPatch }}
+    {{- end }}
+    {{- $karpenterPatches := list (dict "target" (dict "group" "karpenter.k8s.aws" "version" "v1" "kind" "EC2NodeClass" "name" "dynamic-cpu") "patch" $karpenterDiscoveryPatch) }}
+    {{- $patches = concat $patches $karpenterPatches }}
+    # floci-divergence: Local Karpenter needs egress to the registered emulator's IPv4 address and port.
+    {{- if eq $provider "floci" }}
+    {{- $flociAddress := splitList ":" (index (urlParse (index $annotations "s3-endpoint")) "host") }}
+    {{- $flociEgress := dict "to" (list (dict "ipBlock" (dict "cidr" (printf "%s/32" (first $flociAddress))))) "ports" (list (dict "protocol" "TCP" "port" (int (last $flociAddress)))) }}
+    {{- $flociNetworkPatch := dict "target" (dict "group" "networking.k8s.io" "version" "v1" "kind" "NetworkPolicy" "name" "karpenter-network-isolation") "patch" (toJson (list (dict "op" "add" "path" "/spec/egress/-" "value" $flociEgress))) }}
+    {{- $patches = append $patches $flociNetworkPatch }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "homer" }}
+    {{- $allClusters := concat (list .nameNormalized) $registeredCells }}
+    {{- $clustersValue := join " " $allClusters }}
+    {{- $homerPatches := list (dict "target" (dict "group" "apps" "version" "v1" "kind" "Deployment" "name" "homer") "patch" (printf "- op: replace\n  path: /spec/template/spec/initContainers/0/env/0/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/1/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/2/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/3/value\n  value: %s" $intranetDomain $baseDomain $accessDomain $clustersValue)) }}
+    {{- $patches = concat $patches $homerPatches }}
+    {{- end }}
+    {{- if eq .component "velero-ui" }}
+    {{- $veleroHost := printf "velero-ui.%s" $baseDomain }}
+    {{- $dexHost := printf "dex.%s" $intranetDomain }}
+    {{- $veleroSecOps := list (dict "op" "replace" "path" "/spec/oidc/provider/issuer" "value" (printf "https://%s" $dexHost)) (dict "op" "replace" "path" "/spec/oidc/provider/authorizationEndpoint" "value" (printf "https://%s/auth" $dexHost)) (dict "op" "replace" "path" "/spec/oidc/provider/tokenEndpoint" "value" "http://dex.dex.svc.cluster.local:5556/token") (dict "op" "replace" "path" "/spec/oidc/provider/backendRefs" "value" (list (dict "group" "" "kind" "Service" "name" "dex" "namespace" "dex" "port" 5556 "weight" 1))) (dict "op" "replace" "path" "/spec/oidc/provider/endSessionEndpoint" "value" (printf "https://%s/logout" $dexHost)) (dict "op" "replace" "path" "/spec/oidc/redirectURL" "value" (printf "https://%s/oauth2/callback" $veleroHost)) (dict "op" "replace" "path" "/spec/jwt/providers/0/issuer" "value" (printf "https://%s" $dexHost)) (dict "op" "replace" "path" "/spec/jwt/providers/0/remoteJWKS/uri" "value" "http://dex.dex.svc.cluster.local:5556/keys") (dict "op" "replace" "path" "/spec/jwt/providers/0/remoteJWKS/backendRefs" "value" (list (dict "group" "" "kind" "Service" "name" "dex" "namespace" "dex" "port" 5556 "weight" 1))) }}
+    # floci-divergence: Local clusters do not have Google Workspace directory groups.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $veleroSecOps = append $veleroSecOps (dict "op" "replace" "path" "/spec/authorization/rules/1/principal/jwt/claims/0/values" "value" $operatorGroups) }}
+    {{- if gt (len $operatorEmails) 0 }}
+    {{- $veleroEmailRule := dict "name" "operator-email" "action" "Allow" "principal" (dict "jwt" (dict "provider" "velero-ui" "claims" (list (dict "name" "email" "valueType" "String" "values" $operatorEmails)))) }}
+    {{- $veleroSecOps = append $veleroSecOps (dict "op" "add" "path" "/spec/authorization/rules/-" "value" $veleroEmailRule) }}
+    {{- end }}
+    {{- end }}
+    {{- $veleroPatches := list (dict "target" (dict "group" "gateway.networking.k8s.io" "version" "v1" "kind" "HTTPRoute" "name" "velero-ui") "patch" (printf "- op: replace\n  path: /spec/hostnames/0\n  value: %s" $veleroHost)) (dict "target" (dict "group" "gateway.envoyproxy.io" "version" "v1alpha1" "kind" "Backend" "name" "velero-ui-dex") "patch" (printf "- op: replace\n  path: /spec/endpoints/0/fqdn/hostname\n  value: %s" $dexHost)) (dict "target" (dict "group" "gateway.envoyproxy.io" "version" "v1alpha1" "kind" "SecurityPolicy" "name" "velero-ui-oidc") "patch" (toYaml $veleroSecOps)) }}
+    {{- $patches = concat $patches $veleroPatches }}
+    {{- end }}
+    {{- if eq .component "coder" }}
+    # floci-divergence: Floci control planes route via Headscale VPN for local ingress.
+    {{- $headscaleUrl := ternary (printf "https://headscale.%s" $baseDomain) "" (eq $provider "floci") }}
+    # floci-divergence: Floci clusters mount local storage classes rather than cloud CSI volumes.
+    {{- $workspaceStorageClass := ternary "workspace-expandable" "general-expandable" (eq $provider "floci") }}
+    {{- $coderReconcileEnv := list (dict "name" "CODER_TEMPLATE_ACCESS_ALIAS_DOMAIN" "value" $accessDomain) (dict "name" "CODER_TEMPLATE_DEPLOYMENT_DOMAIN" "value" $intranetDomain) (dict "name" "CODER_TEMPLATE_HEADSCALE_URL" "value" $headscaleUrl) (dict "name" "CODER_TEMPLATE_REPOSITORY_URL" "value" $gitTransportURL) (dict "name" "CODER_TEMPLATE_STORAGE_CLASS" "value" $workspaceStorageClass) }}
+    # floci-divergence: Floci defaults to arm64 and origin registry; cloud clusters configure from annotations.
+    {{- $defaultArch := ternary "arm64" "amd64" (eq $provider "floci") }}
+    {{- $nodeArch := default $defaultArch (coalesce (index $annotations "node-arch") (index $annotations "arch") (index (default dict .metadata.labels) "arch")) }}
+    {{- $coderTemplateCell := "" }}
+    {{- $incarnations := dict }}
+    {{- $placements := dict }}
+    {{- $virtualNames := dict }}
+    {{- if gt (len $registeredCells) 0 }}
+    {{- $coderTemplateCell = first $registeredCells }}
+    {{- range $c := $registeredCells }}
+    {{- $_ := set $incarnations $c "0123456789ab" }}
+    {{- $placement := dict "cpu" (dict "default" 1 "max" 3 "min" 1) "gpu_offers" (dict) "memory_gib" (dict "default" 2 "max" 8 "min" 1) "storage_gib" (dict "default" 8 "max" 48 "min" 8) "tmp_storage_gib" 64 }}
+    # floci-divergence: Floci local environments use constrained host resource sizing envelopes; cloud clusters use production node pool sizes.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $cloudGpuOffers := dict "a10g-on-demand" (dict "capacity_type" "on-demand" "max_count" 8 "model" "a10g" "workspace_max" (dict "cpu" 190 "memory_gib" 700)) "a10g-spot" (dict "capacity_type" "spot" "max_count" 8 "model" "a10g" "workspace_max" (dict "cpu" 190 "memory_gib" 700)) "l4-on-demand" (dict "capacity_type" "on-demand" "max_count" 8 "model" "l4" "workspace_max" (dict "cpu" 190 "memory_gib" 700)) "l4-spot" (dict "capacity_type" "spot" "max_count" 8 "model" "l4" "workspace_max" (dict "cpu" 190 "memory_gib" 700)) }}
+    {{- $placement = dict "cpu" (dict "default" 10 "max" 190 "min" 1) "gpu_offers" $cloudGpuOffers "memory_gib" (dict "default" 32 "max" 1400 "min" 1) "storage_gib" (dict "default" 256 "max" 1024 "min" 16) "tmp_storage_gib" 256 }}
+    {{- end }}
+    {{- $_ := set $placements $c $placement }}
+    {{- $_ := set $virtualNames $c (trimPrefix "cell-" $c) }}
+    {{- end }}
+    {{- end }}
+    {{- $incarnationJson := toJson $incarnations }}
+    {{- $placementJson := toJson $placements }}
+    {{- $virtualNameJson := toJson $virtualNames }}
+    {{- $coderInitContainers := list (dict "name" "source" "env" (list (dict "name" "SOURCE_REPOSITORY" "value" $gitTransportURL))) }}
+    # floci-divergence: Floci reconciler uses local origin registry and local host inventories; cloud clusters use ECR and automation token.
+    {{- if eq $provider "floci" }}
+    {{- $coderReconcileEnv = concat $coderReconcileEnv (list (dict "name" "CODER_TEMPLATE_ARCH" "value" $nodeArch) (dict "name" "CODER_TEMPLATE_CELL" "value" $coderTemplateCell) (dict "name" "CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY" "value" $incarnationJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY" "value" $placementJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY" "value" $virtualNameJson)) }}
+    {{- else if ne $provider "" }}
+    {{- $ecrRegistry := coalesce (index $annotations "ecr-registry") (index $annotations "workload-registry") }}
+    {{- if not $ecrRegistry }}{{ fail (printf "%s requires ecr-registry or workload-registry annotation on %s" .component $provider) }}{{- end }}
+    {{- $originAuthMode := default $provider (index $annotations "workload-origin-auth-mode") }}
+    {{- $originRegion := default "us-west-2" (coalesce (index $annotations "aws-region") (index $annotations "region") (index (default dict .metadata.labels) "region")) }}
+    {{- $originRoleArn := default "" (coalesce (index $annotations "workload-origin-role-arn") (index $annotations "ecr-role-arn")) }}
+    {{- $coderReconcileEnv = concat $coderReconcileEnv (list (dict "name" "CODER_TEMPLATE_ARCH" "value" $nodeArch) (dict "name" "CODER_TEMPLATE_CELL" "value" $coderTemplateCell) (dict "name" "CODER_TEMPLATE_WORKLOAD_REGISTRY" "value" $ecrRegistry) (dict "name" "CODER_TEMPLATE_WORKLOAD_ORIGIN_AUTH_MODE" "value" $originAuthMode) (dict "name" "CODER_TEMPLATE_WORKLOAD_ORIGIN_PROVIDER" "value" $provider) (dict "name" "CODER_TEMPLATE_WORKLOAD_ORIGIN_REGION" "value" $originRegion) (dict "name" "CODER_TEMPLATE_WORKLOAD_ORIGIN_ROLE_ARN" "value" $originRoleArn) (dict "name" "CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY" "value" $incarnationJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY" "value" $placementJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY" "value" $virtualNameJson) (dict "name" "CODER_SESSION_TOKEN_FILE" "value" "/var/run/coder/automation-token/token") (dict "name" "PRESERVE_CODER_SESSION_TOKEN" "value" "true")) }}
+    {{- $workspaceRepo := printf "%s/src/infra/definitions/workspaces/templates/dev" $ecrRegistry }}
+    {{- $ecrLoginCommand := printf "token=$(aws ecr get-login-password --region %s)\nmkdir -p /state/.docker\ncat <<EOF > /state/.docker/config.json\n{\n  \"auths\": {\n    \"%s\": {\n      \"auth\": \"$(printf 'AWS:%%s' \"$token\" | base64 | tr -d '\\n')\"\n    }\n  }\n}\nEOF\ncp /state/.docker/config.json /state/config.json\n" $originRegion $ecrRegistry }}
+    {{- $ecrLoginContainer := dict "name" "ecr-login" "image" "docker.io/amazon/aws-cli:2.37.5@sha256:fb7ccfc7b4e3a05017e6c9ded4ba959b99af622130e211fb976c68c2f4d3f224" "command" (list "/bin/sh" "-ec" $ecrLoginCommand) "env" (list (dict "name" "HOME" "value" "/tmp") (dict "name" "AWS_REGION" "value" $originRegion)) "resources" (dict "requests" (dict "cpu" "10m" "memory" "16Mi") "limits" (dict "cpu" "100m" "memory" "64Mi")) "securityContext" (dict "allowPrivilegeEscalation" false "capabilities" (dict "drop" (list "ALL")) "readOnlyRootFilesystem" true "runAsGroup" 65532 "runAsNonRoot" true "runAsUser" 65532 "seccompProfile" (dict "type" "RuntimeDefault")) "volumeMounts" (list (dict "name" "state" "mountPath" "/state") (dict "name" "tmp" "mountPath" "/tmp")) }}
+    {{- $resolveWorkspaceContainer := dict "name" "resolve-workspace-image" "env" (list (dict "name" "WORKSPACE_IMAGE_SOURCE" "value" (printf "%s:dev-v1" $workspaceRepo)) (dict "name" "WORKSPACE_IMAGE_REPOSITORY" "value" $workspaceRepo) (dict "name" "WORKSPACE_IMAGE_SOURCE_INSECURE" "value" "false") (dict "name" "DOCKER_CONFIG" "value" "/state/.docker")) }}
+    {{- $coderInitContainers = append $coderInitContainers $ecrLoginContainer }}
+    {{- $coderInitContainers = append $coderInitContainers $resolveWorkspaceContainer }}
+    {{- end }}
+    {{- $coderJobPodSpec := dict "initContainers" $coderInitContainers "containers" (list (dict "name" "reconcile" "env" $coderReconcileEnv)) }}
+    # floci-divergence: Cloud clusters mount pre-minted automation token into reconciler container.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $coderJobPodSpec = mergeOverwrite $coderJobPodSpec (dict "containers" (list (dict "name" "reconcile" "env" $coderReconcileEnv "volumeMounts" (list (dict "name" "automation-token" "mountPath" "/var/run/coder/automation-token" "readOnly" true)))) "volumes" (list (dict "name" "automation-token" "secret" (dict "secretName" "coder-automation-token")))) }}
+    {{- end }}
+    {{- $coderJobPatch := dict "apiVersion" "batch/v1" "kind" "Job" "metadata" (dict "name" "coder-template-reconciler") "spec" (dict "template" (dict "spec" $coderJobPodSpec)) }}
+    {{- $coderPatches := list (dict "target" (dict "group" "batch" "version" "v1" "kind" "Job" "name" "coder-template-reconciler") "patch" (toYaml $coderJobPatch)) }}
+    # floci-divergence: Cloud clusters bypass Dex OIDC bootstrap and mount pre-minted coder-automation-token.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $healerOps := list (dict "op" "replace" "path" "/spec/template/spec/initContainers" "value" list) (dict "op" "replace" "path" "/spec/template/spec/containers/0/args/8" "value" "/var/run/coder/automation-token/token") (dict "op" "add" "path" "/spec/template/spec/containers/0/volumeMounts/-" "value" (dict "name" "automation-token" "mountPath" "/var/run/coder/automation-token" "readOnly" true)) (dict "op" "add" "path" "/spec/template/spec/volumes/-" "value" (dict "name" "automation-token" "secret" (dict "secretName" "coder-automation-token"))) }}
+    {{- $coderPatches = append $coderPatches (dict "target" (dict "group" "apps" "version" "v1" "kind" "Deployment" "name" "coder-workspace-healer") "patch" (toYaml $healerOps)) }}
+    {{- end }}
+    {{- $patches = concat $patches $coderPatches }}
+    {{- end }}
+    {{- if eq .component "dragonfly-manager" }}
+    {{- $dragonflyHost := printf "dragonfly.%s" $baseDomain }}
+    {{- $dragonflyAliasHost := printf "dragonfly.%s" $intranetDomain }}
+    {{- $dragonflyDoorHost := printf "dragonfly-manager.%s" $accessDomain }}
+    {{- $dexHost := printf "dex.%s" $intranetDomain }}
+    {{- $dragonflyRouteOps := list (dict "op" "replace" "path" "/spec/hostnames/0" "value" $dragonflyHost) }}
+    {{- if ne $baseDomain $intranetDomain }}
+    {{- $dragonflyRouteOps = append $dragonflyRouteOps (dict "op" "add" "path" "/spec/hostnames/-" "value" $dragonflyAliasHost) }}
+    {{- end }}
+    {{- $dragonflySecOps := list (dict "op" "replace" "path" "/spec/oidc/provider/issuer" "value" (printf "https://%s" $dexHost)) (dict "op" "replace" "path" "/spec/oidc/provider/authorizationEndpoint" "value" (printf "https://%s/auth" $dexHost)) (dict "op" "replace" "path" "/spec/jwt/providers/0/issuer" "value" (printf "https://%s" $dexHost)) }}
+    # floci-divergence: Local clusters do not have Google Workspace directory groups.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $dragonflySecOps = append $dragonflySecOps (dict "op" "replace" "path" "/spec/authorization/rules/1/principal/jwt/claims/0/values" "value" $operatorGroups) }}
+    {{- if gt (len $operatorEmails) 0 }}
+    {{- $dragonflyEmailRule := dict "name" "operator-email" "action" "Allow" "principal" (dict "jwt" (dict "provider" "dragonfly-console" "claims" (list (dict "name" "email" "valueType" "String" "values" $operatorEmails)))) }}
+    {{- $dragonflySecOps = append $dragonflySecOps (dict "op" "add" "path" "/spec/authorization/rules/-" "value" $dragonflyEmailRule) }}
+    {{- end }}
+    {{- end }}
+    {{- $dragonflyPatches := list (dict "target" (dict "group" "gateway.networking.k8s.io" "version" "v1" "kind" "HTTPRoute" "name" "dragonfly-console") "patch" (toYaml $dragonflyRouteOps)) (dict "target" (dict "group" "gateway.networking.k8s.io" "version" "v1" "kind" "TLSRoute" "name" "dragonfly-manager") "patch" (printf "- op: replace\n  path: /spec/hostnames/0\n  value: %s" $dragonflyDoorHost)) (dict "target" (dict "group" "cert-manager.io" "version" "v1" "kind" "Certificate" "name" "dragonfly-grpc-mtls") "patch" (printf "- op: replace\n  path: /spec/dnsNames/0\n  value: %s" $dragonflyDoorHost)) (dict "target" (dict "group" "gateway.envoyproxy.io" "version" "v1alpha1" "kind" "SecurityPolicy" "name" "dragonfly-console-oidc") "patch" (toYaml $dragonflySecOps)) }}
+    # floci-divergence: Floci clusters mount Dragonfly cell cluster CA bundle.
+    {{- if eq $provider "floci" }}
+    {{- $dragonflyCaPatch := dict "target" (dict "group" "trust.cert-manager.io" "version" "v1alpha1" "kind" "Bundle" "name" "dragonfly-grpc-ca-bundle") "patch" "- op: replace\n  path: /spec/sources/1/secret/name\n  value: cell-cluster-ca" }}
+    {{- $dragonflyPatches = append $dragonflyPatches $dragonflyCaPatch }}
+    {{- end }}
+    {{- $dragonflyBridgeOps := list (dict "op" "replace" "path" "/spec/template/spec/containers/0/env/0/value" "value" .nameNormalized) }}
+    # floci-divergence: Floci pulls the bridge image from its seeded origin registry; cloud clusters use the ECR infrastructure image.
+    {{- if eq $provider "floci" }}
+    {{- $dragonflyBridgeOps = append $dragonflyBridgeOps (dict "op" "replace" "path" "/spec/template/spec/containers/0/image" "value" .flociBridgeImage) }}
+    {{- else if ne $provider "" }}
+    {{- $ecrRegistry := coalesce (index $annotations "ecr-registry") (index $annotations "workload-registry") }}
+    {{- if not $ecrRegistry }}{{ fail (printf "%s requires ecr-registry or workload-registry annotation on %s" .component $provider) }}{{- end }}
+    {{- $cloudBridgeImage := printf "%s/%s/infrastructure:dragonfly-sso@%s" $ecrRegistry .nameNormalized .cloudBridgeDigest }}
+    {{- $dragonflyBridgeOps = append $dragonflyBridgeOps (dict "op" "replace" "path" "/spec/template/spec/containers/0/image" "value" $cloudBridgeImage) }}
+    {{- end }}
+    # floci-divergence: Cloud clusters configure domain-qualified operator groups and operator emails in Dragonfly OIDC secret.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $dragonflyOidcPatch := dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "namespace" "dragonfly-system" "name" "dragonfly-oidc") "patch" (printf "- op: replace\n  path: /spec/target/template/data/operator-group\n  value: %s\n- op: replace\n  path: /spec/target/template/data/operator-emails\n  value: %s" (join "," $operatorGroups) (join "," $operatorEmails)) }}
+    {{- $dragonflyPatches = append $dragonflyPatches $dragonflyOidcPatch }}
+    {{- end }}
+    {{- $dragonflyBridgePatch := dict "target" (dict "group" "apps" "version" "v1" "kind" "Deployment" "name" "dragonfly-sso") "patch" (toYaml $dragonflyBridgeOps) }}
+    {{- $dragonflyPatches = append $dragonflyPatches $dragonflyBridgePatch }}
+    {{- $patches = concat $patches $dragonflyPatches }}
+    {{- end }}
+    {{- if eq .component "kube-oidc-proxy" }}
+    {{- $kubeHost := printf "kube-oidc-proxy.%s.%s" .nameNormalized $accessDomain }}
+    {{- $dexHost := printf "dex.%s" $intranetDomain }}
+    {{- $kubeConfigPatch := printf "- op: replace\n  path: /data/oidc-issuer-url\n  value: https://%s" $dexHost }}
+    # floci-divergence: Floci local users authenticate with preferred_username while cloud clusters authenticate via Google Workspace email.
+    {{- if ne $provider "floci" }}
+    {{- $kubeConfigPatch = printf "%s\n- op: replace\n  path: /data/oidc-username-claim\n  value: email" $kubeConfigPatch }}
+    {{- end }}
+    {{- $kubePatches := list (dict "target" (dict "group" "cert-manager.io" "version" "v1" "kind" "Certificate" "name" "kube-oidc-proxy-door") "patch" (printf "- op: replace\n  path: /spec/dnsNames/0\n  value: %s" $kubeHost)) (dict "target" (dict "group" "gateway.networking.k8s.io" "version" "v1" "kind" "TLSRoute" "name" "kube-oidc-proxy") "patch" (printf "- op: replace\n  path: /spec/hostnames/0\n  value: %s" $kubeHost)) (dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "kube-oidc-proxy-config") "patch" $kubeConfigPatch) }}
+    {{- $patches = concat $patches $kubePatches }}
+    {{- end }}
+    {{- if eq .component "kyverno" }}
+    {{- $ecrRegistry := index $annotations "ecr-registry" }}
+    {{- if $ecrRegistry }}
+    {{- $kyvernoPatch := dict "target" (dict "group" "kyverno.io" "version" "v1" "kind" "ClusterPolicy" "name" "production-image-digest-pinning") "patch" (printf "- op: add\n  path: /spec/rules/1/validate/deny/conditions/any/0/value/-\n  value: %s" $ecrRegistry) }}
+    {{- $patches = append $patches $kyvernoPatch }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "prowler" }}
+    # floci-divergence: Floci clusters do not have cloud IAM roles for Prowler CSPM scans.
+    {{- if ne $provider "floci" }}
+    {{- $prowlerCronJobOps := list (dict "op" "replace" "path" "/spec/suspend" "value" false) (dict "op" "replace" "path" "/spec/jobTemplate/spec/template/spec/automountServiceAccountToken" "value" true) }}
+    {{- if eq $provider "gcp" }}
+    {{- $prowlerCronJobOps = append $prowlerCronJobOps (dict "op" "replace" "path" "/spec/jobTemplate/spec/template/spec/containers/0/command" "value" (list "prowler" "gcp" "--compliance" "cis_gcp_foundations_v2.0" "-M" "json")) }}
+    {{- $gcpProject := default "configured-by-applicationset" (coalesce (index $annotations "gcp-project-id") (index $annotations "project-id") (index (default dict .metadata.labels) "project")) }}
+    {{- $prowlerSaEmail := printf "%s-prowler@%s.iam.gserviceaccount.com" .nameNormalized $gcpProject }}
+    {{- $prowlerSaPatch := dict "target" (dict "version" "v1" "kind" "ServiceAccount" "name" "prowler") "patch" (printf "- op: replace\n  path: /metadata/annotations/iam.gke.io~1gcp-service-account\n  value: %s" $prowlerSaEmail) }}
+    {{- $patches = append $patches $prowlerSaPatch }}
+    {{- end }}
+    {{- $prowlerCronJobPatch := dict "target" (dict "group" "batch" "version" "v1" "kind" "CronJob" "name" "prowler") "patch" (toYaml $prowlerCronJobOps) }}
+    {{- $patches = append $patches $prowlerCronJobPatch }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "parca" }}
+    {{- $resourcePrefix := default "corp" (coalesce (index $annotations "resource-prefix") (index $annotations "storage-prefix")) }}
+    {{- $profilesBucket := coalesce (index $annotations "profiles-bucket") (printf "%s-%s-profiles" $resourcePrefix .nameNormalized) }}
+    {{- if and (eq $provider "aws") $profilesBucket }}
+    {{- $awsRegion := coalesce (index $annotations "aws-region") (index $annotations "region") (index (default dict .metadata.labels) "region") }}
+    {{- if not $awsRegion }}
+    {{- fail (printf "cluster %q is missing required aws-region annotation" .name) }}
+    {{- end }}
+    {{- $storageEndpoint := coalesce (index $annotations "storage-endpoint") (index $annotations "s3-endpoint") (printf "s3.%s.amazonaws.com" $awsRegion) }}
+    {{- $parcaConfigContent := printf "object_storage:\n  bucket:\n    type: S3\n    config:\n      bucket: %s\n      endpoint: %s\n      aws_sdk_auth: true\n" $profilesBucket $storageEndpoint }}
+    {{- $parcaConfigPatch := dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "parca") "patch" (printf "- op: replace\n  path: /data/parca.yaml\n  value: |\n%s" ($parcaConfigContent | indent 4)) }}
+    {{- $parcaChecksumPatch := dict "target" (dict "group" "apps" "version" "v1" "kind" "Deployment" "name" "parca") "patch" (printf "- op: replace\n  path: /spec/template/metadata/annotations/checksum~1config\n  value: %s" ($parcaConfigContent | sha256sum)) }}
+    {{- $patches = append $patches $parcaConfigPatch }}
+    {{- $patches = append $patches $parcaChecksumPatch }}
+    {{- else if and (eq $provider "gcp") $profilesBucket }}
+    {{- $parcaConfigContent := printf "object_storage:\n  bucket:\n    type: GCS\n    config:\n      bucket: %s\n" $profilesBucket }}
+    {{- $parcaConfigPatch := dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "parca") "patch" (printf "- op: replace\n  path: /data/parca.yaml\n  value: |\n%s" ($parcaConfigContent | indent 4)) }}
+    {{- $parcaChecksumPatch := dict "target" (dict "group" "apps" "version" "v1" "kind" "Deployment" "name" "parca") "patch" (printf "- op: replace\n  path: /spec/template/metadata/annotations/checksum~1config\n  value: %s" ($parcaConfigContent | sha256sum)) }}
+    {{- $patches = append $patches $parcaConfigPatch }}
+    {{- $patches = append $patches $parcaChecksumPatch }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "parca-agent" }}
+    {{- $parcaAgentPatches := list (dict "target" (dict "group" "apps" "version" "v1" "kind" "DaemonSet" "labelSelector" "app.kubernetes.io/name=parca-agent") "patch" (printf "- op: replace\n  path: /spec/template/spec/containers/0/env/1/value\n  value: %s" .nameNormalized)) }}
+    {{- $patches = concat $patches $parcaAgentPatches }}
+    {{- end }}
+    # GKE manages its own node-problem-detector addon; omit standalone DaemonSet on GCP.
+    {{- if and (eq .component "node-problem-detector") (eq $provider "gcp") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "apps" "version" "v1" "kind" "DaemonSet" "name" "node-problem-detector") "patch" "apiVersion: apps/v1\nkind: DaemonSet\nmetadata:\n  name: node-problem-detector\n$patch: delete") }}
+    {{- end }}
+    {{- if eq .component "cluster-access" }}
+    # floci-divergence: Cloud clusters bind Google Workspace operator groups and operator emails to cluster-operators role.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $clusterAccessPatches := list }}
+    {{- range $group := $operatorGroups }}
+    {{- if ne $group "operators" }}
+    {{- $clusterAccessPatches = append $clusterAccessPatches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "ClusterRoleBinding" "name" "cluster-operators") "patch" (printf "- op: add\n  path: /subjects/-\n  value:\n    apiGroup: rbac.authorization.k8s.io\n    kind: Group\n    name: cluster:group:%s" $group)) }}
+    {{- end }}
+    {{- end }}
+    {{- range $email := $operatorEmails }}
+    {{- $clusterAccessPatches = append $clusterAccessPatches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "ClusterRoleBinding" "name" "cluster-operators") "patch" (printf "- op: add\n  path: /subjects/-\n  value:\n    apiGroup: rbac.authorization.k8s.io\n    kind: User\n    name: cluster:user:%s" $email)) }}
+    {{- end }}
+    {{- $patches = concat $patches $clusterAccessPatches }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "external-secrets" }}
+    {{- $oidcOps := list (dict "op" "replace" "path" "/stringData/issuer" "value" (printf "https://dex.%s" $intranetDomain)) (dict "op" "replace" "path" "/stringData/jwks_uri" "value" (printf "https://dex.%s/keys" $intranetDomain)) (dict "op" "replace" "path" "/stringData/argocd_external_url" "value" (printf "https://argocd.%s" $intranetDomain)) (dict "op" "replace" "path" "/stringData/atlantis_external_url" "value" (printf "https://atlantis.%s" $intranetDomain)) (dict "op" "replace" "path" "/stringData/buildbuddy_callback_uri" "value" (printf "https://buildbuddy.%s/oauth2/callback" $intranetDomain)) (dict "op" "replace" "path" "/stringData/buildbuddy_alias_callback_uri" "value" (printf "https://buildbuddy.%s/oauth2/callback" $intranetDomain)) (dict "op" "replace" "path" "/stringData/coder_external_url" "value" (printf "https://coder.%s" $intranetDomain)) (dict "op" "replace" "path" "/stringData/coder_wildcard_access_url" "value" (printf "*.coder.%s" $baseDomain)) (dict "op" "replace" "path" "/stringData/dragonflyManagerAddress" "value" (printf "dragonfly-manager.%s:443" $accessDomain)) (dict "op" "replace" "path" "/stringData/headlamp_external_url" "value" (printf "https://headlamp.%s" $intranetDomain)) (dict "op" "replace" "path" "/stringData/headscale_external_url" "value" (printf "https://headscale.%s" $intranetDomain)) (dict "op" "replace" "path" "/stringData/kargo_external_url" "value" (printf "https://kargo.%s" $intranetDomain)) (dict "op" "replace" "path" "/stringData/opencost_external_url" "value" (printf "https://opencost.%s" $intranetDomain)) (dict "op" "replace" "path" "/stringData/parca_callback_uri" "value" (printf "https://parca.%s/oauth2/callback" $intranetDomain)) (dict "op" "replace" "path" "/stringData/parca_alias_callback_uri" "value" (printf "https://parca.%s/oauth2/callback" $intranetDomain)) (dict "op" "replace" "path" "/stringData/signoz_callback_uri" "value" (printf "https://signoz.%s/oauth2/callback" $intranetDomain)) (dict "op" "replace" "path" "/stringData/signoz_alias_callback_uri" "value" (printf "https://signoz.%s/oauth2/callback" $intranetDomain)) (dict "op" "replace" "path" "/stringData/signoz_root_email" "value" (printf "signoz@%s" $publicDomain)) }}
+    # floci-divergence: Floci keeps Dex password bootstrap user; cloud removes bootstrap credentials.
+    {{- if eq $provider "floci" }}
+    {{- $coderBootstrapUser := printf "ops@%s" $publicDomain }}
+    {{- $oidcOps = append $oidcOps (dict "op" "replace" "path" "/stringData/coder_bootstrap_oidc_username" "value" $coderBootstrapUser) }}
+    {{- else if ne $provider "" }}
+    {{- $oidcOps = append $oidcOps (dict "op" "remove" "path" "/stringData/coder_bootstrap_oidc_password") }}
+    {{- $oidcOps = append $oidcOps (dict "op" "remove" "path" "/stringData/coder_bootstrap_oidc_username") }}
+    {{- end }}
+    {{- $oidcPatch := dict "target" (dict "version" "v1" "kind" "Secret" "namespace" "application-identity" "name" "application-oidc") "patch" (toYaml $oidcOps) }}
+    {{- $patches = append $patches $oidcPatch }}
+    # floci-divergence: Cloud clusters sync production application-oidc secrets from the cloud secret store when configured.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- if index $annotations "application-oidc-key" }}
+    {{- $oidcSecretStore := default "aws-secrets-manager" (index $annotations "secret-store-cloud") }}
+    {{- $oidcRemoteKey := index $annotations "application-oidc-key" }}
+    {{- $oidcEsPatchOps := list (dict "op" "replace" "path" "/spec/secretStoreRef/name" "value" $oidcSecretStore) (dict "op" "replace" "path" "/spec/dataFrom/0/extract/key" "value" $oidcRemoteKey) }}
+    {{- $patches = append $patches (dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "namespace" "application-identity" "name" "application-oidc") "patch" (toYaml $oidcEsPatchOps)) }}
+    {{- end }}
+    {{- $deployKeySecretStore := default "aws-secrets-manager" (index $annotations "secret-store-cloud") }}
+    {{- $deployKeyRemoteKey := default (printf "%s-argocd-git-deploy-key" .nameNormalized) (index $annotations "git-deploy-key-remote-key") }}
+    {{- $coderKeyPatchOps := list (dict "op" "replace" "path" "/spec/secretStoreRef/name" "value" $deployKeySecretStore) (dict "op" "replace" "path" "/spec/data/0/remoteRef/key" "value" $deployKeyRemoteKey) (dict "op" "remove" "path" "/spec/data/0/remoteRef/property") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "name" "coder-template-publication") "patch" (toYaml $coderKeyPatchOps)) }}
+    {{- $tokenRemoteKey := default (printf "%s-coder-automation-token" .nameNormalized) (index $annotations "coder-automation-token-key") }}
+    {{- $tokenEsPatchOps := list (dict "op" "replace" "path" "/spec/secretStoreRef/name" "value" $deployKeySecretStore) (dict "op" "replace" "path" "/spec/data/0/remoteRef/key" "value" $tokenRemoteKey) }}
+    {{- $patches = append $patches (dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "name" "coder-automation-token") "patch" (toYaml $tokenEsPatchOps)) }}
+    {{- $webhookSecretStore := default "aws-secrets-manager" (index $annotations "secret-store-cloud") }}
+    {{- $webhookRemoteKey := default (printf "%s-argocd-github-webhook" .nameNormalized) (index $annotations "argocd-webhook-remote-key") }}
+    {{- $webhookPatchOps := list (dict "op" "replace" "path" "/spec/secretStoreRef/name" "value" $webhookSecretStore) (dict "op" "replace" "path" "/spec/data/0/remoteRef/key" "value" $webhookRemoteKey) }}
+    {{- $patches = append $patches (dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "namespace" "argocd" "name" "argocd-webhook") "patch" (toYaml $webhookPatchOps)) }}
+    {{- end }}
+    {{- if eq $provider "aws" }}
+    {{- $awsRegion := default "us-west-2" (coalesce (index $annotations "aws-region") (index $annotations "region")) }}
+    {{- $awsStorePatch := dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ClusterSecretStore" "name" "aws-secrets-manager") "patch" (printf "- op: replace\n  path: /spec/provider/aws/region\n  value: %s" $awsRegion) }}
+    {{- $patches = append $patches $awsStorePatch }}
+    {{- end }}
+    # floci-divergence: Floci local clusters adapt headscale-preauth record name to the control cluster identity and use local-secret-records for argocd-webhook.
+    {{- if eq $provider "floci" }}
+    {{- $hsSecretPatch := dict "target" (dict "version" "v1" "kind" "Secret" "name" "headscale-preauth") "patch" (printf "- op: replace\n  path: /metadata/name\n  value: headscale-preauth-%s" .nameNormalized) }}
+    {{- $hsRolePatch := dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "Role" "name" "secret-record-reader" "namespace" "secret-records") "patch" (printf "- op: add\n  path: /rules/0/resourceNames/-\n  value: headscale-preauth-%s" .nameNormalized) }}
+    {{- $argocdWebhookPatch := dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "namespace" "argocd" "name" "argocd-webhook") "patch" "- op: replace\n  path: /spec/secretStoreRef/name\n  value: local-secret-records" }}
+    {{- $patches = concat $patches (list $hsSecretPatch $hsRolePatch $argocdWebhookPatch) }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "dex" }}
+    {{- $rayUris := list }}
+    {{- $veleroUris := list (printf "https://velero-ui.%s/oauth2/callback" $baseDomain) }}
+    {{- $snapshotUris := list (printf "https://coder-snapshots.%s/oauth2/callback" $intranetDomain) (printf "https://snapshots.%s/oauth2/callback" $intranetDomain) }}
+    {{- range $c := $registeredCells }}
+    {{- $rayUris = append $rayUris (printf "https://ray.%s.%s/oauth2/callback" $c $accessDomain) }}
+    {{- $veleroUris = append $veleroUris (printf "https://velero-ui.%s.%s/oauth2/callback" $c $accessDomain) }}
+    {{- $snapshotUris = append $snapshotUris (printf "https://coder-snapshots.%s.%s/oauth2/callback" $c $accessDomain) }}
+    {{- $snapshotUris = append $snapshotUris (printf "https://snapshots.%s.%s/oauth2/callback" $c $accessDomain) }}
+    {{- end }}
+    # LINT.IfChange(dex-client-secret-env)
+    {{- $dexClientSpecs := list (dict "id" "argocd" "name" "Argo CD" "secretEnv" "ARGOCD_CLIENT_SECRET" "redirectURIs" (list (printf "https://argocd.%s/auth/callback" $intranetDomain))) (dict "id" "atlantis" "name" "Atlantis" "secretEnv" "ATLANTIS_CLIENT_SECRET" "redirectURIs" (list (printf "https://atlantis.%s/oauth2/callback" $intranetDomain))) (dict "id" "buildbuddy" "name" "BuildBuddy" "secretEnv" "BUILDBUDDY_CLIENT_SECRET" "redirectURIs" (list (printf "https://buildbuddy.%s/oauth2/callback" $intranetDomain))) (dict "id" "coder" "name" "Coder" "secretEnv" "CODER_CLIENT_SECRET" "redirectURIs" (list (printf "https://coder.%s/api/v2/users/oidc/callback" $intranetDomain))) (dict "id" "dragonfly" "name" "Dragonfly" "secretEnv" "DRAGONFLY_CLIENT_SECRET" "redirectURIs" (list (printf "https://dragonfly.%s/oauth2/callback" $intranetDomain))) (dict "id" "headlamp" "name" "Headlamp" "secretEnv" "HEADLAMP_CLIENT_SECRET" "redirectURIs" (list (printf "https://headlamp.%s/oidc-callback" $intranetDomain))) (dict "id" "headscale" "name" "Headscale" "secretEnv" "HEADSCALE_CLIENT_SECRET" "redirectURIs" (list (printf "https://headscale.%s/oidc/callback" $intranetDomain))) (dict "id" "kargo" "name" "Kargo" "public" true "redirectURIs" (list (printf "https://kargo.%s/login" $intranetDomain) "http://localhost:8080/auth/callback" "http://localhost/auth/callback")) (dict "id" "kargo-cli" "name" "Kargo CLI" "public" true "redirectURIs" (list "http://127.0.0.1:8080/auth/callback" "http://localhost:8080/auth/callback")) (dict "id" "kuberhealthy" "name" "Kuberhealthy" "secretEnv" "KUBERHEALTHY_CLIENT_SECRET" "redirectURIs" (list (printf "https://kuberhealthy.%s/oauth2/callback" $intranetDomain))) (dict "id" "opencost" "name" "OpenCost" "secretEnv" "OPENCOST_CLIENT_SECRET" "redirectURIs" (list (printf "https://opencost.%s/oauth2/callback" $intranetDomain))) (dict "id" "parca" "name" "Parca" "secretEnv" "PARCA_CLIENT_SECRET" "redirectURIs" (list (printf "https://parca.%s/oauth2/callback" $intranetDomain))) (dict "id" "ray-dashboard" "name" "Ray Dashboard" "secretEnv" "RAY_DASHBOARD_CLIENT_SECRET" "redirectURIs" $rayUris) (dict "id" "signoz" "name" "SigNoz" "secretEnv" "SIGNOZ_CLIENT_SECRET" "redirectURIs" (list (printf "https://signoz.%s/oauth2/callback" $intranetDomain))) (dict "id" "velero-ui" "name" "Velero UI" "secretEnv" "VELERO_UI_CLIENT_SECRET" "redirectURIs" $veleroUris) (dict "id" "workspace-snapshot-catalog" "name" "Workspace Snapshot Catalog" "secretEnv" "WORKSPACE_SNAPSHOT_CATALOG_CLIENT_SECRET" "redirectURIs" $snapshotUris) }}
+    # LINT.ThenChange(//src/infra/argocd/components/dex/kustomize/client-secrets.external-secret.yaml:dex-client-secret-env)
+    {{- $dexClients := list }}
+    {{- range $client := $dexClientSpecs }}
+    {{- $entry := dict "id" $client.id "name" $client.name "redirectURIs" $client.redirectURIs }}
+    {{- if $client.public }}
+    {{- $entry = mergeOverwrite $entry (dict "public" true) }}
+    {{- else }}
+    {{- $entry = mergeOverwrite $entry (dict "secretEnv" $client.secretEnv) }}
+    {{- end }}
+    {{- $dexClients = append $dexClients $entry }}
+    {{- end }}
+    {{- $dexPasswords := list (dict "email" (printf "ops@%s" $publicDomain) "hash" "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" "preferredUsername" "ops" "username" "ops" "userID" "08a8684b-db88-4b73-90a9-3cd1661f5466" "groups" (list "operators" "team:examples" "team:examples:ops" "capability:gitops" "capability:profiling" "capability:traces" "capability:workspaces")) (dict "email" (printf "ops@%s" $intranetDomain) "hash" "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" "preferredUsername" "ops" "username" "ops" "userID" "08a8684b-db88-4b73-90a9-3cd1661f5466" "groups" (list "operators" "team:examples" "team:examples:ops" "capability:gitops" "capability:profiling" "capability:traces" "capability:workspaces")) (dict "email" (printf "ops@%s" $accessDomain) "hash" "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" "preferredUsername" "ops" "username" "ops" "userID" "08a8684b-db88-4b73-90a9-3cd1661f5466" "groups" (list "operators" "team:examples" "team:examples:ops" "capability:gitops" "capability:profiling" "capability:traces" "capability:workspaces")) (dict "email" (printf "dev@%s" $publicDomain) "hash" "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" "preferredUsername" "dev" "username" "dev" "userID" "c8379f28-1337-4f35-95fd-353efd40b3ee" "groups" (list "team:examples" "team:examples:dev" "capability:traces" "capability:workspaces")) (dict "email" (printf "dev@%s" $intranetDomain) "hash" "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" "preferredUsername" "dev" "username" "dev" "userID" "c8379f28-1337-4f35-95fd-353efd40b3ee" "groups" (list "team:examples" "team:examples:dev" "capability:traces" "capability:workspaces")) (dict "email" (printf "dev@%s" $accessDomain) "hash" "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" "preferredUsername" "dev" "username" "dev" "userID" "c8379f28-1337-4f35-95fd-353efd40b3ee" "groups" (list "team:examples" "team:examples:dev" "capability:traces" "capability:workspaces")) }}
+    {{- $dexConnectors := list }}
+    # floci-divergence: Local clusters do not have Google Workspace OAuth credentials.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $googleGroupsEnabled := false }}
+    {{- $groupsAnnotation := index $annotations "google-groups-enabled" }}
+    {{- $groupsHelmValue := coalesce (index $helmValues "google-groups-enabled") (index $helmValues "googleGroupsEnabled") }}
+    {{- if ne $groupsAnnotation nil }}
+    {{- $googleGroupsEnabled = eq ($groupsAnnotation | toString) "true" }}
+    {{- else if ne $groupsHelmValue nil }}
+    {{- $googleGroupsEnabled = eq ($groupsHelmValue | toString) "true" }}
+    {{- end }}
+    {{- $googleConnectorConfig := dict "clientID" "$GOOGLE_CLIENT_ID" "clientSecret" "$GOOGLE_CLIENT_SECRET" "redirectURI" (printf "https://dex.%s/callback" $intranetDomain) "hostedDomains" $hostedDomains }}
+    {{- if $googleGroupsEnabled }}
+    {{- $googleConnectorConfig = mergeOverwrite $googleConnectorConfig (dict "serviceAccountFilePath" "/etc/dex/google-sa/service-account.json" "adminEmail" $googleAdminEmail "groups" $operatorGroups) }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "volumeMounts" (list (dict "name" "tmp" "mountPath" "/tmp") (dict "name" "google-sa" "mountPath" "/etc/dex/google-sa" "readOnly" true)) "volumes" (list (dict "name" "tmp" "emptyDir" (dict "medium" "Memory" "sizeLimit" "16Mi")) (dict "name" "google-sa" "secret" (dict "secretName" "google-workspace-oauth" "optional" true)))) }}
+    {{- end }}
+    {{- $dexConnectors = list (dict "type" "google" "id" "google" "name" "Google Workspace" "config" $googleConnectorConfig) }}
+    {{- else }}
+    {{- $patches = append $patches (dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "name" "google-workspace-oauth") "patch" "apiVersion: external-secrets.io/v1\nkind: ExternalSecret\nmetadata:\n  name: google-workspace-oauth\n$patch: delete") }}
+    {{- end }}
+    {{- $dexOauth2 := dict "skipApprovalScreen" true "grantTypes" (list "authorization_code" "refresh_token") }}
+    {{- $dexConfig := dict "issuer" (printf "https://dex.%s" $intranetDomain) "storage" (dict "type" "kubernetes" "config" (dict "inCluster" true "crdHandling" "check")) "web" (dict "http" "0.0.0.0:5556" "allowedOrigins" (list "*")) "oauth2" $dexOauth2 "expiry" (dict "refreshTokens" (dict "reuseInterval" "3s")) "sessions" (dict "absoluteLifetime" "24h" "validIfNotUsedFor" "1h" "ssoSharedWithDefault" "all") "staticClients" $dexClients "enablePasswordDB" false }}
+    {{- if gt (len $dexConnectors) 0 }}
+    {{- $dexConfig = mergeOverwrite $dexConfig (dict "connectors" $dexConnectors) }}
+    {{- else }}
+    {{- $dexConfig = mergeOverwrite $dexConfig (dict "enablePasswordDB" true "staticPasswords" $dexPasswords "oauth2" (dict "passwordConnector" "local" "grantTypes" (list "authorization_code" "refresh_token" "password"))) }}
+    {{- end }}
+    {{- $dexPatch := dict "target" (dict "version" "v1" "kind" "Secret" "name" "dex-config") "patch" (printf "apiVersion: v1\nkind: Secret\nmetadata:\n  name: dex-config\nstringData:\n  config.yaml: |\n%s" (toYaml $dexConfig | indent 4)) }}
+    {{- $patches = append $patches $dexPatch }}
+    # floci-divergence: Cloud clusters sync Google Workspace OAuth credentials from the cloud secret store.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $oauthSecretStore := default "aws-secrets-manager" (index $annotations "secret-store-cloud") }}
+    {{- $oauthRemoteKey := default (printf "%s-google-workspace-oauth" .nameNormalized) (index $annotations "google-workspace-oauth-key") }}
+    {{- $oauthPatchOps := list (dict "op" "replace" "path" "/spec/secretStoreRef/name" "value" $oauthSecretStore) (dict "op" "replace" "path" "/spec/dataFrom/0/extract/key" "value" $oauthRemoteKey) }}
+    {{- $patches = append $patches (dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "name" "google-workspace-oauth") "patch" (toYaml $oauthPatchOps)) }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "kuberhealthy" }}
+    {{- $headlampClusters := join "," (concat (list .nameNormalized) $registeredCells) }}
+    {{- $identityValues := printf "# Declares shared container image digests and test fixture parameters to defend Chainsaw test suites against unpinned dependencies and registry drift.\n\nclusterDomain: %s\nheadlampClusters: %s\nintranetDomain: %s\npublicDomain: %s\npythonImage: >-\n  docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df\n" $clusterDomain $headlampClusters $intranetDomain $publicDomain }}
+    {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "chainsaw-identity-tests") "patch" (printf "- op: replace\n  path: /data/values.yaml\n  value: %q" $identityValues)) }}
+    {{- $observabilityValues := printf "# Declares shared container image digests and test fixture parameters to defend Chainsaw test suites against unpinned dependencies and registry drift.\n\nclusterDomain: %s\npythonImage: >-\n  docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df\n" $clusterDomain }}
+    {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "chainsaw-observability-tests") "patch" (printf "- op: replace\n  path: /data/values.yaml\n  value: %q" $observabilityValues)) }}
+    {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "chainsaw-storage-tests") "patch" "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: chainsaw-storage-tests\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "chainsaw-scheduling-tests") "patch" "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: chainsaw-scheduling-tests\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "comcast.github.io" "version" "v1" "kind" "KuberhealthyCheck" "name" "chainsaw-scheduling") "patch" "apiVersion: comcast.github.io/v1\nkind: KuberhealthyCheck\nmetadata:\n  name: chainsaw-scheduling\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "comcast.github.io" "version" "v1" "kind" "KuberhealthyCheck" "name" "chainsaw-storage") "patch" "apiVersion: comcast.github.io/v1\nkind: KuberhealthyCheck\nmetadata:\n  name: chainsaw-storage\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ServiceAccount" "name" "chainsaw-scheduling") "patch" "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: chainsaw-scheduling\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "ClusterRole" "name" "chainsaw-scheduling") "patch" "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name: chainsaw-scheduling\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "ClusterRoleBinding" "name" "chainsaw-scheduling") "patch" "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRoleBinding\nmetadata:\n  name: chainsaw-scheduling\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "Role" "name" "chainsaw-scheduling") "patch" "apiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  name: chainsaw-scheduling\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "RoleBinding" "name" "chainsaw-scheduling") "patch" "apiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n  name: chainsaw-scheduling\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ServiceAccount" "name" "chainsaw-storage") "patch" "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: chainsaw-storage\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "ClusterRole" "name" "chainsaw-storage") "patch" "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name: chainsaw-storage\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "ClusterRoleBinding" "name" "chainsaw-storage") "patch" "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRoleBinding\nmetadata:\n  name: chainsaw-storage\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "Role" "name" "chainsaw-storage") "patch" "apiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  name: chainsaw-storage\n$patch: delete") }}
+    {{- $patches = append $patches (dict "target" (dict "group" "rbac.authorization.k8s.io" "version" "v1" "kind" "RoleBinding" "name" "chainsaw-storage") "patch" "apiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n  name: chainsaw-storage\n$patch: delete") }}
+    {{- end }}
+    {{- with .domainUrlPatch }}
+    {{- $patches = append $patches (dict "target" .target "patch" (printf "- op: replace\n  path: %s\n  value: %s%s" .path .prefix $accessDomain)) }}
+    {{- end }}
+    {{- $acmeEnabled := eq (default "" (index .metadata.labels "acme-dns01")) "enabled" }}
+    # floci-divergence: Floci local clusters lack public DNS zones required for ACME DNS-01 challenges.
+    {{- if and $acmeEnabled (ne $provider "floci") (ne $provider "") }}
+    {{- with .acmeOverrides }}
+    {{- $helmValues = mergeOverwrite $helmValues . }}
+    {{- end }}
+    {{- end }}
+    {{- if eq .component "acme" }}
+    # floci-divergence: Cloud clusters reference cluster-scoped Cloudflare credentials in AWS Secrets Manager.
+    {{- if and (ne $provider "floci") (ne $provider "") }}
+    {{- $cfRemoteKey := default (printf "%s-cloudflare-api-token" .nameNormalized) (index $annotations "cloudflare-api-token-key") }}
+    {{- $cfPatchOps := list (dict "op" "replace" "path" "/spec/data/0/remoteRef/key" "value" $cfRemoteKey) }}
+    {{- $patches = append $patches (dict "target" (dict "group" "external-secrets.io" "version" "v1" "kind" "ExternalSecret" "namespace" "cert-manager-system" "name" "cloudflare-api-token") "patch" (toYaml $cfPatchOps)) }}
+    {{- $acmeIssuerPatchOps := list (dict "op" "replace" "path" "/spec/acme/email" "value" $googleAdminEmail) (dict "op" "replace" "path" "/spec/acme/solvers/0/selector/dnsZones" "value" (list $intranetDomain)) (dict "op" "replace" "path" "/spec/acme/solvers/1/selector/dnsZones" "value" $hostedDomains) }}
+    {{- $patches = append $patches (dict "target" (dict "group" "cert-manager.io" "version" "v1" "kind" "ClusterIssuer" "name" "public-acme") "patch" (toYaml $acmeIssuerPatchOps)) }}
+    {{- end }}
+    {{- end }}
+    {{- if .injectClusterProvider }}
+    {{- $helmValues = mergeOverwrite $helmValues (dict "target" (dict "name" .nameNormalized "provider" (default "floci" $provider) "role" "ctrl")) }}
+    {{- end }}
+    {{- $valFiles := default list }}
+    {{- if .helmValueFiles }}
+    {{- $valFiles = .helmValueFiles }}
+    {{- else if .helmValues }}
+    {{- $valFiles = list .helmValues }}
+    {{- else if .chart }}
+    {{- $defaultVal := ternary (regexReplaceAll "/kustomize.*$" .path "/helm/values.yaml") (printf "%s/values.yaml" .path) (contains "/kustomize" .path) }}
+    {{- $valFiles = list $defaultVal }}
+    {{- end }}
+    {{- with (index (default dict .helmValueOverridesByProvider) $provider) }}
+    {{- $valFiles = concat $valFiles . }}
+    {{- end }}
+    {{- $vpaTargets := default list }}
+    {{- $vpaUpdateMode := "InPlace" }}
+    {{- $vpaControlledValues := "RequestsOnly" }}
+    {{- if hasKey . "vpa" }}
+      {{- if kindIs "bool" .vpa }}
+        {{- if .vpa }}
+          {{- $vpaTargets = list (dict "name" .component) }}
+        {{- end }}
+      {{- else if kindIs "slice" .vpa }}
+        {{- $vpaTargets = .vpa }}
+      {{- else if kindIs "map" .vpa }}
+        {{- with .vpa.targets }}
+          {{- $vpaTargets = . }}
+        {{- end }}
+        {{- with .vpa.updateMode }}
+          {{- $vpaUpdateMode = . }}
+        {{- end }}
+        {{- with .vpa.controlledValues }}
+          {{- $vpaControlledValues = . }}
+        {{- end }}
+      {{- else if kindIs "string" .vpa }}
+        {{- if and (ne .vpa "custom") (ne .vpa "false") }}
+          {{- $vpaTargets = list (dict "name" .vpa) }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    spec:
+    {{- with .ignoreDifferences }}
+      ignoreDifferences: {{ . | toJson }}
+    {{- end }}
+      sources:
+      {{- if .chart }}
+        - repoURL: '{{ .chartRepo }}'
+          chart: '{{ .chart }}'
+          targetRevision: '{{ .chartVersion }}'
+          helm:
+            releaseName: '{{ .releaseName | default .component }}'
+            valueFiles:
+            {{- range $valFiles }}
+              - '$values/{{ . }}'
+            {{- end }}
+            {{- with $helmValues }}
+            valuesObject: {{ . | toJson }}
+            {{- end }}
+        - repoURL: '{{ $repoURL }}'
+          targetRevision: HEAD
+          ref: values
+        {{- if not (hasSuffix "/helm" .path) }}
+        - repoURL: '{{ $repoURL }}'
+          targetRevision: HEAD
+          path: '{{ .path }}'
+          {{- if $patches }}
+          kustomize:
+            patches: {{ $patches | toJson }}
+          {{- end }}
+        {{- end }}
+      {{- else }}
+        - repoURL: '{{ $repoURL }}'
+          targetRevision: HEAD
+          path: '{{ .path }}'
+        {{- if $valFiles }}
+          helm:
+            valueFiles:
+            {{- range $valFiles }}
+              - '{{ . }}'
+            {{- end }}
+            {{- with $helmValues }}
+            valuesObject: {{ . | toJson }}
+            {{- end }}
+        {{- else if $patches }}
+          kustomize:
+            patches: {{ $patches | toJson }}
+        {{- end }}
+      {{- end }}
+      {{- if $vpaTargets }}
+        - repoURL: '{{ $repoURL }}'
+          targetRevision: HEAD
+          path: src/infra/argocd/components/default_vpa/helm
+          helm:
+            valuesObject:
+              enabled: true
+              updateMode: '{{ $vpaUpdateMode }}'
+              controlledValues: '{{ $vpaControlledValues }}'
+              targets:
+              {{- range $vpaTargets }}
+                {{- if kindIs "map" . }}
+                - name: '{{ .name }}'
+                  {{- with .kind }}
+                  kind: '{{ . }}'
+                  {{- end }}
+                  {{- with .apiVersion }}
+                  apiVersion: '{{ . }}'
+                  {{- end }}
+                  {{- with .updateMode }}
+                  updateMode: '{{ . }}'
+                  {{- end }}
+                  {{- with .minAllowed }}
+                  minAllowed: {{ . | toJson }}
+                  {{- end }}
+                {{- else }}
+                - name: '{{ . }}'
+                {{- end }}
+              {{- end }}
+      {{- end }}

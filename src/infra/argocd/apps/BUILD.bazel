@@ -1,0 +1,68 @@
+"""Check targets for the Argo CD applications."""
+
+load("@rules_python//python:defs.bzl", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "HELM_TEMPLATE", "package_sources", "source_set")
+
+source_set(
+    name = "application_templates",
+    srcs = glob(
+        ["*.yaml"],
+        exclude = ["profiles.yaml"],
+    ),
+    kind = HELM_TEMPLATE,
+)
+
+exports_files(
+    ["cells.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+package_sources(exclude = [
+    "cells.yaml",
+    "ctrl.yaml",
+    "projects.yaml",
+    "teams.yaml",
+])
+
+py_test(
+    name = "profiles_test",
+    srcs = ["profiles_test.py"],
+    args = [
+        "$(locations @rules_helm//helm:current_toolchain)",
+        "$(location //src/infra/argocd/components/dragonfly_peer:helm/client-image.yaml)",
+        "$(location //src/infra/argocd/components/dragonfly_manager:vendor-helm-render)",
+        "$(location //src/infra/argocd/components/dragonfly_peer:vendor-helm-render)",
+        "$(location //src/infra/images:infrastructure-images.json)",
+        "$(location //src/infra/argocd/components/clickhouse:base_render)",
+        "$(location //src/infra/argocd/components/coder:kustomize/template-reconciler.k8s.yaml)",
+        "$(location //src/infra/argocd/components/local_runtime_tls:helm_render)",
+        "$(location //src/infra/argocd/components/vpa:helm/values.yaml)",
+        "$(location @vendor_helm_vpa//:vertical-pod-autoscaler)",
+        "$(location //src/infra/argocd/components/routing_registry:helm_render-local-cell)",
+        "$(location //src/examples/svelte_web:manifest)",
+        "$(locations @rules_gitops//kustomize:resolved_toolchain)",
+        "$(location profiles.yaml)",
+        "$(location ctrl.yaml)",
+        "$(location cells.yaml)",
+    ],
+    data = [
+        "cells.yaml",
+        "ctrl.yaml",
+        "profiles.yaml",
+        "teams.yaml",
+        "//src/examples/svelte_web:manifest",
+        "//src/infra/argocd/components/clickhouse:base_render",
+        "//src/infra/argocd/components/coder:kustomize/template-reconciler.k8s.yaml",
+        "//src/infra/argocd/components/dragonfly_manager:vendor-helm-render",
+        "//src/infra/argocd/components/dragonfly_peer:helm/client-image.yaml",
+        "//src/infra/argocd/components/dragonfly_peer:vendor-helm-render",
+        "//src/infra/argocd/components/local_runtime_tls:helm_render",
+        "//src/infra/argocd/components/routing_registry:helm_render-local-cell",
+        "//src/infra/argocd/components/vpa:helm/values.yaml",
+        "//src/infra/images:infrastructure-images.json",
+        "@rules_gitops//kustomize:resolved_toolchain",
+        "@rules_helm//helm:current_toolchain",
+        "@vendor_helm_vpa//:vertical-pod-autoscaler",
+    ],
+    deps = ["@dev_python_deps//pyyaml"],
+)
