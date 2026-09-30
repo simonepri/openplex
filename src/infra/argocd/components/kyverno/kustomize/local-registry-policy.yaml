@@ -1,0 +1,14 @@
+# Adds Floci ECR's loopback OCI address to the approved local workload-image registries. The local runtime maps it to the shared registry data plane.
+
+- op: test
+  path: /spec/rules/1/name
+  value: require-trusted-registries-for-workload-images
+- op: test
+  path: /spec/rules/1/validate/deny/conditions/any/0/value/3
+  value: ghcr.io
+- op: test
+  path: /spec/rules/1/validate/deny/conditions/any/0/value/4
+  value: nvcr.io
+- op: add
+  path: /spec/rules/1/validate/deny/conditions/any/0/value/4
+  value: localhost:15100
