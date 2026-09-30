@@ -1,0 +1,21 @@
+# Preserves one kube-oidc-proxy replica during voluntary disruptions. The shared redundant-availability component includes it once.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kube-oidc-proxy
+  namespace: kube-oidc-proxy-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/component: oidc-authenticator
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kube-oidc-proxy
+    app.kubernetes.io/part-of: headlamp
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: kube-oidc-proxy
+      app.kubernetes.io/name: kube-oidc-proxy

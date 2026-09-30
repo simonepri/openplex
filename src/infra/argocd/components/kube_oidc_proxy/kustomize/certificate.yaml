@@ -1,0 +1,26 @@
+# Public TLS certificate for the cell-qualified kube-oidc-proxy door. Fleet patches the exact cell-qualified hostname; cloud cells use ACME DNS-01.
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kube-oidc-proxy-door
+  namespace: kube-oidc-proxy-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/component: serving-tls
+    app.kubernetes.io/managed-by: cert-manager
+    app.kubernetes.io/name: kube-oidc-proxy
+    app.kubernetes.io/part-of: headlamp
+spec:
+  dnsNames:
+    # keep-sorted start
+    - kube-oidc-proxy.invalid
+    - kube-oidc-proxy.kube-oidc-proxy-system.svc
+    - kube-oidc-proxy.kube-oidc-proxy-system.svc.cluster.local
+    # keep-sorted end
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: cluster-local-ca
+  secretName: kube-oidc-proxy-tls

@@ -1,0 +1,330 @@
+# Configures ServiceAccount and impersonation ClusterRole allowing kube-oidc-proxy to delegate user actions.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-oidc-proxy
+  namespace: kube-oidc-proxy-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/component: oidc-authenticator
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kube-oidc-proxy
+    app.kubernetes.io/part-of: headlamp
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-oidc-proxy-impersonator
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/component: impersonation
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kube-oidc-proxy
+    app.kubernetes.io/part-of: headlamp
+rules:
+  # Kubernetes 1.36 constrained impersonation checks the requested action
+  # before checking every forwarded user.Info field. These custom verbs grant
+  # no direct resource access to the proxy ServiceAccount; the impersonated
+  # user's ordinary RBAC remains the final authorization boundary.
+  # LINT.IfChange(headlamp-constrained-actions)
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - endpoints
+      - events
+      - limitranges
+      - namespaces
+      - nodes
+      - persistentvolumeclaims
+      - persistentvolumes
+      - pods
+      - pods/log
+      - resourcequotas
+      - services
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [""]
+    resources: [services/proxy]
+    resourceNames: ['prometheus-api-bridge:9090']
+    verbs: ["impersonate-on:user-info:get"]
+  - apiGroups: [""]
+    resources: [pods/eviction]
+    verbs: ["impersonate-on:user-info:create"]
+  - apiGroups: [apps]
+    resources: [daemonsets, deployments, replicasets, statefulsets]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [apps]
+    resources: [deployments/scale, statefulsets/scale]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:patch"
+      - "impersonate-on:user-info:update"
+  - apiGroups: [batch]
+    resources: [cronjobs, jobs]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [networking.k8s.io]
+    resources: [ingressclasses, ingresses, networkpolicies]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [storage.k8s.io]
+    resources:
+      - csidrivers
+      - csinodes
+      - storageclasses
+      - volumeattachments
+      - volumeattributesclasses
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [snapshot.storage.k8s.io]
+    resources: [volumesnapshotclasses, volumesnapshotcontents, volumesnapshots]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterrolebindings, clusterroles, rolebindings, roles]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes, pods]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+  - apiGroups: [authorization.k8s.io]
+    resources: [selfsubjectaccessreviews, selfsubjectrulesreviews]
+    verbs: ["impersonate-on:user-info:create"]
+  - apiGroups: [argoproj.io]
+    resources: [applications, applicationsets, appprojects]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gatewayclasses, gateways, grpcroutes, httproutes]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [kueue.x-k8s.io]
+    resources:
+      - clusterqueues
+      - cohorts
+      - localqueues
+      - resourceflavors
+      - topologies
+      - workloads
+      - workloadpriorityclasses
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [ray.io]
+    resources: [rayclusters, rayjobs, rayservices]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [cert-manager.io]
+    resources: [certificaterequests, certificates, clusterissuers, issuers]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [acme.cert-manager.io]
+    resources: [challenges, orders]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [karpenter.sh]
+    resources: [nodeclaims, nodeclasses, nodepools]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [karpenter.k8s.aws]
+    resources: [ec2nodeclasses]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [karpenter.k8s.gcp]
+    resources: [gcenodeclasses]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [keda.sh]
+    resources: [clustertriggerauthentications, scaledjobs, scaledobjects, triggerauthentications]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [kyverno.io]
+    resources:
+      - admissionreports
+      - backgroundscanreports
+      - cleanuppolicies
+      - clusteradmissionreports
+      - clusterbackgroundscanreports
+      - clustercleanuppolicies
+      - clusterpolicies
+      - policies
+      - policyexceptions
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [policies.kyverno.io]
+    resources: [deletingpolicies, generatingpolicies, imagevalidatingpolicies, mutatingpolicies, validatingpolicies]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [reports.kyverno.io]
+    resources: [clusterephemeralreports, ephemeralreports]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [wgpolicyk8s.io]
+    resources: [clusterpolicyreports, policyreports]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [aquasecurity.github.io]
+    resources:
+      - clustercompliancereports
+      - clusterconfigauditreports
+      - clusterinfraassessmentreports
+      - clusterrbacassessmentreports
+      - clustersbomreports
+      - clustervulnerabilityreports
+      - configauditreports
+      - exposedsecretreports
+      - infraassessmentreports
+      - rbacassessmentreports
+      - sbomreports
+      - vulnerabilityreports
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [spdx.softwarecomposition.kubescape.io]
+    resources:
+      - applicationprofiles
+      - configurationscansummaries
+      - generatednetworkpolicies
+      - knownservers
+      - networkneighborhoods
+      - openvulnerabilityexchangecontainers
+      - sbomsyftfiltereds
+      - sbomsyfts
+      - vulnerabilitymanifests
+      - vulnerabilitymanifestsummaries
+      - vulnerabilitysummaries
+      - workloadconfigurationscans
+      - workloadconfigurationscansummaries
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [kubescape.io]
+    resources: [clustersecurityexceptions, rules, runtimerulealertbindings, securityexceptions]
+    verbs:
+      - "impersonate-on:user-info:get"
+      - "impersonate-on:user-info:list"
+      - "impersonate-on:user-info:watch"
+  - apiGroups: [""]
+    resources: [services/proxy]
+    resourceNames: ['opencost:http-ui']
+    verbs: ["impersonate-on:user-info:get"]
+  - nonResourceURLs:
+      - /api
+      - /api/*
+      - /apis
+      - /apis/*
+      - /healthz
+      - /livez
+      - /openapi
+      - /openapi/*
+      - /readyz
+      - /version
+      - /version/
+    verbs: ["impersonate-on:user-info:get"]
+  # LINT.ThenChange(//src/infra/argocd/components/cluster_access/kustomize/operator-access.yaml:headlamp-cluster-operator-actions)
+  # User and group values come only from the validated OIDC token: the proxy
+  # rejects client-supplied Impersonate-* headers unless the OIDC user may
+  # impersonate, and the fleet contract requires the cluster:group: prefix.
+  # The constrained user-info mode also rejects system:masters unconditionally.
+  - apiGroups: [authentication.k8s.io]
+    resources: [users, groups]
+    verbs: ["impersonate:user-info"]
+  # Kubernetes adds this audit identity to authenticated OIDC user.Info. No
+  # arbitrary extra, token-review, or end-user impersonation permission exists.
+  - apiGroups: [authentication.k8s.io]
+    resources: [userextras/authentication.kubernetes.io/credential-id]
+    verbs: ["impersonate:user-info"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-oidc-proxy-impersonator
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/component: impersonation
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kube-oidc-proxy
+    app.kubernetes.io/part-of: headlamp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-oidc-proxy-impersonator
+subjects:
+  - kind: ServiceAccount
+    name: kube-oidc-proxy
+    namespace: kube-oidc-proxy-system

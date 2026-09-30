@@ -1,0 +1,182 @@
+# Deploys kube-oidc-proxy validating Dex tokens and proxying authenticated requests via impersonation headers.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-oidc-proxy
+  namespace: kube-oidc-proxy-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: oidc-authenticator
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kube-oidc-proxy
+    app.kubernetes.io/part-of: headlamp
+    app.kubernetes.io/version: 1.0.12
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: kube-oidc-proxy
+      app.kubernetes.io/name: kube-oidc-proxy
+  template:
+    metadata:
+      annotations:
+        # The fleet child Application replaces both values from the validated contract.
+        checksum/oidc-contract: configured-by-applicationset
+      labels:
+        app.kubernetes.io/component: oidc-authenticator
+        app.kubernetes.io/instance: kube-oidc-proxy
+        app.kubernetes.io/name: kube-oidc-proxy
+        app.kubernetes.io/part-of: headlamp
+        app.kubernetes.io/version: 1.0.12
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: kube-oidc-proxy
+                    app.kubernetes.io/name: kube-oidc-proxy
+                topologyKey: kubernetes.io/hostname
+              weight: 100
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      priorityClassName: cluster-operators
+      serviceAccountName: kube-oidc-proxy
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: kube-oidc-proxy
+          image: ghcr.io/tremolosecurity/kube-oidc-proxy:1.0.12-2ae5ed@sha256:d7747f308042216acd31eb48af4baefb2f508afc2023736451931b2d323907e9
+          imagePullPolicy: IfNotPresent
+          command: [/usr/bin/kube-oidc-proxy]
+          args:
+            - --secure-port=8443
+            - --tls-cert-file=/etc/kube-oidc-proxy/tls/tls.crt
+            - --tls-private-key-file=/etc/kube-oidc-proxy/tls/tls.key
+            - --tls-min-version=VersionTLS12
+            - --readiness-probe-port=8080
+            - --kubeconfig=/etc/kube-oidc-proxy/upstream/kubeconfig
+            # kube-oidc-proxy 1.0.12 always constructs a CA provider; passing
+            # the cluster CA bundle keeps local and private issuers usable.
+            - --oidc-ca-file=/etc/ssl/local-ca/ca.crt
+            - --oidc-client-id=$(OIDC_CLIENT_ID)
+            - --oidc-issuer-url=$(OIDC_ISSUER_URL)
+            - --oidc-username-claim=$(OIDC_USERNAME_CLAIM)
+            - --oidc-username-prefix=$(OIDC_USERNAME_PREFIX)
+            - --oidc-groups-claim=$(OIDC_GROUPS_CLAIM)
+            - --oidc-groups-prefix=$(OIDC_GROUPS_PREFIX)
+            - --oidc-signing-algs=RS256
+          env:
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: kube-oidc-proxy-config
+                  key: oidc-client-id
+            - name: OIDC_GROUPS_CLAIM
+              valueFrom:
+                configMapKeyRef:
+                  name: kube-oidc-proxy-config
+                  key: oidc-groups-claim
+            - name: OIDC_GROUPS_PREFIX
+              valueFrom:
+                configMapKeyRef:
+                  name: kube-oidc-proxy-config
+                  key: oidc-groups-prefix
+            - name: OIDC_ISSUER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: kube-oidc-proxy-config
+                  key: oidc-issuer-url
+            - name: OIDC_USERNAME_CLAIM
+              valueFrom:
+                configMapKeyRef:
+                  name: kube-oidc-proxy-config
+                  key: oidc-username-claim
+            - name: OIDC_USERNAME_PREFIX
+              valueFrom:
+                configMapKeyRef:
+                  name: kube-oidc-proxy-config
+                  key: oidc-username-prefix
+          ports:
+            - {name: https, containerPort: 8443, protocol: TCP}
+            - {name: health, containerPort: 8080, protocol: TCP}
+          readinessProbe:
+            httpGet: {path: /ready, port: health, scheme: HTTP}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: {port: https}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - name: kube-oidc-proxy-control-ca
+              mountPath: /etc/ssl/local-ca
+              readOnly: true
+            - name: kube-root-ca
+              mountPath: /etc/ssl/kube-root-ca
+              readOnly: true
+            - name: serving-tls
+              mountPath: /etc/kube-oidc-proxy/tls
+              readOnly: true
+            - name: upstream-kubeconfig
+              mountPath: /etc/kube-oidc-proxy/upstream
+              readOnly: true
+            - name: projected-kubernetes-api-token
+              mountPath: /var/run/secrets/tokens/kubernetes-api
+              readOnly: true
+      volumes:
+        - name: kube-oidc-proxy-control-ca
+          configMap:
+            name: kube-oidc-proxy-control-ca
+            items:
+              - {key: ca.crt, path: ca.crt}
+        - name: kube-root-ca
+          configMap:
+            name: kube-root-ca.crt
+        - name: serving-tls
+          secret:
+            secretName: kube-oidc-proxy-tls
+            defaultMode: 288
+            items:
+              - {key: tls.crt, path: tls.crt}
+              - {key: tls.key, path: tls.key}
+        - name: upstream-kubeconfig
+          configMap:
+            name: kube-oidc-proxy-config
+            defaultMode: 292
+            items:
+              - {key: upstream-kubeconfig, path: kubeconfig}
+        - name: projected-kubernetes-api-token
+          projected:
+            defaultMode: 288
+            sources:
+              - serviceAccountToken:
+                  expirationSeconds: 3600
+                  path: token

@@ -1,0 +1,29 @@
+# Allows Dex ingress from the Envoy Gateway edge and from the local-login conformance test pod.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dex
+  namespace: dex
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: dex
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: dex
+      app.kubernetes.io/name: dex
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 5556}
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: local-login-conformance
+      ports:
+        - {protocol: TCP, port: 5556}

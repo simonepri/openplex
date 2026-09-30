@@ -1,0 +1,25 @@
+# Internal TLS service for kube-oidc-proxy. The shared Gateway owns network exposure; Headlamp derives the cell-qualified endpoint from the cell inventory.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-oidc-proxy
+  namespace: kube-oidc-proxy-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: oidc-authenticator
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kube-oidc-proxy
+    app.kubernetes.io/part-of: headlamp
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: kube-oidc-proxy
+    app.kubernetes.io/name: kube-oidc-proxy
+  ports:
+    - name: https
+      appProtocol: https
+      port: 443
+      protocol: TCP
+      targetPort: https

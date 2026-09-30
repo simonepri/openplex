@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Values contract for the first-party oauth2-proxy integration chart consumed by Argo CD fleet Applications.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "application",
+    "identity",
+    "localCA",
+    "mode",
+    "oidcEgressCIDR",
+    "podDisruptionBudget",
+    "proxy"
+  ],
+  "properties": {
+    "affinity": { "type": "object" },
+    "mode": { "type": "string", "enum": ["disabled", "single"] },
+    "application": { "type": "object" },
+    "identity": { "type": "object" },
+    "internalDNS": { "type": "object" },
+    "localCA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "oidcEgressCIDR": {
+      "type": "string",
+      "pattern": "^(|(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/32)$"
+    },
+    "replicas": { "type": "integer", "minimum": 1 },
+    "podDisruptionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "proxy": { "type": "object" },
+    "topologySpreadConstraints": { "type": "array" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "mode": { "const": "disabled" }
+      }
+    },
+    {
+      "properties": {
+        "mode": { "const": "single" },
+        "application": { "$ref": "#/$defs/application" },
+        "identity": { "$ref": "#/$defs/singleIdentity" },
+        "proxy": { "$ref": "#/$defs/proxy" }
+      }
+    }
+  ],
+  "$defs": {
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["partOf", "serviceAccountName"],
+      "properties": {
+        "partOf": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "serviceAccountName": { "$ref": "#/$defs/dnsLabel" }
+      }
+    },
+    "dnsLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientIDProperty",
+        "clientSecretProperty",
+        "cookieSecretProperty",
+        "secretName"
+      ],
+      "properties": {
+        "clientIDProperty": { "$ref": "#/$defs/secretProperty" },
+        "clientSecretProperty": { "$ref": "#/$defs/secretProperty" },
+        "cookieSecretProperty": { "$ref": "#/$defs/secretProperty" },
+        "externalURLProperty": { "$ref": "#/$defs/secretProperty" },
+        "secretName": { "$ref": "#/$defs/dnsLabel" }
+      }
+    },
+    "singleIdentity": {
+      "$ref": "#/$defs/identity"
+    },
+    "secretProperty": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "labelMap": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cookieName", "name", "upstream"],
+      "properties": {
+        "cookieName": { "type": "string", "pattern": "^_[A-Za-z0-9_]+$" },
+        "name": { "$ref": "#/$defs/dnsLabel" },
+        "passUserHeaders": { "type": "boolean" },
+        "redirectURL": { "type": "string", "pattern": "^https://\\S+/oauth2/callback$" },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "$ref": "#/$defs/dnsLabel" }
+          },
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": { "required": ["secretName"] }
+        },
+        "upstream": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["podSelector", "port", "url"],
+          "properties": {
+            "namespaceSelector": { "$ref": "#/$defs/labelMap" },
+            "podSelector": { "$ref": "#/$defs/labelMap" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "url": { "type": "string", "pattern": "^https?://\\S+$" }
+          }
+        }
+      }
+    }
+  }
+}

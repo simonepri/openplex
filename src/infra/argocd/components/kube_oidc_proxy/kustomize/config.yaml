@@ -1,0 +1,42 @@
+# Defines kube-oidc-proxy configuration with OIDC client settings and projected token upstream kubeconfig.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-oidc-proxy-config
+  namespace: kube-oidc-proxy-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/component: oidc-authenticator
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kube-oidc-proxy
+    app.kubernetes.io/part-of: headlamp
+data:
+  # The Kube OIDC proxy fleet child Application replaces these fail-closed values from one
+  # validated, versioned registration contract.
+  oidc-client-id: headlamp
+  oidc-groups-claim: groups
+  oidc-groups-prefix: "cluster:group:"
+  oidc-issuer-url: https://dex.invalid
+  oidc-username-claim: preferred_username
+  oidc-username-prefix: "cluster:user:"
+  upstream-kubeconfig: |
+    apiVersion: v1
+    kind: Config
+    preferences: {}
+    clusters:
+      - name: upstream
+        cluster:
+          server: https://kubernetes.default.svc
+          certificate-authority: /etc/ssl/kube-root-ca/ca.crt
+    contexts:
+      - name: upstream
+        context:
+          cluster: upstream
+          user: projected-service-account
+    current-context: upstream
+    users:
+      - name: projected-service-account
+        user:
+          tokenFile: /var/run/secrets/tokens/kubernetes-api/token
