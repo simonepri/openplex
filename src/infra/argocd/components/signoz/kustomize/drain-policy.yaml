@@ -1,0 +1,125 @@
+# Enforces Kyverno ClusterPolicy giving otel-collector and signoz Pods extended termination grace periods.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: signoz-services-runtime-hardening
+  annotations:
+    # Apply pod shutdown budgets before the chart workloads are created.
+    argocd.argoproj.io/sync-wave: "-1"
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  failurePolicy: Fail
+  validationFailureAction: Audit
+  rules:
+    - name: give-signoz-services-time-to-drain
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [signoz]
+              selector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values: [otel-collector, signoz]
+                matchLabels:
+                  app.kubernetes.io/instance: signoz
+      mutate:
+        patchStrategicMerge:
+          spec:
+            terminationGracePeriodSeconds: 60
+      skipBackgroundRequests: true
+    - name: wait-for-postgres
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [signoz]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: signoz
+                  app.kubernetes.io/instance: signoz
+      mutate:
+        patchStrategicMerge:
+          spec:
+            initContainers:
+              - name: wait-for-postgres
+                image: docker.io/curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+                command:
+                  - /bin/sh
+                  - -ec
+                  - |
+                    until nc -z -w 2 signoz-postgres-rw.signoz 5432; do
+                      echo "Waiting for PostgreSQL (signoz-postgres-rw:5432)..."
+                      sleep 2
+                    done
+                resources:
+                  requests: {cpu: 10m, memory: 16Mi}
+                  limits: {cpu: 50m, memory: 32Mi}
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop: [ALL]
+                  readOnlyRootFilesystem: true
+                  runAsGroup: 10001
+                  runAsNonRoot: true
+                  runAsUser: 10001
+                  seccompProfile:
+                    type: RuntimeDefault
+      skipBackgroundRequests: true
+    - name: set-signoz-workload-pod-security-context
+      match: &workloadPods
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [signoz]
+              selector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values: [signoz-telemetrystore-migrator, otel-collector]
+                matchLabels:
+                  app.kubernetes.io/instance: signoz
+      mutate:
+        patchStrategicMerge:
+          spec:
+            securityContext:
+              fsGroup: 10001
+              fsGroupChangePolicy: OnRootMismatch
+              runAsGroup: 10001
+              runAsNonRoot: true
+              runAsUser: 10001
+              seccompProfile:
+                type: RuntimeDefault
+      skipBackgroundRequests: true
+    - name: set-signoz-workload-container-security-context
+      match: *workloadPods
+      mutate:
+        foreach:
+          - list: request.object.spec.containers
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: '{{ element.name }}'
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop: [ALL]
+                      runAsNonRoot: true
+                      runAsUser: 10001
+          - list: request.object.spec.initContainers || `[]`
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: '{{ element.name }}'
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop: [ALL]
+                      runAsNonRoot: true
+                      runAsUser: 10001
+      skipBackgroundRequests: true

@@ -1,0 +1,52 @@
+# Configures KEDA ScaledObject driving horizontal autoscaling for the central SigNoz OTel collector based on ingestion throughput and exporter queue saturation.
+
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: signoz-otel-collector
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: signoz-otel-collector
+  pollingInterval: 30
+  minReplicaCount: 2
+  maxReplicaCount: 8
+  fallback:
+    failureThreshold: 3
+    replicas: 4
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 15
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 120
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-api-bridge.signoz.svc.cluster.local:9090
+        metricName: otel_ingestion_spans_per_sec
+        query: sum(rate(otelcol_receiver_accepted_spans{job="signoz-otel-collector"}[2m]))
+        threshold: "12000"
+        timeout: "30s"
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-api-bridge.signoz.svc.cluster.local:9090
+        metricName: otel_exporter_queue_fill_ratio
+        query: sum(otelcol_exporter_queue_size{job="signoz-otel-collector"}) / sum(otelcol_exporter_queue_capacity{job="signoz-otel-collector"})
+        threshold: "0.7"
+        timeout: "30s"

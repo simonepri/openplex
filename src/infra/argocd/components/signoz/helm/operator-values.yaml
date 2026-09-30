@@ -1,0 +1,27 @@
+# Configures base Helm values for the upstream SigNoz Operator that reconciles namespaced SigNoz resources from the signoz namespace. Rendered by the signoz-operator fleet child Application.
+
+fullnameOverride: signoz-operator
+
+crds:
+  install: true
+  keep: true
+
+controller:
+  args:
+    - --watch-namespaces=signoz
+  image:
+    repository: docker.io/signoz/signoz-operator
+    tag: v0.0.1@sha256:7eda1c70f3a32d07282397f437bb3a03baabfa7cf2f3f123e27fde38aa13fb6f
+  labels:
+    app.kubernetes.io/component: resource-operator
+    app.kubernetes.io/part-of: signoz
+  pod:
+    annotations:
+      automount-service-account-token: "true"
+    labels:
+      app.kubernetes.io/component: resource-operator
+      app.kubernetes.io/part-of: signoz
+  priorityClassName: cluster-operators
+
+rbac:
+  namespaced: false

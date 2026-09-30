@@ -1,0 +1,91 @@
+# Restricts SigNoz core and OpenTelemetry collector network traffic to authorized internal ports.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: signoz-core
+  namespace: signoz
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: signoz
+      app.kubernetes.io/instance: signoz
+      app.kubernetes.io/component: signoz
+  policyTypes: [Ingress]
+  ingress:
+    # Query traffic terminates at the observability door, whose load-balancer
+    # source identity is not selectable by Kubernetes NetworkPolicy. The door
+    # allowlist and enumerated API port are the published interfaces.
+    - ports:
+        - {protocol: TCP, port: 8080}
+    # OpAMP is an internal collector-to-core control channel.
+    - from:
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 4320}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: signoz-otel-collector
+  namespace: signoz
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: signoz
+      app.kubernetes.io/instance: signoz
+      app.kubernetes.io/component: otel-collector
+  policyTypes: [Ingress]
+  ingress:
+    # Local collectors and the authenticated observability door own ingest.
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: otel-collector
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {protocol: TCP, port: 4317}
+        - {protocol: TCP, port: 4318}
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: otel-collector
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 14250}
+        - {protocol: TCP, port: 14268}
+        - {protocol: TCP, port: 8081}
+        - {protocol: TCP, port: 8082}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 8888,}
+

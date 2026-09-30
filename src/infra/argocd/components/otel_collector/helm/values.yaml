@@ -1,0 +1,1051 @@
+# Configures base Helm values for the OpenTelemetry Collector, applied on every ctrl and cell cluster; the Kustomize companion adds the VPA recommendation. Rendered by the otel-collector fleet child Application.
+
+mode: daemonset
+fullnameOverride: otel-collector
+useGOMEMLIMIT: true
+clusterRole:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources:
+        # keep-sorted start
+        - nodes/pods
+        - nodes/proxy
+        - nodes/stats
+        - pods
+        # keep-sorted end
+      verbs:
+        # keep-sorted start
+        - get
+        - list
+        - watch
+        # keep-sorted end
+extraEnvs:
+  - name: K8S_CLUSTER_NAME
+    value: ""
+image:
+  repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
+  tag: 0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+extraVolumes:
+  # keep-sorted start
+  - name: cluster-ca
+    configMap:
+      name: cluster-local-ca
+  # Read-only host filesystem and kernel process views for the host_metrics
+  # receiver scrapers (CPU, load, memory, filesystem, disk, network).
+  - name: host-proc
+    hostPath: {path: /proc, type: Directory}
+  - name: hostfs
+    hostPath: {path: /, type: Directory}
+    # keep-sorted end
+extraVolumeMounts:
+  # keep-sorted start
+  - name: cluster-ca
+    mountPath: /etc/cluster-ca
+    readOnly: true
+  - name: host-proc
+    mountPath: /hostfs/proc
+    readOnly: true
+  - name: hostfs
+    mountPath: /hostfs
+    readOnly: true
+    # keep-sorted end
+presets:
+  # The upstream chart elects one DaemonSet pod per cluster to collect these
+  # API-derived workload metrics, avoiding duplicate series on multi-node
+  # clusters while retaining node-local collection for the other receivers.
+  clusterMetrics:
+    enabled: true
+  # Reuse the DaemonSet's established Kubernetes leader-election mechanism for
+  # the cluster-wide event watch. All other object families stay disabled.
+  kubernetesObjects:
+    enabled: true
+    watch: false
+    core: {enabled: false}
+    rbac: {enabled: false}
+    storage: {enabled: false}
+    networking: {enabled: false}
+    autoscaling: {enabled: false, vpa: {enabled: false}}
+    policy: {enabled: false}
+    apiExtensions: {enabled: false}
+    events: {enabled: true}
+  kubernetesAttributes:
+    enabled: true
+  kubeletMetrics:
+    enabled: true
+  logsCollection:
+    enabled: true
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {cpu: "2", memory: 2Gi}
+networkPolicy:
+  enabled: true
+service:
+  enabled: true
+priorityClassName: node-agents
+terminationGracePeriodSeconds: 60
+livenessProbe:
+  httpGet: {path: /, port: 13133}
+  failureThreshold: 12
+  periodSeconds: 30
+  timeoutSeconds: 10
+readinessProbe:
+  httpGet: {path: /, port: 13133}
+  failureThreshold: 6
+  periodSeconds: 10
+  timeoutSeconds: 5
+startupProbe:
+  httpGet: {path: /, port: 13133}
+  failureThreshold: 60
+  periodSeconds: 10
+  timeoutSeconds: 10
+rollout:
+  strategy: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities: {drop: [ALL]}
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+config:
+  extensions:
+    health_check:
+      endpoint: ${env:MY_POD_IP}:13133
+  receivers:
+    host_metrics:
+      collection_interval: 60s
+      root_path: /hostfs
+      scrapers:
+        cpu:
+          metrics:
+            system.cpu.utilization: {enabled: true}
+        disk:
+          exclude:
+            devices:
+              # keep-sorted start
+              - ^loop\d+$
+              - ^ram\d+$
+              # keep-sorted end
+            match_type: regexp
+        filesystem:
+          include_virtual_filesystems: true
+          exclude_mount_points:
+            mount_points:
+              # keep-sorted start
+              - '^/dev($|/)'
+              - '^/proc($|/)'
+              - '^/run/k3s/containerd($|/)'
+              - '^/snap($|/)'
+              - '^/sys($|/)'
+              - '^/var/lib/docker($|/)'
+              - '^/var/lib/kubelet($|/)'
+              # keep-sorted end
+            match_type: regexp
+          exclude_fs_types:
+            fs_types:
+              # keep-sorted start
+              - autofs
+              - binfmt_misc
+              - bpf
+              - cgroup2
+              - configfs
+              - debugfs
+              - devpts
+              - devtmpfs
+              - fusectl
+              - hugetlbfs
+              - iso9660
+              - mqueue
+              - nsfs
+              - proc
+              - procfs
+              - pstore
+              - rpc_pipefs
+              - squashfs
+              - sysfs
+              - tmpfs
+              - tracefs
+              # keep-sorted end
+            match_type: strict
+          metrics:
+            system.filesystem.utilization: {enabled: true}
+        load: {}
+        memory:
+          metrics:
+            system.linux.memory.available: {enabled: true}
+            system.memory.utilization: {enabled: true}
+        network:
+          exclude:
+            interfaces:
+              # keep-sorted start
+              - ^cali.*$
+              - ^docker.*$
+              - ^veth.*$
+              # keep-sorted end
+            match_type: regexp
+        paging: {}
+        processes: {}
+    # Match the workload, node, and pod-status contract used by SigNoz's
+    # Kubernetes views and dashboards. Sixty seconds bounds API and storage
+    # load while still surfacing rollout and node-condition changes promptly.
+    k8s_cluster:
+      collection_interval: 60s
+      node_conditions_to_report:
+        - Ready
+        - MemoryPressure
+        - DiskPressure
+        - PIDPressure
+        - NetworkUnavailable
+      allocatable_types_to_report: [cpu, memory]
+      metrics:
+        # Suppress duplicate per-container resource metrics in this cluster-wide
+        # receiver while enabling container readiness, status, restarts, and CronJob metrics.
+        k8s.container.cpu_limit: {enabled: false}
+        k8s.container.cpu_request: {enabled: false}
+        k8s.container.ephemeralstorage_limit: {enabled: false}
+        k8s.container.ephemeralstorage_request: {enabled: false}
+        k8s.container.memory_limit: {enabled: false}
+        k8s.container.memory_request: {enabled: false}
+        k8s.container.ready: {enabled: true}
+        k8s.container.restarts: {enabled: true}
+        k8s.container.status.reason: {enabled: true}
+        k8s.container.status.state: {enabled: true}
+        k8s.container.storage_limit: {enabled: false}
+        k8s.container.storage_request: {enabled: false}
+        k8s.cronjob.active_jobs: {enabled: true}
+        k8s.node.condition: {enabled: true}
+        k8s.pod.status_reason: {enabled: true}
+        # The selected SigNoz dashboards do not query these OTel families;
+        # compatibility consumers keep their independently reviewed KSM set.
+        k8s.namespace.phase: {enabled: false}
+        k8s.replicaset.available: {enabled: false}
+        k8s.replicaset.desired: {enabled: false}
+        k8s.replication_controller.available: {enabled: false}
+        k8s.replication_controller.desired: {enabled: false}
+        k8s.resource_quota.hard_limit: {enabled: false}
+        k8s.resource_quota.used: {enabled: false}
+    # The preset defaults omit persistent-volume statistics. Volume metrics
+    # are node-local kubelet data, so enabling the group does not add an API
+    # informer or a second exporter deployment.
+    kubeletstats:
+      collection_interval: 60s
+      metric_groups: [container, pod, node, volume]
+      node: ${env:K8S_NODE_NAME}
+      metrics:
+        # keep-sorted start
+        container.uptime: {enabled: true}
+        k8s.container.cpu.node.utilization: {enabled: true}
+        k8s.container.cpu_limit_utilization: {enabled: true}
+        k8s.container.cpu_request_utilization: {enabled: true}
+        k8s.container.memory.node.utilization: {enabled: true}
+        k8s.container.memory_limit_utilization: {enabled: true}
+        k8s.container.memory_request_utilization: {enabled: true}
+        k8s.pod.cpu_limit_utilization: {enabled: true}
+        k8s.pod.memory_limit_utilization: {enabled: true}
+        # keep-sorted end
+    # The logsCollection preset owns file discovery, mounts, and pipeline
+    # wiring. This operator list deliberately extends that preset so the
+    # container envelope and file-path-derived Kubernetes metadata are kept
+    # ahead of application-level parsing.
+    filelog:
+      operators:
+        - type: container
+          id: container-parser
+          add_metadata_from_filepath: true
+          max_log_size: 102400
+        - type: add
+          id: identify-stream
+          field: attributes["log.stream.id"]
+          value: EXPR(attributes["log.file.path"] + ":" + attributes["log.iostream"])
+        # The container parser already rejoins CRI partial (P/F) fragments.
+        # Rejoin conventional indented stack frames and unindented Go stack
+        # trace lines (e.g. goroutine headers, function calls, created by)
+        # into one record, keeping each container stream independent.
+        - type: recombine
+          id: multiline-stacktrace
+          combine_field: body
+          combine_with: "\n"
+          is_first_entry: >-
+            body matches "^[^\\s]" and not (
+              body matches "^goroutine \\d+ \\["
+              or body matches "^created by "
+              or body matches "^\\.\\.\\."
+              or body matches "^([a-zA-Z0-9_./\\(\\)\\*\\-]+\\.)+[a-zA-Z0-9_./\\(\\)\\*\\-]+\\(.*\\)"
+              or body matches "^([a-zA-Z0-9_.-]+\\/)+[a-zA-Z0-9_./\\(\\)\\*\\-]+$"
+            )
+          source_identifier: attributes["log.stream.id"]
+          max_log_size: 102400
+          force_flush_period: 1s
+        - type: remove
+          id: remove-stream-identifier
+          field: attributes["log.stream.id"]
+        - type: json_parser
+          id: parse-json
+          parse_from: body
+          parse_to: attributes
+          if: >-
+            type(body) == "string" and body matches "^\\s*\\{.*\\}\\s*$"
+          on_error: send_quiet
+        - type: key_value_parser
+          id: parse-key-value
+          parse_from: body
+          parse_to: attributes
+          if: >-
+            type(body) == "string" and body matches "^\\s*[A-Za-z_][A-Za-z0-9_.-]*="
+          on_error: send_quiet
+        # Parse common console encoders by their shape rather than by service.
+        # The application timestamp, severity, caller, and message remain
+        # temporary attributes until the logs transform canonicalizes them.
+        - type: regex_parser
+          id: parse-rfc3339-console
+          parse_from: body
+          parse_to: attributes
+          regex: >-
+            ^(?P<parsed_timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s+(?P<parsed_level>[A-Za-z]+(?:\+\d+)?)\s+(?:(?P<parsed_caller>[^\s]+):(?P<parsed_line>\d+)\s+)?(?P<parsed_message>[\s\S]*)$
+          if: >-
+            type(body) == "string" and body matches "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+          on_error: send_quiet
+        # gRPC-Go's channelz logger prepends stable component and optional
+        # channel/subchannel context to its message. Only interpret that
+        # prefix when the parsed caller proves the record came from grpclog.
+        - type: regex_parser
+          id: parse-grpc-go-context
+          parse_from: attributes["parsed_message"]
+          parse_to: attributes
+          regex: >-
+            ^\[(?P<grpc_log_component>[^\]]+)\]\s*(?:\[Channel #(?P<grpc_channel_id>\d+)(?: SubChannel #(?P<grpc_subchannel_id>\d+))?\]\s*)?(?P<parsed_grpc_message>[\s\S]*)$
+          if: >-
+            type(attributes["parsed_message"]) == "string" and type(attributes["parsed_caller"]) == "string" and attributes["parsed_caller"] matches "(^|/)grpclog/grpclog\\.go$"
+          on_error: send_quiet
+        - type: regex_parser
+          id: parse-coder-console
+          parse_from: body
+          parse_to: attributes
+          regex: >-
+            ^(?P<parsed_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+\[(?P<parsed_level>[A-Za-z]+)\]\s+(?P<parsed_message>[\s\S]*)$
+          if: >-
+            type(body) == "string" and body matches "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)? \\["
+          on_error: send_quiet
+        - type: regex_parser
+          id: parse-slash-date-console
+          parse_from: body
+          parse_to: attributes
+          regex: >-
+            ^(?P<parsed_timestamp>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+(?P<parsed_message>[\s\S]*)$
+          if: >-
+            type(body) == "string" and body matches "^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}"
+          on_error: send_quiet
+        - type: regex_parser
+          id: parse-klog-console
+          parse_from: body
+          parse_to: attributes
+          regex: >-
+            ^(?P<parsed_level>[IWEF])\d{4}\s+\d{2}:\d{2}:\d{2}\.\d+\s+(?:\d+\s+)?(?P<parsed_caller>[^\s:\]]+):(?P<parsed_line>\d+)\]?\s+(?P<parsed_message>[\s\S]*)$
+          if: >-
+            type(body) == "string" and body matches "^[IWEF]\\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d+"
+          on_error: send_quiet
+        - type: regex_parser
+          id: parse-envoy-console
+          parse_from: body
+          parse_to: attributes
+          regex: >-
+            ^\[(?P<parsed_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\[(?P<thread_id>\d+)\]\[(?P<parsed_level>[^\]]+)\]\[(?P<logger>[^\]]+)\](?:\s+\[(?P<parsed_caller>.+):(?P<parsed_line>\d+)\])?\s+(?P<parsed_message>[\s\S]*)$
+          if: >-
+            type(body) == "string" and body matches "^\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"
+          on_error: send_quiet
+        # Zap-style console records may end their first line with a JSON
+        # context object followed by a stack trace. Lift that context and keep
+        # the stack independently addressable.
+        - type: regex_parser
+          id: parse-console-context
+          parse_from: attributes["parsed_message"]
+          parse_to: attributes
+          regex: >-
+            ^(?P<parsed_message_text>[^\n]*?)\s+(?P<parsed_context>\{[^\n]*\})(?:\n(?P<parsed_stacktrace>[\s\S]*))?$
+          if: >-
+            type(attributes["parsed_message"]) == "string" and attributes["parsed_message"] matches "\\{.*\\}(?:\\n|$)"
+          on_error: send_quiet
+        - type: json_parser
+          id: parse-console-context-json
+          parse_from: attributes["parsed_context"]
+          parse_to: attributes
+          if: >-
+            type(attributes["parsed_context"]) == "string" and attributes["parsed_context"] matches "^\\{.*\\}$"
+          on_error: send_quiet
+        # Some text loggers carry a bracketed level inside an otherwise
+        # unlevelled message, such as Tailscale's "[warning]" diagnostics.
+        - type: regex_parser
+          id: parse-embedded-level
+          parse_from: attributes["parsed_message"]
+          parse_to: attributes
+          regex: >-
+            (?i)\[(?P<parsed_embedded_level>trace|debug|debu|info|inf|warn|warning|err|error|fatal)\]
+          if: >-
+            type(attributes["parsed_level"]) == "nil" and type(attributes["parsed_message"]) == "string" and attributes["parsed_message"] matches "(?i)\\[(trace|debug|debu|info|inf|warn|warning|err|error|fatal)\\]"
+          on_error: send_quiet
+        # Parsers merge into attributes, so evidence must be written after
+        # every branch. A producer-supplied log.original can never replace
+        # the exact application payload observed by the collector.
+        - type: copy
+          id: preserve-original
+          from: body
+          to: attributes["log.original"]
+        - type: regex_parser
+          id: parse-exception
+          parse_from: attributes["exception"]
+          parse_to: attributes
+          regex: >-
+            ^\(type=<class '(?P<exception_type>[^']+)'>, value=(?P<exception_message>.*), traceback=.*\)$
+          if: >-
+            type(attributes["exception"]) == "string" and attributes["exception"] matches "^\\(type=<class '"
+          on_error: send_quiet
+        - type: regex_parser
+          id: parse-caller
+          parse_from: attributes["caller"]
+          parse_to: attributes
+          regex: '^(?P<parsed_caller>.*):(?P<parsed_line>\d+)$'
+          if: >-
+            type(attributes["parsed_caller"]) == "nil" and type(attributes["caller"]) == "string"
+          on_error: send_quiet
+        # Collapse producer field aliases to one temporary severity source.
+        # Explicit console levels and nested database severities take
+        # precedence over wrapper metadata.
+        - type: copy
+          id: severity-source-from-level
+          from: attributes["level"]
+          to: attributes["parsed_severity"]
+          if: 'type(attributes["level"]) == "string" and attributes["level"] != ""'
+        - type: copy
+          id: severity-source-from-severity
+          from: attributes["severity"]
+          to: attributes["parsed_severity"]
+          if: 'type(attributes["severity"]) == "string" and attributes["severity"] != ""'
+        - type: copy
+          id: severity-source-from-severity-text
+          from: attributes["severity_text"]
+          to: attributes["parsed_severity"]
+          if: 'type(attributes["severity_text"]) == "string" and attributes["severity_text"] != ""'
+        - type: copy
+          id: severity-source-from-priority
+          from: attributes["priority"]
+          to: attributes["parsed_severity"]
+          if: 'type(attributes["priority"]) == "string" and attributes["priority"] != ""'
+        - type: copy
+          id: severity-source-from-database-record
+          from: attributes["record"]["error_severity"]
+          to: attributes["parsed_severity"]
+          if: >-
+            type(attributes["record"]) == "map" and type(attributes["record"]["error_severity"]) == "string" and attributes["record"]["error_severity"] != ""
+        - type: copy
+          id: severity-source-from-console
+          from: attributes["parsed_level"]
+          to: attributes["parsed_severity"]
+          if: 'type(attributes["parsed_level"]) == "string" and attributes["parsed_level"] != ""'
+        - type: copy
+          id: severity-source-from-embedded-level
+          from: attributes["parsed_embedded_level"]
+          to: attributes["parsed_severity"]
+          if: >-
+            type(attributes["parsed_embedded_level"]) == "string" and attributes["parsed_embedded_level"] != ""
+        - type: severity_parser
+          id: normalize-severity
+          parse_from: attributes["parsed_severity"]
+          if: 'type(attributes["parsed_severity"]) == "string"'
+          overwrite_text: true
+          mapping:
+            trace: [verbose, "Level(-2)", "Level(-3)", "Level(-4)"]
+            debug: [debu, dbg, debug, Debug, DEBUG, "DEBUG+1", "DEBUG+2", "DEBUG+3", "DEBUG+4", "Level(-1)"]
+            info: [i, inf, info, Info, INFO, information, informational, Informational, success, notice, Notice, ok, log]
+            warn: [w, wrn, warn, Warn, WARN, warning, Warning, WARNING]
+            error: [e, err, Err, ERR, error, Error, ERROR, eror, failure, failed]
+            fatal: [f, fatal, Fatal, FATAL, critical, Critical, CRITICAL, crit, panic, dpanic, emerg, emergency, Emergency, alert, Alert]
+          on_error: send_quiet
+        # Prefer event time over the container-envelope time. RFC3339 and
+        # epoch-second forms cover controller-runtime JSON, Velero logfmt, and
+        # ClickHouse date_time outputs.
+        - type: time_parser
+          id: timestamp-from-ts-rfc3339
+          parse_from: attributes["ts"]
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.999999999Z07:00"
+          if: >-
+            type(attributes["ts"]) == "string" and not(attributes["ts"] matches "^[0-9]+(\\.[0-9]+)?$")
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-ts-epoch
+          parse_from: attributes["ts"]
+          layout_type: epoch
+          layout: s.ns
+          if: >-
+            type(attributes["ts"]) in ["int", "uint", "float"] or (type(attributes["ts"]) == "string" and attributes["ts"] matches "^[0-9]+(\\.[0-9]+)?$")
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-time-rfc3339
+          parse_from: attributes["time"]
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.999999999Z07:00"
+          if: >-
+            type(attributes["time"]) == "string" and not(attributes["time"] matches "^[0-9]+(\\.[0-9]+)?$")
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-time-epoch
+          parse_from: attributes["time"]
+          layout_type: epoch
+          layout: s.ns
+          if: >-
+            type(attributes["time"]) in ["int", "uint", "float"] or (type(attributes["time"]) == "string" and attributes["time"] matches "^[0-9]+(\\.[0-9]+)?$")
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-timestamp-rfc3339
+          parse_from: attributes["timestamp"]
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.999999999Z07:00"
+          if: >-
+            type(attributes["timestamp"]) == "string" and not(attributes["timestamp"] matches "^[0-9]+(\\.[0-9]+)?$")
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-timestamp-epoch
+          parse_from: attributes["timestamp"]
+          layout_type: epoch
+          layout: s.ns
+          if: >-
+            type(attributes["timestamp"]) in ["int", "uint", "float"] or (type(attributes["timestamp"]) == "string" and attributes["timestamp"] matches "^[0-9]+(\\.[0-9]+)?$")
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-date-time-rfc3339
+          parse_from: attributes["date_time"]
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.999999999Z07:00"
+          if: >-
+            type(attributes["date_time"]) == "string" and not(attributes["date_time"] matches "^[0-9]+(\\.[0-9]+)?$") and attributes["date_time"] matches "T"
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-date-time-space
+          parse_from: attributes["date_time"]
+          layout_type: gotime
+          layout: "2006-01-02 15:04:05.999999999"
+          if: >-
+            type(attributes["date_time"]) == "string" and not(attributes["date_time"] matches "^[0-9]+(\\.[0-9]+)?$") and not(attributes["date_time"] matches "T")
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-date-time-space-tz
+          parse_from: attributes["date_time"]
+          layout_type: gotime
+          layout: "2006-01-02 15:04:05.999999999Z07:00"
+          if: >-
+            type(attributes["date_time"]) == "string" and not(attributes["date_time"] matches "^[0-9]+(\\.[0-9]+)?$") and not(attributes["date_time"] matches "T")
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-date-time-epoch
+          parse_from: attributes["date_time"]
+          layout_type: epoch
+          layout: s.us
+          if: >-
+            type(attributes["date_time"]) in ["int", "uint", "float"] or (type(attributes["date_time"]) == "string" and attributes["date_time"] matches "^[0-9]+(\\.[0-9]+)?$")
+          on_error: send_quiet
+        # A fully qualified application timestamp wins over the CRI envelope.
+        # Known unzoned console encoders run in UTC; klog lacks a year and
+        # therefore deliberately retains the CRI timestamp.
+        - type: time_parser
+          id: timestamp-from-console-rfc3339
+          parse_from: attributes["parsed_timestamp"]
+          layout_type: gotime
+          layout: "2006-01-02T15:04:05.999999999Z07:00"
+          if: >-
+            type(attributes["parsed_timestamp"]) == "string" and attributes["parsed_timestamp"] matches "^\\d{4}-\\d{2}-\\d{2}T"
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-console-space
+          parse_from: attributes["parsed_timestamp"]
+          layout_type: gotime
+          layout: "2006-01-02 15:04:05.999999999"
+          location: UTC
+          if: >-
+            type(attributes["parsed_timestamp"]) == "string" and attributes["parsed_timestamp"] matches "^\\d{4}-\\d{2}-\\d{2} "
+          on_error: send_quiet
+        - type: time_parser
+          id: timestamp-from-console-slash
+          parse_from: attributes["parsed_timestamp"]
+          layout_type: gotime
+          layout: "2006/01/02 15:04:05"
+          location: UTC
+          if: >-
+            type(attributes["parsed_timestamp"]) == "string" and attributes["parsed_timestamp"] matches "^\\d{4}/\\d{2}/\\d{2} "
+          on_error: send_quiet
+        # Normalize logger and component aliases without discarding their
+        # producer-specific source fields. Existing normalized fields win.
+        - type: copy
+          id: logger-name-from-logger
+          from: attributes["logger"]
+          to: attributes["logger.name"]
+          if: >-
+            type(attributes["logger.name"]) == "nil" and type(attributes["logger"]) == "string"
+        - type: copy
+          id: logger-name-from-logger-name
+          from: attributes["logger_name"]
+          to: attributes["logger.name"]
+          if: >-
+            type(attributes["logger.name"]) == "nil" and type(attributes["logger_name"]) == "string"
+        - type: copy
+          id: logger-name-from-log-source
+          from: attributes["logSource"]
+          to: attributes["logger.name"]
+          if: >-
+            type(attributes["logger.name"]) == "nil" and type(attributes["logSource"]) == "string"
+        - type: copy
+          id: component-from-controller
+          from: attributes["controller"]
+          to: attributes["component"]
+          if: >-
+            type(attributes["component"]) == "nil" and type(attributes["controller"]) == "string"
+        - type: copy
+          id: component-from-service
+          from: attributes["service"]
+          to: attributes["component"]
+          if: >-
+            type(attributes["component"]) == "nil" and type(attributes["service"]) == "string"
+        - type: copy
+          id: component-from-container
+          from: resource["k8s.container.name"]
+          to: attributes["component"]
+          if: >-
+            type(attributes["component"]) == "nil" and type(resource["k8s.container.name"]) == "string"
+    prometheus:
+      config:
+        scrape_configs:
+          - job_name: opentelemetry-collector
+            scrape_interval: 60s
+            static_configs:
+              - targets:
+                  - ${env:MY_POD_IP}:8888
+    prometheus/annotations:
+      config:
+        global:
+          scrape_interval: 60s
+          scrape_timeout: 10s
+        scrape_configs:
+          - job_name: kubernetes-pods-annotations
+            kubernetes_sd_configs:
+              - role: pod
+                selectors:
+                  - role: pod
+                    field: spec.nodeName=${env:K8S_NODE_NAME}
+            relabel_configs:
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_annotation_signoz_io_scrape]
+                regex: "true"
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_ready]
+                regex: "true"
+              - action: replace
+                source_labels: [__meta_kubernetes_pod_annotation_signoz_io_path]
+                target_label: __metrics_path__
+                regex: (.+)
+              - action: replace
+                source_labels: [__address__, __meta_kubernetes_pod_annotation_signoz_io_port]
+                regex: ([^:]+)(?::\d+)?;(\d+)
+                replacement: $1:$2
+                target_label: __address__
+              - action: replace
+                source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - action: replace
+                source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+            metric_relabel_configs:
+              # Suppress static PostgreSQL configuration dumping; CloudNativePG
+              # parameters are managed declaratively in GitOps and do not vary dynamically.
+              - action: drop
+                source_labels: [__name__]
+                regex: cnpg_pg_settings_setting
+    prometheus/coredns:
+      config:
+        global:
+          scrape_interval: 60s
+          scrape_timeout: 10s
+        scrape_configs:
+          - job_name: coredns
+            honor_labels: true
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names: [kube-system]
+                selectors:
+                  - role: pod
+                    field: spec.nodeName=${env:K8S_NODE_NAME}
+            relabel_configs:
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_label_k8s_app]
+                regex: kube-dns
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_container_port_number]
+                regex: "9153"
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_ready]
+                regex: "true"
+    prometheus/dcgm:
+      config:
+        global:
+          scrape_interval: 60s
+          scrape_timeout: 25s
+        scrape_configs:
+          - job_name: dcgm-exporter
+            kubernetes_sd_configs:
+              - role: pod
+                selectors:
+                  - role: pod
+                    field: spec.nodeName=${env:K8S_NODE_NAME}
+            relabel_configs:
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_label_app]
+                regex: nvidia-dcgm-exporter
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_node_name]
+                regex: ${env:K8S_NODE_NAME}
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_container_port_name]
+                regex: metrics
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_ready]
+                regex: "true"
+    prometheus/opencost:
+      config:
+        global:
+          scrape_interval: 60s
+          scrape_timeout: 10s
+        scrape_configs:
+          - job_name: opencost
+            honor_labels: true
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names: [opencost]
+                selectors:
+                  - role: pod
+                    field: spec.nodeName=${env:K8S_NODE_NAME}
+            relabel_configs:
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+                regex: opencost
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_container_name, __meta_kubernetes_pod_container_port_number]
+                regex: opencost;9003
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_ready]
+                regex: "true"
+            metric_relabel_configs:
+              - target_label: cluster
+                replacement: ${env:K8S_CLUSTER_NAME}
+    prometheus/torch_compile_cache:
+      config:
+        global:
+          scrape_interval: 60s
+          scrape_timeout: 10s
+        scrape_configs:
+          - job_name: torch-compile-cache
+            kubernetes_sd_configs:
+              - role: pod
+                selectors:
+                  - role: pod
+                    field: spec.nodeName=${env:K8S_NODE_NAME}
+            relabel_configs:
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_label_valkey_io_cluster]
+                regex: torch-compile-cache
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_container_port_name]
+                regex: metrics
+              - action: keep
+                source_labels: [__meta_kubernetes_pod_ready]
+                regex: "true"
+  exporters:
+    otlphttp/signoz:
+      endpoint: http://signoz-otel-collector.signoz.svc.cluster.local:4318
+      compression: zstd
+      sending_queue:
+        enabled: true
+        num_consumers: 2
+        queue_size: 2000
+      retry_on_failure:
+        enabled: true
+        initial_interval: 2s
+        max_interval: 30s
+        max_elapsed_time: 1800s
+  processors:
+    batch:
+      send_batch_size: 8192
+      send_batch_max_size: 16384
+      timeout: 5s
+    k8s_attributes:
+      extract:
+        labels:
+          - from: pod
+            key: app.kubernetes.io/component
+            tag_name: k8s.pod.label.app_kubernetes_io_component
+          - from: pod
+            key: app.kubernetes.io/name
+            tag_name: service.name
+          - from: pod
+            key: ray.io/cluster
+            tag_name: ray.cluster.name
+    # The leader-elected k8sobjects receiver emits the watched Event as a raw
+    # map. Normalize the stable events.k8s.io/v1 fields before filtering so
+    # SigNoz receives the same searchable shape as native OTel event records.
+    transform/kubernetes_events:
+      error_mode: ignore
+      log_statements:
+        - conditions:
+            - >-
+              log.attributes["k8s.resource.name"] == "events" and IsMap(log.body) and IsMap(log.body["object"])
+          statements:
+            - >-
+              set(log.attributes["k8s.event.action"], log.body["object"]["action"]) where IsString(log.body["object"]["action"])
+            - >-
+              set(log.attributes["k8s.event.reason"], log.body["object"]["reason"]) where IsString(log.body["object"]["reason"])
+            - >-
+              set(log.attributes["k8s.event.type"], log.body["object"]["type"]) where IsString(log.body["object"]["type"])
+            - >-
+              set(log.attributes["k8s.event.start_time"], log.body["object"]["eventTime"]) where IsString(log.body["object"]["eventTime"])
+            - >-
+              set(log.attributes["k8s.event.last_observed_time"], log.body["object"]["series"]["lastObservedTime"]) where IsMap(log.body["object"]["series"]) and IsString(log.body["object"]["series"]["lastObservedTime"])
+            - >-
+              set(log.attributes["k8s.event.count"], log.body["object"]["series"]["count"]) where IsMap(log.body["object"]["series"]) and log.body["object"]["series"]["count"] != nil
+            - >-
+              set(log.attributes["k8s.event.name"], log.body["object"]["metadata"]["name"]) where IsMap(log.body["object"]["metadata"]) and IsString(log.body["object"]["metadata"]["name"])
+            - >-
+              set(log.attributes["k8s.event.uid"], log.body["object"]["metadata"]["uid"]) where IsMap(log.body["object"]["metadata"]) and IsString(log.body["object"]["metadata"]["uid"])
+            - >-
+              set(resource.attributes["k8s.namespace.name"], log.body["object"]["metadata"]["namespace"]) where IsMap(log.body["object"]["metadata"]) and IsString(log.body["object"]["metadata"]["namespace"])
+            - >-
+              set(log.attributes["k8s.namespace.name"], log.body["object"]["metadata"]["namespace"]) where IsMap(log.body["object"]["metadata"]) and IsString(log.body["object"]["metadata"]["namespace"])
+            - >-
+              set(log.attributes["k8s.event.reporting_controller"], log.body["object"]["reportingController"]) where IsString(log.body["object"]["reportingController"])
+            - >-
+              set(log.attributes["k8s.event.reporting_instance"], log.body["object"]["reportingInstance"]) where IsString(log.body["object"]["reportingInstance"])
+            - >-
+              set(resource.attributes["k8s.object.api_version"], log.body["object"]["regarding"]["apiVersion"]) where IsMap(log.body["object"]["regarding"]) and IsString(log.body["object"]["regarding"]["apiVersion"])
+            - >-
+              set(resource.attributes["k8s.object.kind"], log.body["object"]["regarding"]["kind"]) where IsMap(log.body["object"]["regarding"]) and IsString(log.body["object"]["regarding"]["kind"])
+            - >-
+              set(resource.attributes["k8s.object.name"], log.body["object"]["regarding"]["name"]) where IsMap(log.body["object"]["regarding"]) and IsString(log.body["object"]["regarding"]["name"])
+            - >-
+              set(resource.attributes["k8s.object.uid"], log.body["object"]["regarding"]["uid"]) where IsMap(log.body["object"]["regarding"]) and IsString(log.body["object"]["regarding"]["uid"])
+            - set(log.severity_text, "WARN") where log.body["object"]["type"] == "Warning"
+            - set(log.severity_number, SEVERITY_NUMBER_WARN) where log.body["object"]["type"] == "Warning"
+            - set(log.severity_text, "INFO") where log.body["object"]["type"] == "Normal"
+            - set(log.severity_number, SEVERITY_NUMBER_INFO) where log.body["object"]["type"] == "Normal"
+            - set(log.body, log.body["object"]["note"]) where IsString(log.body["object"]["note"])
+    # Project heterogeneous application encoders onto the OpenTelemetry log
+    # data model. Producer fields and log.original remain available as
+    # evidence; only parser-temporary fields are removed.
+    transform/logs:
+      error_mode: silent
+      log_statements:
+        - conditions:
+            - log.attributes["log.original"] != nil
+          statements:
+            # Resolve the display body from the producer's conventional
+            # message aliases. More specific encoders intentionally win.
+            - set(log.body, log.attributes["log"]) where IsString(log.attributes["log"])
+            - set(log.body, log.attributes["msg"]) where IsString(log.attributes["msg"])
+            - set(log.body, log.attributes["message"]) where IsString(log.attributes["message"])
+            - set(log.body, log.attributes["parsed_message"]) where IsString(log.attributes["parsed_message"])
+            - set(log.body, log.attributes["parsed_message_text"]) where IsString(log.attributes["parsed_message_text"])
+            - set(log.body, log.attributes["parsed_grpc_message"]) where IsString(log.attributes["parsed_grpc_message"])
+            - >-
+              set(log.body, log.attributes["record"]["message"]) where IsMap(log.attributes["record"]) and IsString(log.attributes["record"]["message"])
+            - >-
+              replace_pattern(log.body, "(?i)\\[(trace|debug|debu|info|inf|warn|warning|err|error|fatal)\\]\\s*", "") where IsString(log.body) and IsString(log.attributes["parsed_embedded_level"])
+
+            # Promote source location, thread, exception, and stack fields to
+            # their OpenTelemetry semantic-convention names.
+            - >-
+              set(log.attributes["code.file.path"], log.attributes["code.filepath"]) where log.attributes["code.file.path"] == nil and IsString(log.attributes["code.filepath"])
+            - >-
+              set(log.attributes["code.function.name"], log.attributes["code.function"]) where log.attributes["code.function.name"] == nil and IsString(log.attributes["code.function"])
+            - >-
+              set(log.attributes["code.line.number"], Int(log.attributes["code.lineno"])) where log.attributes["code.line.number"] == nil and log.attributes["code.lineno"] != nil
+            - >-
+              set(log.attributes["code.file.path"], log.attributes["parsed_caller"]) where IsString(log.attributes["parsed_caller"])
+            - >-
+              set(log.attributes["code.line.number"], Int(log.attributes["parsed_line"])) where log.attributes["parsed_line"] != nil
+            - >-
+              set(log.attributes["code.stacktrace"], log.attributes["parsed_stacktrace"]) where IsString(log.attributes["parsed_stacktrace"]) and log.attributes["parsed_stacktrace"] != ""
+            - >-
+              set(log.attributes["thread.id"], Int(log.attributes["thread_id"])) where log.attributes["thread.id"] == nil and log.attributes["thread_id"] != nil
+            - >-
+              set(log.attributes["grpc.log.component"], log.attributes["grpc_log_component"]) where IsString(log.attributes["grpc_log_component"])
+            - >-
+              set(log.attributes["grpc.channel.id"], Int(log.attributes["grpc_channel_id"])) where log.attributes["grpc_channel_id"] != nil
+            - >-
+              set(log.attributes["grpc.subchannel.id"], Int(log.attributes["grpc_subchannel_id"])) where log.attributes["grpc_subchannel_id"] != nil
+            - >-
+              set(log.attributes["exception.type"], log.attributes["exception_type"]) where IsString(log.attributes["exception_type"])
+            - >-
+              set(log.attributes["exception.message"], log.attributes["exception_message"]) where IsString(log.attributes["exception_message"])
+
+            # Turn terse event and access-log labels into useful summaries.
+            - >-
+              set(log.body, Concat(["[", log.attributes["action"], "] ", log.attributes["note"]], "")) where IsString(log.attributes["action"]) and IsString(log.attributes["note"]) and IsString(log.body) and IsMatch(log.body, "(?i)^event occurred$")
+            - >-
+              set(log.body, Format("%s %s -> %v", [log.attributes["method"], log.attributes["path"], log.attributes["status"]])) where IsString(log.attributes["method"]) and IsString(log.attributes["path"]) and log.attributes["status"] != nil
+            - >-
+              set(log.body, Format("%s %s -> %v", [log.attributes["method"], log.attributes["path"], log.attributes["response_code"]])) where IsString(log.attributes["method"]) and IsString(log.attributes["path"]) and log.attributes["response_code"] != nil
+            - >-
+              set(log.body, Format("HTTP %s -> %v", [log.attributes["http.route"], log.attributes["http.response.status_code"]])) where log.body == "::RECEIVED-REQUEST::" and IsString(log.attributes["http.route"]) and log.attributes["http.response.status_code"] != nil
+            - >-
+              set(log.body, Format("S3 %s s3://%s/%s -> %v", [log.attributes["operation"], log.attributes["bucket"], log.attributes["key"], log.attributes["http_status"]])) where IsString(log.attributes["bucket"]) and IsString(log.attributes["operation"]) and log.attributes["http_status"] != nil
+            - >-
+              set(log.body, Format("VPC %s %s:%v -> %s:%v (%v bytes)", [log.attributes["action"], log.attributes["srcaddr"], log.attributes["srcport"], log.attributes["dstaddr"], log.attributes["dstport"], log.attributes["bytes"]])) where IsString(log.attributes["srcaddr"]) and IsString(log.attributes["dstaddr"]) and log.attributes["action"] != nil
+
+            # Keep concise producer messages while surfacing their actionable
+            # error or exception detail exactly once.
+            - >-
+              set(log.body, Concat([log.body, log.attributes["error"]], ": ")) where IsString(log.body) and IsString(log.attributes["error"]) and log.attributes["error"] != "" and Index(log.body, log.attributes["error"]) == -1
+            - >-
+              set(log.body, Concat([log.body, log.attributes["exception.message"]], ": ")) where IsString(log.body) and IsString(log.attributes["exception.message"]) and log.attributes["exception.message"] != "" and Index(log.body, log.attributes["exception.message"]) == -1
+
+            # severity_parser sets the numeric OpenTelemetry bucket. Keep its
+            # text canonical too, including records without an explicit level.
+            - set(log.severity_text, "UNSPECIFIED") where log.severity_number == SEVERITY_NUMBER_UNSPECIFIED
+            - >-
+              set(log.severity_text, "TRACE") where log.severity_number >= SEVERITY_NUMBER_TRACE and log.severity_number <= SEVERITY_NUMBER_TRACE4
+            - >-
+              set(log.severity_text, "DEBUG") where log.severity_number >= SEVERITY_NUMBER_DEBUG and log.severity_number <= SEVERITY_NUMBER_DEBUG4
+            - >-
+              set(log.severity_text, "INFO") where log.severity_number >= SEVERITY_NUMBER_INFO and log.severity_number <= SEVERITY_NUMBER_INFO4
+            - >-
+              set(log.severity_text, "WARN") where log.severity_number >= SEVERITY_NUMBER_WARN and log.severity_number <= SEVERITY_NUMBER_WARN4
+            - >-
+              set(log.severity_text, "ERROR") where log.severity_number >= SEVERITY_NUMBER_ERROR and log.severity_number <= SEVERITY_NUMBER_ERROR4
+            - >-
+              set(log.severity_text, "FATAL") where log.severity_number >= SEVERITY_NUMBER_FATAL and log.severity_number <= SEVERITY_NUMBER_FATAL4
+
+            - delete_key(log.attributes, "exception_message")
+            - delete_key(log.attributes, "exception_type")
+            - delete_key(log.attributes, "grpc_channel_id")
+            - delete_key(log.attributes, "grpc_log_component")
+            - delete_key(log.attributes, "grpc_subchannel_id")
+            - delete_key(log.attributes, "parsed_caller")
+            - delete_key(log.attributes, "parsed_context")
+            - delete_key(log.attributes, "parsed_embedded_level")
+            - delete_key(log.attributes, "parsed_grpc_message")
+            - delete_key(log.attributes, "parsed_level")
+            - delete_key(log.attributes, "parsed_line")
+            - delete_key(log.attributes, "parsed_message")
+            - delete_key(log.attributes, "parsed_message_text")
+            - delete_key(log.attributes, "parsed_severity")
+            - delete_key(log.attributes, "parsed_stacktrace")
+            - delete_key(log.attributes, "parsed_timestamp")
+    # Never amplify an observability-backend slowdown by feeding its own
+    # high-rate retry/queue diagnostics back into the same blocked writer.
+    # Other warnings and errors remain available; only the exact recursive
+    # feedback signatures are discarded after Kubernetes attribution.
+    filter/ingestion_feedback:
+      error_mode: ignore
+      log_conditions:
+        - >-
+          resource.attributes["k8s.namespace.name"] == "signoz" and IsMatch(resource.attributes["k8s.pod.name"], "^chi-signoz-clickhouse-") and IsMatch(log.body, ".*Temporarily pause scheduling of tasks.*")
+        - >-
+          (resource.attributes["k8s.namespace.name"] == "signoz" and (IsMatch(resource.attributes["k8s.pod.name"], "^signoz-otel-collector-") or IsMatch(resource.attributes["k8s.pod.name"], "^prometheus-api-bridge-collector-")) or (resource.attributes["k8s.namespace.name"] == "otel-system" and IsMatch(resource.attributes["k8s.pod.name"], "^otel-collector-agent-"))) and (IsMatch(log.body, ".*sending queue is full.*") or IsMatch(log.body, ".*data refused due to high memory usage.*") or IsMatch(log.body, ".*context deadline exceeded.*"))
+    # DEBUG records are too verbose for centralized retention. Routine HTTP 2xx
+    # query access logs from prometheus-api-bridge and SigNoz are dropped to
+    # reduce noise while retaining errors, warnings, and non-2xx responses.
+    # Trivy Operator also uses base64-only stdout records as an internal
+    # compressed-report transport; retain its human-readable diagnostics while
+    # dropping that machine payload before it crosses the cluster telemetry
+    # boundary.
+    filter/log_volume:
+      error_mode: ignore
+      log_conditions:
+        - >-
+          log.severity_number >= SEVERITY_NUMBER_DEBUG and log.severity_number <= SEVERITY_NUMBER_DEBUG4
+        - >-
+          resource.attributes["k8s.namespace.name"] == "signoz" and resource.attributes["k8s.container.name"] == "bridge" and log.severity_number >= SEVERITY_NUMBER_INFO and log.severity_number <= SEVERITY_NUMBER_INFO4 and (log.attributes["path"] == "/api/v1/query" or log.attributes["path"] == "/api/v1/query_range") and (log.attributes["status"] >= 200 and log.attributes["status"] <= 299)
+        - >-
+          resource.attributes["k8s.namespace.name"] == "signoz" and resource.attributes["k8s.container.name"] == "signoz" and log.severity_number >= SEVERITY_NUMBER_INFO and log.severity_number <= SEVERITY_NUMBER_INFO4 and (log.attributes["http.route"] == "/api/v1/query" or log.attributes["http.route"] == "/api/v1/query_range") and (log.attributes["http.response.status_code"] >= 200 and log.attributes["http.response.status_code"] <= 299)
+        - >-
+          resource.attributes["k8s.namespace.name"] == "trivy-system" and resource.attributes["k8s.pod.label.app_kubernetes_io_component"] == "security-report-scanner" and log.attributes["log.iostream"] == "stdout" and IsString(log.body) and IsMatch(log.body, "^[A-Za-z0-9+/=\\r\\n]+$")
+    # CloudNativePG exports every internal PostgreSQL setting as a metric.
+    # Settings are immutable under GitOps; suppress this high-cardinality series.
+    filter/cnpg_settings:
+      error_mode: ignore
+      metric_conditions:
+        - >-
+          metric.name == "cnpg_pg_settings_setting"
+    # Kubelet volume statistics also include Secrets, ConfigMaps, and
+    # emptyDir mounts. The PVC dashboard needs only durable claims, whose
+    # receiver resources carry this claim-name attribute.
+    filter/persistent_volumes:
+      error_mode: ignore
+      metric_conditions:
+        - >-
+          IsMatch(metric.name, "^k8s\\.volume\\.") and resource.attributes["k8s.persistentvolumeclaim.name"] == nil
+    filter/kubernetes_events:
+      error_mode: ignore
+      log_conditions:
+        - >-
+          log.attributes["k8s.resource.name"] == "events" and log.attributes["k8s.event.type"] != "Warning"
+    resourcedetection:
+      detectors: [env, system]
+      timeout: 2s
+      system:
+        hostname_sources: [os]
+    resource/cluster_name:
+      attributes:
+        - action: upsert
+          key: k8s.cluster.name
+          value: ${env:K8S_CLUSTER_NAME}
+    resource/host_identity:
+      attributes:
+        # keep-sorted start
+        - action: upsert
+          key: host.id
+          value: ${env:K8S_NODE_NAME}
+        - action: upsert
+          key: host.name
+          value: ${env:K8S_NODE_NAME}
+        - action: upsert
+          key: k8s.cluster.name
+          value: ${env:K8S_CLUSTER_NAME}
+        - action: upsert
+          key: k8s.node.name
+          value: ${env:K8S_NODE_NAME}
+          # keep-sorted end
+  service:
+    extensions: [health_check]
+    pipelines:
+      traces:
+        exporters: [otlphttp/signoz]
+        processors: [memory_limiter, k8s_attributes, resource/cluster_name, batch]
+      metrics:
+        exporters: [otlphttp/signoz]
+        processors:
+          - memory_limiter
+          - k8s_attributes
+          - filter/persistent_volumes
+          - filter/cnpg_settings
+          - resource/cluster_name
+          - batch
+        receivers: [otlp, prometheus, prometheus/annotations, prometheus/coredns, prometheus/dcgm, prometheus/opencost, prometheus/torch_compile_cache]
+      metrics/host:
+        exporters: [otlphttp/signoz]
+        processors:
+          - memory_limiter
+          - resourcedetection
+          - resource/host_identity
+          - batch
+        receivers: [host_metrics]
+      logs:
+        exporters: [otlphttp/signoz]
+        processors:
+          - memory_limiter
+          - k8s_attributes
+          - transform/kubernetes_events
+          - filter/kubernetes_events
+          - transform/logs
+          - filter/log_volume
+          - filter/ingestion_feedback
+          - resource/cluster_name
+          - batch

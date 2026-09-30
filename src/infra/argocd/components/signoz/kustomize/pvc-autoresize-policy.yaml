@@ -1,0 +1,35 @@
+# Enforces Kyverno ClusterPolicy for bounded ClickHouse PVC autoresize: mutates resize.topolvm.io annotations on PVCs labeled clickhouse.altinity.com/chi=signoz-clickhouse on admission.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: signoz-clickhouse-pvc-autoresize
+  labels:
+    app.kubernetes.io/name: signoz-pvc-autoresize-policy
+    app.kubernetes.io/part-of: signoz
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  failurePolicy: Ignore
+  validationFailureAction: Audit
+  rules:
+    - name: annotate-new-clickhouse-pvcs
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [PersistentVolumeClaim]
+              namespaces: [signoz]
+              selector:
+                matchLabels:
+                  clickhouse.altinity.com/chi: signoz-clickhouse
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations: &clickhouseResizeAnnotations
+              resize.topolvm.io/increase: 20%
+              # The CHI owns provider-sized caps. Default only legacy PVCs
+              # that predate that contract; never overwrite a smaller cap.
+              +(resize.topolvm.io/storage_limit): 500Gi
+              resize.topolvm.io/threshold: 20%
