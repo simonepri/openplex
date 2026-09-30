@@ -1,0 +1,59 @@
+{{- /* Binds portable storage classes to OpenEBS Rawfile LocalPV for local expandable volumes. */ -}}
+
+{{- if eq .Values.provider "local" }}
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: general-expandable
+  annotations:
+    # Rawfile parameters are immutable; existing PVs remain bound by class name.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+    resize.topolvm.io/enabled: "true"
+    storageclass.kubernetes.io/is-default-class: "true"
+# LINT.IfChange(local-general-expandable-storage-provisioner)
+provisioner: rawfile.csi.openebs.io
+# LINT.ThenChange(//src/infra/argocd/components/rawfile_localpv/helm/values.yaml:rawfile-localpv-provisioner-name)
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  thinProvision: "true"
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: workspace-expandable
+# LINT.IfChange(local-workspace-storage-provisioner)
+provisioner: rawfile.csi.openebs.io
+# LINT.ThenChange(//src/infra/argocd/components/rawfile_localpv/helm/values.yaml:rawfile-localpv-provisioner-name)
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  storagePool: default
+  thinProvision: "false"
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: general-ephemeral
+# LINT.IfChange(local-general-ephemeral-storage-provisioner)
+provisioner: rawfile.csi.openebs.io
+# LINT.ThenChange(//src/infra/argocd/components/rawfile_localpv/helm/values.yaml:rawfile-localpv-provisioner-name)
+allowVolumeExpansion: false
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+# Local installs this local-path class before Argo starts. Retain it for explicit
+# compatibility use while handing the default contract to general-expandable.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+{{- end }}

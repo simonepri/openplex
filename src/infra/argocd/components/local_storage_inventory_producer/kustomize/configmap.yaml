@@ -1,0 +1,75 @@
+# Provides scripts for the local storage inventory producer CronJob.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-storage-inventory-producer-scripts
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: local-storage-inventory-producer
+data:
+  produce-inventory.sh: |
+    #!/usr/bin/env bash
+    # Generates local inventory Parquet shards and manifests for storage classes.
+    # NOTE(simonepri): Floci accepts inventory configs but does not deliver reports; this job stands in for delivery
+
+    set -euo pipefail
+
+    REPORT_DATE="${REPORT_DATE:-$(TZ=UTC24 date +%F)}"
+    : "${S3_ENDPOINT:?S3_ENDPOINT is required}"
+    : "${CELL_NAME:?CELL_NAME is required}"
+    DESTINATION_BUCKET="${DESTINATION_BUCKET:-cloud-${CELL_NAME}-meta}"
+
+    STORAGE_CLASSES=(home scratch meta backups archive)
+
+    for storage_class in "${STORAGE_CLASSES[@]}"; do
+      bucket="cloud-${CELL_NAME}-${storage_class}"
+      echo "Processing storage class: ${storage_class} (bucket: ${bucket}) for date: ${REPORT_DATE}"
+
+      count="$(clickhouse-local --query "
+        SELECT count()
+        FROM s3('${S3_ENDPOINT}/${bucket}/**', 'One')
+        WHERE NOT startsWith(substring(_path, length('${bucket}') + 2), 'meta/inventory/')
+          AND NOT startsWith(substring(_path, length('${bucket}') + 2), 'inventory/')
+          AND NOT startsWith(substring(_path, length('${bucket}') + 2), 'meta/raw/')
+      ")"
+
+      destination_prefix="${S3_ENDPOINT}/${DESTINATION_BUCKET}/inventory/${storage_class}/stats/${REPORT_DATE}T01-00Z"
+
+      if [[ "${count}" -gt 0 ]]; then
+        echo "Found ${count} objects in ${bucket}, generating Parquet shard"
+        clickhouse-local --query "
+          INSERT INTO FUNCTION s3('${destination_prefix}/data/shard.parquet', 'Parquet', 'bucket String, key String, size Int64, last_modified_date DateTime64(3)')
+          SETTINGS s3_truncate_on_insert = 1
+          SELECT
+            '${bucket}' AS bucket,
+            substring(_path, length('${bucket}') + 2) AS key,
+            toInt64(_size) AS size,
+            toDateTime64(_time, 3, 'UTC') AS last_modified_date
+          FROM s3('${S3_ENDPOINT}/${bucket}/**', 'One')
+          WHERE NOT startsWith(substring(_path, length('${bucket}') + 2), 'meta/inventory/')
+            AND NOT startsWith(substring(_path, length('${bucket}') + 2), 'inventory/')
+            AND NOT startsWith(substring(_path, length('${bucket}') + 2), 'meta/raw/')
+        "
+
+        manifest_json='{"fileFormat":"Parquet","files":[{"key":"inventory/'"${storage_class}"'/stats/'"${REPORT_DATE}"'T01-00Z/data/shard.parquet"}]}'
+      else
+        echo "No objects found in ${bucket}, generating empty manifest"
+        manifest_json='{"fileFormat":"Parquet","files":[]}'
+      fi
+
+      clickhouse-local --query "
+        INSERT INTO FUNCTION s3('${destination_prefix}/manifest.json', 'RawBLOB', 'content String')
+        SETTINGS s3_truncate_on_insert = 1
+        SELECT '${manifest_json}' AS content
+      "
+
+      clickhouse-local --query "
+        INSERT INTO FUNCTION s3('${destination_prefix}/manifest.checksum', 'LineAsString', 'content String')
+        SETTINGS s3_truncate_on_insert = 1
+        SELECT lower(hex(MD5('${manifest_json}'))) AS content
+      "
+    done
+
+    echo "Inventory production completed successfully."

@@ -1,0 +1,89 @@
+# Schedules periodic storage inventory production for local cell S3 buckets.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: local-storage-inventory-producer
+  namespace: s3-system
+  annotations:
+    ignore-check.kube-linter.io/no-liveness-probe: >-
+      Storage inventory producer CronJob runs to completion and exits.
+    ignore-check.kube-linter.io/no-readiness-probe: >-
+      Storage inventory producer CronJob runs to completion and exits.
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: local-storage-inventory-producer
+spec:
+  schedule: "17 2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 1800
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/managed-by: argocd
+            app.kubernetes.io/name: local-storage-inventory-producer
+        spec:
+          serviceAccountName: local-storage-inventory-producer
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: producer
+              image: docker.io/clickhouse/clickhouse-server:26.9.10@sha256:b01d1d45df540e487396838dd1397550215a07a8998aa6ac3b50b39802d62701
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/bash
+                - /opt/scripts/produce-inventory.sh
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: S3_ENDPOINT
+                  value: http://192.0.2.1:4566
+                - name: CELL_NAME
+                  value: local-cell
+                - name: INSTALLATION
+                  value: local
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 65532
+                runAsGroup: 65532
+                seccompProfile:
+                  type: RuntimeDefault
+              volumeMounts:
+                - name: scripts
+                  mountPath: /opt/scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: scripts
+              configMap:
+                name: local-storage-inventory-producer-scripts
+                defaultMode: 365
+            - name: tmp
+              emptyDir:
+                sizeLimit: 128Mi

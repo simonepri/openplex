@@ -1,0 +1,61 @@
+{{- /* Binds portable storage classes to AWS EBS CSI driver for expandable and ephemeral volumes. */ -}}
+
+{{- if eq .Values.provider "aws" }}
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: general-expandable
+  annotations:
+    resize.topolvm.io/enabled: "true"
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  csi.storage.k8s.io/fstype: ext4
+  encrypted: "true"
+  tagSpecification_1: environment=production
+  tagSpecification_2: cost-center=shared-infrastructure
+  tagSpecification_3: component=kubernetes-storage
+  tagSpecification_4: pvc-namespace={{ "{{ .PVCNamespace }}" }}
+  tagSpecification_5: pvc-name={{ "{{ .PVCName }}" }}
+  tagSpecification_6: pv-name={{ "{{ .PVName }}" }}
+  type: gp3
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: general-ephemeral
+provisioner: ebs.csi.aws.com
+parameters:
+  csi.storage.k8s.io/fstype: ext4
+  encrypted: "true"
+  tagSpecification_1: environment=production
+  tagSpecification_2: cost-center=shared-infrastructure
+  tagSpecification_3: component=kubernetes-storage
+  tagSpecification_4: pvc-namespace={{ "{{ .PVCNamespace }}" }}
+  tagSpecification_5: pvc-name={{ "{{ .PVCName }}" }}
+  tagSpecification_6: pv-name={{ "{{ .PVName }}" }}
+  type: gp3
+allowVolumeExpansion: false
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: ebs-gp3-retain
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+driver: ebs.csi.aws.com
+deletionPolicy: Retain
+parameters:
+  tagSpecification_1: environment=production
+  tagSpecification_2: cost-center=shared-infrastructure
+  tagSpecification_3: component=kubernetes-storage
+  tagSpecification_4: snapshot-namespace={{ "{{ .VolumeSnapshotNamespace }}" }}
+  tagSpecification_5: snapshot-name={{ "{{ .VolumeSnapshotName }}" }}
+  tagSpecification_6: snapshot-content={{ "{{ .VolumeSnapshotContentName }}" }}
+{{- end }}

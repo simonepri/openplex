@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StorageClassesValues",
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": ["aws", "gcp", "local"]
+    }
+  },
+  "required": ["provider"],
+  "additionalProperties": false
+}
