@@ -1,0 +1,5 @@
+# Configures node-local eStargz snapshotter to reuse kubelet registry credentials during AL2023 bootstrap.
+
+[cri_keychain]
+enable_keychain = true
+image_service_path = "/run/containerd/containerd.sock"
