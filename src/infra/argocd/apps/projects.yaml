@@ -1,0 +1,68 @@
+# AppProjects establishing GitOps trust boundaries and source repos for ctrl and cell clusters.
+
+# Trust boundary for control plane applications and services.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cluster-ctrl
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: Trust boundary for control plane applications and services
+  sourceRepos:
+    - '*'
+  destinations:
+    - name: 'ctrl-*'
+      namespace: '*'
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+# Trust boundary for cell worker cluster capabilities.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cluster-cell
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: Trust boundary for cell worker cluster capabilities
+  sourceRepos:
+    - '*'
+  destinations:
+    - name: 'cell-*'
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+---
+# Trust boundary for team lane bootstrap applications.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: team-bootstrap
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: Trust boundary for team lane bootstrap applications
+  sourceRepos:
+    - '*'
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: argocd
+    - server: https://kubernetes.default.svc
+      namespace: kargo
+    - server: https://kubernetes.default.svc
+      namespace: 'team-*'
+  clusterResourceWhitelist:
+    # keep-sorted start
+    - group: ''
+      kind: Namespace
+    - group: argoproj.io
+      kind: AppProject
+    # keep-sorted end
