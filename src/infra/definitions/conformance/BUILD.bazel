@@ -1,0 +1,159 @@
+"""Declares behavioral test suites, fixtures, runner, and acceptance targets for Chainsaw integration testing."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "CHAINSAW_CONFIG", "CHAINSAW_FIXTURE", "CHAINSAW_SUITE", "package_sources", "source_set")
+
+# gazelle:resolve py coder_workspace :coder_workspace
+# gazelle:resolve py kopia_acceptance :kopia_acceptance
+# gazelle:resolve py floci_estargz_acceptance :floci_estargz_acceptance
+
+exports_files([
+    "runner.sh",
+    "scripts/coder_workspace.py",
+    "scripts/floci_estargz_acceptance.py",
+    "scripts/kopia_acceptance.py",
+    "scripts/ray_train_acceptance.sh",
+])
+
+source_set(
+    name = "suites",
+    srcs = glob(["*.test.k8s.yaml"]),
+    kind = CHAINSAW_SUITE,
+)
+
+py_test(
+    name = "chainsaw_taxonomy_test",
+    srcs = ["chainsaw_taxonomy_test.py"],
+    data = [":suites"],
+    # keep
+    deps = [
+        "@dev_python_deps//pyyaml",
+    ],
+)
+
+source_set(
+    name = "config",
+    srcs = [".chainsaw.yaml"],
+    kind = CHAINSAW_CONFIG,
+)
+
+source_set(
+    name = "fixtures",
+    srcs = glob(
+        ["fixtures/**"],
+        exclude = [
+            "fixtures/**/*.sh",
+        ],
+    ),
+    kind = CHAINSAW_FIXTURE,
+)
+
+package_sources(exclude = [
+    ".chainsaw.yaml",
+    "*.test.k8s.yaml",
+    "**/*.sh",
+    "fixtures/**",
+    "scripts/**",
+])
+
+sh_library(
+    name = "shell",
+    srcs = glob(["**/*.sh"]),
+)
+
+sh_binary(
+    name = "chainsaw",
+    srcs = ["runner.sh"],
+    args = [
+        "$(rootpath //src/bazel/tools:chainsaw)",
+        "$(rootpath //src/bazel/tools:jq)",
+    ],
+    data = [
+        ":config",
+        ":fixtures",
+        ":shell",
+        ":suites",
+        "//src/bazel/tools:chainsaw",
+        "//src/bazel/tools:jq",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "runner_test",
+    srcs = ["runner_test.sh"],
+    args = [
+        "$(rootpath runner.sh)",
+        "$(rootpath //src/bazel/tools:chainsaw)",
+        "$(rootpath //src/bazel/tools:jq)",
+    ],
+    data = [
+        "runner.sh",
+        "//src/bazel/tools:chainsaw",
+        "//src/bazel/tools:jq",
+    ],
+)
+
+py_binary(
+    name = "coder_workspace",
+    srcs = ["scripts/coder_workspace.py"],
+    visibility = ["//src:__subpackages__"],
+    deps = ["//src/infra/argocd/components/coder:python"],
+)
+
+py_test(
+    name = "coder_workspace_test",
+    srcs = ["scripts/coder_workspace_test.py"],
+    data = ["scripts/coder_workspace.py"],
+    imports = ["scripts"],
+    tags = ["no-sandbox"],
+    deps = [":coder_workspace"],
+)
+
+py_binary(
+    name = "kopia_acceptance",
+    srcs = ["scripts/kopia_acceptance.py"],
+    visibility = ["//src:__subpackages__"],
+)
+
+py_test(
+    name = "kopia_acceptance_test",
+    srcs = ["scripts/kopia_acceptance_test.py"],
+    data = ["scripts/kopia_acceptance.py"],
+    imports = ["scripts"],
+    tags = ["no-sandbox"],
+    deps = [":kopia_acceptance"],
+)
+
+py_binary(
+    name = "floci_estargz_acceptance",
+    srcs = ["scripts/floci_estargz_acceptance.py"],
+    visibility = ["//src:__subpackages__"],
+)
+
+py_test(
+    name = "floci_estargz_acceptance_test",
+    srcs = ["scripts/floci_estargz_acceptance_test.py"],
+    data = ["scripts/floci_estargz_acceptance.py"],
+    imports = ["scripts"],
+    tags = ["no-sandbox"],
+)
+
+sh_test(
+    name = "ray_train_acceptance",
+    srcs = ["scripts/ray_train_acceptance_test.sh"],
+    args = [
+        "$(location scripts/ray_train_acceptance.sh)",
+        "$(location //src/bazel/tools:jq)",
+    ],
+    data = [
+        "scripts/ray_train_acceptance.sh",
+        "//src/bazel/rules/oci:stream_tag.sh",
+        "//src/bazel/tools:jq",
+        "//src/infra:sources",
+    ],
+    tags = ["no-sandbox"],
+)

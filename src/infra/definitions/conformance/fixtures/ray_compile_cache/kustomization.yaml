@@ -1,0 +1,16 @@
+# Packages Ray compile-cache test scripts into a ConfigMap to defend distributed compilation caching tests against unversioned test harnesses.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: team-examples-workloads
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/component: compile-cache-conformance
+    app.kubernetes.io/managed-by: chainsaw
+    app.kubernetes.io/part-of: ray-train
+configMapGenerator:
+  - name: ray-train-compile-cache-conformance
+    files:
+      - remote_cache.py
+      - run.sh

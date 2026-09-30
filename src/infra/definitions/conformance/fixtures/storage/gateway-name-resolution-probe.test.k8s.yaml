@@ -1,0 +1,79 @@
+# Stages S3 gateway name resolution probe pods to defend transparent local and cross-region endpoint routing and credential injection.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gateway-name-resolution
+  namespace: team-examples-workloads
+  labels:
+    app.kubernetes.io/component: storage-gateway-conformance
+    app.kubernetes.io/name: gateway-name-resolution
+    app.kubernetes.io/part-of: chainsaw
+    cost-center: examples
+    environment: production
+    availability-class: ha
+    latency-class: ls
+    team: examples
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  securityContext:
+    fsGroup: 65532
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: probe
+      image: ($values.awsCliImage)
+      command: [/bin/sh, -ceu]
+      args:
+        - |-
+          local_key="home/examples/chainsaw/${OBJECT_SUFFIX}/local"
+          global_key="home/examples/eaws-lh1/chainsaw/${OBJECT_SUFFIX}/global"
+          gateway_aws() {
+            AWS_PROFILE=team-s3 \
+              AWS_SHARED_CREDENTIALS_FILE=/var/run/cluster/s3/credentials \
+              aws "$@"
+          }
+          cleanup() {
+            gateway_aws s3api delete-object --bucket eaws-lh1 --key "${local_key}" >/dev/null 2>&1 || true
+            gateway_aws s3api delete-object --bucket global --key "${global_key}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          printf '%s' "local-through-gateway" >/tmp/local-body
+          printf '%s' "global-through-gateway" >/tmp/global-body
+          gateway_aws s3api put-object --bucket eaws-lh1 --key "${local_key}" \
+            --body /tmp/local-body
+          gateway_aws s3api put-object --bucket global --key "${global_key}" \
+            --body /tmp/global-body
+          test -n "$(gateway_aws s3api get-object --bucket eaws-lh1 --key "${local_key}" \
+            /tmp/local-read --query ETag --output text)"
+          test -n "$(gateway_aws s3api get-object --bucket global --key "${global_key}" \
+            /tmp/global-read --query ETag --output text)"
+          test "$(cat /tmp/local-read)" = "local-through-gateway"
+          test "$(cat /tmp/global-read)" = "global-through-gateway"
+          gateway_aws s3api delete-object --bucket eaws-lh1 --key "${local_key}"
+          gateway_aws s3api delete-object --bucket global --key "${global_key}"
+          exit 0
+      env:
+        - {name: OBJECT_SUFFIX, value: ($objectSuffix)}
+        - {name: AWS_DEFAULT_REGION, value: us-east-1}
+        - {name: AWS_EC2_METADATA_DISABLED, value: "true"}
+        - {name: AWS_PAGER, value: ""}
+        - {name: HOME, value: /tmp}
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {cpu: 500m, memory: 256Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+      volumeMounts:
+        - {name: temporary, mountPath: /tmp}
+  volumes:
+    - {name: temporary, emptyDir: {sizeLimit: 16Mi}}

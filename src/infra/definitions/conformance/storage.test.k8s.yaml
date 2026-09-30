@@ -1,0 +1,161 @@
+# Proves PersistentVolumeClaims support online expansion and retain data integrity across StatefulSet recreation to defend against storage loss.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: pvc-expansion-and-statefulset-recovery
+  labels:
+    cadence: daily
+    capability: storage
+    mutates: scratch
+spec:
+  namespace: default
+  cluster: cell-eaws-lh1
+  concurrent: false
+  forceTerminationGracePeriod: 1s
+  timeouts:
+    apply: 30s
+    assert: 3m
+    cleanup: 2m
+    delete: 2m
+    error: 30s
+    exec: 3m
+  steps:
+    - try:
+        - command: &cleanup-storage
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                volumes="$(kubectl get persistentvolumes --output=json | jq -r '
+                  .items[] |
+                  select(
+                    .spec.claimRef.namespace == "storage-e2e" and
+                    .spec.claimRef.name == "data-storage-recovery-0"
+                  ) |
+                  .metadata.name
+                ')"
+                for volume in ${volumes}; do
+                  kubectl patch "persistentvolume/${volume}" \
+                    --type=merge \
+                    --patch='{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+                done
+                kubectl delete namespace/storage-e2e \
+                  --ignore-not-found=true \
+                  --wait=true
+                for volume in ${volumes}; do
+                  kubectl delete "persistentvolume/${volume}" \
+                    --ignore-not-found=true \
+                    --wait=true \
+                    --timeout=120s
+                done
+        - apply:
+            file: fixtures/storage/recovery.test.k8s.yaml
+        - command:
+            entrypoint: kubectl
+            args:
+              - rollout
+              - status
+              - statefulset/storage-recovery
+              - --namespace=storage-e2e
+              - --timeout=180s
+        - command:
+            entrypoint: kubectl
+            args:
+              - get
+              - persistentvolumeclaim/data-storage-recovery-0
+              - --namespace=storage-e2e
+              - --output=jsonpath={.metadata.uid}
+            outputs:
+              - name: originalPvcUid
+                value: (trim_space($stdout))
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=storage-e2e
+              - pod/storage-recovery-0
+              - --
+              - /bin/sh
+              - -ceu
+              - printf '%s' TEST_STORAGE_RECOVERY_OK > /data/marker && sync
+        - command:
+            entrypoint: kubectl
+            args:
+              - patch
+              - persistentvolumeclaim/data-storage-recovery-0
+              - --namespace=storage-e2e
+              - --type=merge
+              - '--patch={"spec":{"resources":{"requests":{"storage":"128Mi"}}}}'
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - persistentvolumeclaim/data-storage-recovery-0
+              - --namespace=storage-e2e
+              - --for=jsonpath={.status.capacity.storage}=128Mi
+              - --timeout=180s
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=storage-e2e
+              - pod/storage-recovery-0
+              - --
+              - /bin/sh
+              - -ceu
+              - |-
+                test "$(df -Pk /data | awk 'NR == 2 {print $2}')" -ge 100000
+                cat /data/marker
+            check:
+              (trim_space($stdout)): TEST_STORAGE_RECOVERY_OK
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - statefulset/storage-recovery
+              - --namespace=storage-e2e
+              - --wait=true
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - --for=delete
+              - pod/storage-recovery-0
+              - --namespace=storage-e2e
+              - --timeout=180s
+        - apply:
+            file: fixtures/storage/recovery.test.k8s.yaml
+        - command:
+            entrypoint: kubectl
+            args:
+              - rollout
+              - status
+              - statefulset/storage-recovery
+              - --namespace=storage-e2e
+              - --timeout=180s
+        - command:
+            entrypoint: kubectl
+            args:
+              - get
+              - persistentvolumeclaim/data-storage-recovery-0
+              - --namespace=storage-e2e
+              - --output=jsonpath={.metadata.uid}
+            check:
+              (trim_space($stdout)): ($originalPvcUid)
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=storage-e2e
+              - pod/storage-recovery-0
+              - --
+              - /bin/sh
+              - -ceu
+              - |-
+                test "$(df -Pk /data | awk 'NR == 2 {print $2}')" -ge 100000
+                cat /data/marker
+            check:
+              (trim_space($stdout)): TEST_STORAGE_RECOVERY_OK
+      finally:
+        - command: *cleanup-storage

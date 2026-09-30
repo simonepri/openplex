@@ -1,0 +1,27 @@
+# Proves Headscale workspace sidecars defend process isolation, restricted mounts, and controller lineage against interactive breakout attempts.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: headscale-workspace-isolation
+  labels:
+    cadence: commit
+    capability: networking
+    mutates: none
+spec:
+  namespace: headscale-workspace-isolation-e2e
+  cluster: ctrl-eaws-lh1
+  concurrent: false
+  timeouts:
+    exec: 10m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            env:
+              - name: BUSYBOX_IMAGE
+                value: ($values.busyboxImage)
+              - name: FIXTURE
+                value: fixtures/security/headscale-workspace-isolation.test.k8s.yaml
+            args:
+              - scripts/check_headscale_workspace_isolation.sh

@@ -1,0 +1,192 @@
+# Proves admission controllers reject unpinned images, untrusted registries, privileged pods, and spoofed system exceptions to defend cluster security baselines.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: admission-rejects-policy-bypass-probes
+  labels:
+    cadence: commit
+    capability: security
+    mutates: scratch
+spec:
+  namespace: security-e2e
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    exec: 2m
+  steps:
+    - try:
+        - command:
+            entrypoint: kubectl
+            args:
+              - run
+              - unpinned-image-probe
+              - --namespace=security-e2e
+              - --image=docker.io/library/busybox:latest
+              - --restart=Never
+              - --dry-run=server
+              - --
+              - sleep
+              - "1"
+            check:
+              ($error != null): true
+              (contains($stderr, 'production-image-digest-pinning')): true
+              (contains($stderr, 'require-digests-for-workload-images')): true
+        - command:
+            entrypoint: kubectl
+            args:
+              - run
+              - untrusted-registry-probe
+              - --namespace=security-e2e
+              - --image=example.invalid/probe@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+              - --restart=Never
+              - --dry-run=server
+              - --
+              - sleep
+              - "1"
+            check:
+              ($error != null): true
+              (contains($stderr, 'production-image-digest-pinning')): true
+              (contains($stderr, 'require-trusted-registries-for-workload-images')): true
+        - command:
+            entrypoint: sh
+            env:
+              - name: BUSYBOX_IMAGE
+                value: ($values.busyboxImage)
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --filename=- <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: privileged-pod-probe
+                  namespace: security-e2e
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: probe
+                      image: "${BUSYBOX_IMAGE}"
+                      securityContext: {privileged: true}
+                EOF
+            check:
+              ($error != null): true
+              (contains($stderr, 'production-pod-security')): true
+              (contains($stderr, 'block-privileged-pods')): true
+        - command:
+            entrypoint: bash
+            env:
+              - name: BUSYBOX_IMAGE
+                value: ($values.busyboxImage)
+            args: [scripts/check_dragonfly_client_security_profile.sh]
+        - command:
+            entrypoint: sh
+            env:
+              - name: BUSYBOX_IMAGE
+                value: ($values.busyboxImage)
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --filename=- <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: spoofed-parca-agent-probe
+                  namespace: profiling
+                  labels:
+                    app.kubernetes.io/component: profiler
+                    app.kubernetes.io/instance: parca-agent
+                    app.kubernetes.io/name: parca-agent
+                spec:
+                  serviceAccountName: default
+                  hostPID: true
+                  restartPolicy: Never
+                  containers:
+                    - name: probe
+                      image: "${BUSYBOX_IMAGE}"
+                      securityContext: {privileged: true}
+                EOF
+            check:
+              ($error != null): true
+              (contains($stderr, 'production-pod-security')): true
+              (contains($stderr, 'require-reviewed-parca-agent-security-profile')): true
+        - command:
+            entrypoint: sh
+            env:
+              - name: BUSYBOX_IMAGE
+                value: ($values.busyboxImage)
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --filename=- <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: spoofed-rawfile-localpv-probe
+                  namespace: openebs
+                  labels:
+                    app.kubernetes.io/instance: rawfile-localpv
+                    app.kubernetes.io/name: rawfile-localpv
+                    component: node
+                spec:
+                  serviceAccountName: default
+                  restartPolicy: Never
+                  containers:
+                    - name: csi-driver
+                      image: "${BUSYBOX_IMAGE}"
+                      securityContext: {privileged: true}
+                    - name: registrar
+                      image: "${BUSYBOX_IMAGE}"
+                    - name: provisioner
+                      image: "${BUSYBOX_IMAGE}"
+                  volumes:
+                    - {name: dev, hostPath: {path: /dev}}
+                    - {name: kubelet, hostPath: {path: /var/lib/kubelet/}}
+                    - {name: plugins, hostPath: {path: /var/lib/kubelet/plugins/rawfile-localpv}}
+                    - {name: registry, hostPath: {path: /var/lib/kubelet/plugins_registry}}
+                    - {name: volumes, hostPath: {path: /var/local/openebs/rawfile/default-pool/}}
+                    - {name: metadata, hostPath: {path: /var/local/openebs/rawfile/rawfile-localpv/meta}}
+                EOF
+            check:
+              ($error != null): true
+              (contains($stderr, 'local-rawfile-localpv-security-profile')): true
+              (contains($stderr, 'require-reviewed-rawfile-localpv-security-profile')): true
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --filename=- <<'EOF'
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: argocd-owned-runtime-probe
+                  namespace: profiling
+                  annotations:
+                    argocd.argoproj.io/tracking-id: probe:/Service:profiling/argocd-owned-runtime-probe
+                spec:
+                  selector: {app: argocd-owned-runtime-probe}
+                  ports:
+                    - {name: http, port: 8080, targetPort: 8080}
+                EOF
+            check:
+              ($error == null): true
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                kubectl apply --dry-run=server --filename=- <<'EOF'
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: ownerless-runtime-probe
+                  namespace: profiling
+                spec:
+                  selector: {app: ownerless-runtime-probe}
+                  ports:
+                    - {name: http, port: 8080, targetPort: 8080}
+                EOF
+            check:
+              ($error != null): true
+              (contains($stderr, 'runtime-ownership')): true

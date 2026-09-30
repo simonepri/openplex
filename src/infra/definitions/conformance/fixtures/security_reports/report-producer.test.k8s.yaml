@@ -1,0 +1,39 @@
+# Deploys first-party application workloads to defend Trivy and Kubescape in-cluster vulnerability and posture report generation contracts.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-report-producer
+  namespace: security-reports-e2e
+  labels:
+    app.kubernetes.io/component: security-report-acceptance
+    app.kubernetes.io/managed-by: chainsaw
+    app.kubernetes.io/name: security-report-producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: security-report-producer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: security-report-acceptance
+        app.kubernetes.io/managed-by: chainsaw
+        app.kubernetes.io/name: security-report-producer
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: application
+          image: ($reportImage)
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault

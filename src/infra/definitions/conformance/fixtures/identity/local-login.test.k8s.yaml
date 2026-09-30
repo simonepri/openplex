@@ -1,0 +1,102 @@
+# Stages Dex authentication test inputs and mock client configurations to defend local login, claim validation, and invalid credential denial tests.
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dex-local-login-conformance-inputs
+  namespace: dex
+  labels:
+    app.kubernetes.io/component: local-login-conformance
+type: Opaque
+stringData:
+  dex-password: password
+  headlamp-client-secret: local-only-headlamp
+  signoz-client-secret: local-only-signoz
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dex-local-login-conformance
+  namespace: dex
+  labels:
+    app.kubernetes.io/component: local-login-conformance
+spec:
+  # One retry covers the fixture's observed intermittent client-attempt failure;
+  # repeated failures remain bounded and retain their diagnostics.
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: local-login-conformance
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: login
+          image: ($values.pythonImage)
+          imagePullPolicy: IfNotPresent
+          command: [python, /opt/conformance/login.py]
+          env:
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+            - {name: PYTHONUNBUFFERED, value: "1"}
+            - {name: SSL_CERT_FILE, value: /etc/ssl/local-ca/ca.crt}
+            - name: DEX_ISSUER
+              value: (join('', ['https://dex.', $values.clusterDomain]))
+            - name: DEX_USERNAME
+              value: (join('', ['ops@', $values.publicDomain]))
+            - name: DEX_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: dex-local-login-conformance-inputs, key: dex-password}
+            - {name: DEX_HEADLAMP_CLIENT_ID, value: headlamp}
+            - name: DEX_HEADLAMP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: dex-local-login-conformance-inputs, key: headlamp-client-secret}
+            - name: DEX_HEADLAMP_REDIRECT_URI
+              value: (join('', ['https://headlamp.ctrl-eaws-lh1.', $values.clusterDomain, '/oidc-callback']))
+            - name: DEX_DRAGONFLY_REDIRECT_URI
+              value: (join('', ['https://dragonfly.', $values.clusterDomain, '/oauth2/callback']))
+            - name: DEX_DRAGONFLY_URL
+              value: (join('', ['https://dragonfly.', $values.clusterDomain, '/']))
+            - {name: DEX_SIGNOZ_CLIENT_ID, value: signoz}
+            - name: DEX_SIGNOZ_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: dex-local-login-conformance-inputs, key: signoz-client-secret}
+            - name: DEX_SIGNOZ_REDIRECT_URI
+              value: (join('', ['https://signoz.ctrl-eaws-lh1.', $values.clusterDomain, '/oauth2/callback']))
+            - {name: DEX_EXPECTED_USERNAME, value: ops}
+            - {name: DEX_EXPECTED_GROUPS, value: 'operators,team:examples'}
+            - {name: HEADLAMP_CLUSTERS, value: 'ctrl-eaws-lh1,cell-eaws-lh1'}
+            - name: HEADLAMP_URL
+              value: (join('', ['https://headlamp.', $values.clusterDomain]))
+            - name: CODER_URL
+              value: (join('', ['https://coder.', $values.clusterDomain]))
+            - name: SNAPSHOT_PORTAL_URL
+              value: (join('', ['https://coder-snapshots.', $values.clusterDomain]))
+          resources:
+            limits: {cpu: 200m, memory: 128Mi}
+            requests: {cpu: 25m, memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          volumeMounts:
+            # keep-sorted start
+            - {name: local-ca, mountPath: /etc/ssl/local-ca, readOnly: true}
+            - {name: script, mountPath: /opt/conformance, readOnly: true}
+            # keep-sorted end
+      volumes:
+        # keep-sorted start
+        - name: local-ca
+          configMap:
+            name: dex-local-ca-conformance
+            items:
+              - {key: ca.crt, path: ca.crt}
+        - {name: script, configMap: {name: dex-local-login-conformance}}
+        # keep-sorted end

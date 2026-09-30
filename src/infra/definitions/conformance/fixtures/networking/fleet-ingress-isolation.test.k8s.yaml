@@ -1,0 +1,127 @@
+# Stages HTTP server and client probes in profiling namespaces to defend fleet ingress isolation policies against unauthorized inter-namespace traffic.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fleet-isolated-server
+  namespace: parca
+  labels: {app: fleet-isolated-server}
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: http
+      image: ($values.busyboxImage)
+      command: [sh, -c]
+      args: ["echo fleet-isolation-ok > /www/index.html; exec httpd -f -p 8080 -h /www"]
+      ports: [{name: http, containerPort: 8080}]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      volumeMounts: [{name: content, mountPath: /www}]
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  volumes: [{name: content, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-isolated-server
+  namespace: parca
+  labels: {app.kubernetes.io/managed-by: chainsaw}
+spec:
+  selector: {app: fleet-isolated-server}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fleet-isolated-client
+  namespace: parca
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: client
+      image: ($values.busyboxImage)
+      args: [sleep, "600"]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fleet-external-server
+  namespace: networking-baseline
+  labels: {app: fleet-external-server}
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: http
+      image: ($values.busyboxImage)
+      command: [sh, -c]
+      args: ["echo external-control-ok > /www/index.html; exec httpd -f -p 8080 -h /www"]
+      ports: [{name: http, containerPort: 8080}]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      volumeMounts: [{name: content, mountPath: /www}]
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  volumes: [{name: content, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-external-server
+  namespace: networking-baseline
+  labels: {app.kubernetes.io/managed-by: chainsaw}
+spec:
+  selector: {app: fleet-external-server}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fleet-external-client
+  namespace: networking-baseline
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: client
+      image: ($values.busyboxImage)
+      args: [sleep, "600"]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0

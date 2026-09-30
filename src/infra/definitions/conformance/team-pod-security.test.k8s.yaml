@@ -1,0 +1,24 @@
+# Proves Kyverno enforces restricted pod security standards on team workloads while permitting profiled GPU extensions to defend host container isolation.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: team-pod-security
+  labels:
+    cadence: commit
+    capability: security
+    mutates: scratch
+spec:
+  namespace: team-examples-workloads
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    exec: 5m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            env:
+              - name: BUSYBOX_IMAGE
+                value: ($values.busyboxImage)
+            args: [scripts/check_team_pod_security.sh]
