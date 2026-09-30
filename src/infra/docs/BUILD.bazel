@@ -1,0 +1,42 @@
+"""Claims documentation source files and architecture diagrams for the build graph."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "readme_generator",
+    srcs = ["readme.py"],
+    data = [
+        "readme.md",
+        "//:sources",
+    ],
+    imports = ["."],
+    visibility = ["//visibility:private"],
+)
+
+py_binary(
+    name = "readme",
+    srcs = ["readme.py"],
+    main = "readme.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "readme_test",
+    size = "small",
+    srcs = ["readme_test.py"],
+    data = [
+        "readme.md",
+        "//:sources",
+    ],
+    imports = ["."],
+    main = "readme_test.py",
+    precompile = "disabled",
+    deps = [":readme_generator"],
+)

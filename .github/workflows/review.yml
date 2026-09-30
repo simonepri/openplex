@@ -1,0 +1,215 @@
+# GitHub Actions workflow running agentic PR reviews with sticky comments and merge gates.
+
+name: review
+"on":
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read # Read access to repository contents
+
+jobs:
+  review-override:
+    name: Check Review Override
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      active: ${{ steps.override.outputs.active }}
+      reason: ${{ steps.override.outputs.reason }}
+      unconfigured: ${{ steps.credentials.outputs.unconfigured }}
+    steps:
+      - name: Parse override from PR description
+        id: override
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 -c '
+          import os, re
+          body = os.environ.get("PR_BODY", "")
+          match = re.search(r"(?m)^\s*NO_LGTM=(.*)$", body)
+          reason = match.group(1).strip() if match else ""
+          active = bool(match and reason and reason != "<reason>")
+          out = os.environ.get("GITHUB_OUTPUT")
+          if out:
+              with open(out, "a", encoding="utf-8") as f:
+                  f.write("active=" + ("true" if active else "false") + "\n")
+                  f.write(f"reason={reason}\n")
+          print(f"Override: active={active}, reason={reason}")
+          '
+
+      # Fork pull requests never receive secrets, so only a same-repository
+      # pull request can prove that no review credentials are configured.
+      - name: Detect review credentials
+        id: credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEYS: ${{ secrets.ANTHROPIC_API_KEYS }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEYS: ${{ secrets.OPENAI_API_KEYS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+          SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          unconfigured=false
+          if [[ -z "$ANTHROPIC_API_KEY$ANTHROPIC_API_KEYS$OPENAI_API_KEY$OPENAI_API_KEYS$GEMINI_API_KEY$GEMINI_API_KEYS" && "$SAME_REPOSITORY" == "true" ]]; then
+            unconfigured=true
+          fi
+          echo "unconfigured=$unconfigured" >> "$GITHUB_OUTPUT"
+          echo "Review credentials missing: $unconfigured"
+
+  run-review:
+    name: Run Review
+    needs: [review-override]
+    if: needs.review-override.outputs.unconfigured != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      gate: ${{ steps.comment-finish.outputs.gate }}
+    permissions:
+      contents: read # Read access to repository contents
+      issues: write # Write access to issue comments for sticky reviews
+      pull-requests: write # Write access to pull request review comments
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf \
+            /opt/hostedtoolcache \
+            /usr/lib/jvm \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/share/boost \
+            /usr/local/share/powershell \
+            /usr/local/share/vcpkg \
+            /usr/local/share/chromium \
+            /usr/local/lib/node_modules
+          sudo swapoff -a || true
+          sudo rm -f /swapfile /mnt/swapfile || true
+          sudo docker image prune --all --force || true
+          df -h
+
+      # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # v4.2.5
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518
+        with:
+          cache: true
+
+      # v4.2.2
+      - name: Cache Bazel
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf
+        with:
+          path: |
+            ~/.cache/bazel/repository
+            ~/.cache/bazel/disk_cache
+          key: bazel-${{ runner.os }}-${{ hashFiles('**/BUILD', '**/BUILD.bazel', 'MODULE.bazel', 'WORKSPACE.bazel', '.bazelrc') }}
+          restore-keys: |
+            bazel-${{ runner.os }}-
+
+      - name: Configure CI Bazel profile
+        run: |
+          cat << EOF >> .bazelrc.user
+          common --config=ci
+          common --repository_cache=$HOME/.cache/bazel/repository
+          build --disk_cache=$HOME/.cache/bazel/disk_cache
+          build --experimental_disk_cache_gc_max_size=10G
+          EOF
+
+      - name: Start sticky review comment
+        id: comment-start
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 -m src.infra.tools.review.cli comment start \
+            --repo "$REPO" \
+            --pr "$PR_NUMBER" \
+            --sha "$SHA" \
+            --server-url "$SERVER_URL" \
+            --job-url "$SERVER_URL/$REPO/actions/runs/$RUN_ID"
+
+      - name: Run review agent
+        id: agent
+        env:
+          REVIEW_AGENT: ${{ vars.REVIEW_AGENT || 'auto' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEYS: ${{ secrets.ANTHROPIC_API_KEYS }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEYS: ${{ secrets.OPENAI_API_KEYS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          mkdir -p .review
+          mise run review \
+            --base "origin/$BASE_REF" \
+            --target "HEAD" \
+            -o .review/review-bundle.md
+
+      - name: Finish sticky review comment
+        id: comment-finish
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OVERRIDE_ACTIVE: ${{ needs.review-override.outputs.active }}
+          OVERRIDE_REASON: ${{ needs.review-override.outputs.reason }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+          AGENT_OUTCOME: ${{ steps.agent.outcome }}
+        run: |
+          OUTCOME="success"
+          if [[ "$AGENT_OUTCOME" != "success" || ! -f .review/review-result.json ]]; then
+            OUTCOME="failure"
+          fi
+          python3 -m src.infra.tools.review.cli comment finish \
+            --repo "$REPO" \
+            --pr "$PR_NUMBER" \
+            --sha "$SHA" \
+            --server-url "$SERVER_URL" \
+            --job-url "$SERVER_URL/$REPO/actions/runs/$RUN_ID" \
+            --review-file ".review/review-result.json" \
+            --meta-file ".review/review-meta.json" \
+            --err-file ".review/review-error.txt" \
+            --outcome "$OUTCOME"
+
+  review-gate:
+    name: Review Gate
+    needs: [review-override, run-review]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate review gate
+        env:
+          GATE: ${{ needs.run-review.outputs.gate }}
+          OVERRIDE: ${{ needs.review-override.outputs.active }}
+          UNCONFIGURED: ${{ needs.review-override.outputs.unconfigured }}
+        run: |
+          python3 -c '
+          import os, sys
+          gate = os.environ.get("GATE", "")
+          override = os.environ.get("OVERRIDE", "") == "true"
+          if os.environ.get("UNCONFIGURED", "") == "true":
+              print("Review gate passed: no review credentials are configured")
+              sys.exit(0)
+          if gate == "pass" or gate == "override" or override:
+              print(f"Review gate passed (gate={gate}, override={override})")
+              sys.exit(0)
+          print(f"Review gate blocked (gate={gate}, override={override})")
+          sys.exit(1)
+          '
