@@ -1,0 +1,22 @@
+# Configures default values for the first-party oauth2-proxy integration chart. Fleet Applications select one static proxy for a portal that still requires it.
+
+mode: disabled
+application: {}
+identity: {}
+localCA:
+  enabled: false
+oidcEgressCIDR: ""
+podDisruptionBudget:
+  enabled: true
+proxy: {}
+replicas: 2
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: authentication
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+topologySpreadConstraints: []

@@ -1,0 +1,62 @@
+# Limits kube-oidc-proxy ingress to TLS serving port and egress to DNS, Dex OIDC discovery, and Kubernetes API.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kube-oidc-proxy
+  namespace: kube-oidc-proxy-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/component: oidc-authenticator
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kube-oidc-proxy
+    app.kubernetes.io/part-of: headlamp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: kube-oidc-proxy
+      app.kubernetes.io/name: kube-oidc-proxy
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Cloud load balancers may preserve or SNAT the source; OIDC authenticates
+    # every request before the proxy can impersonate a Kubernetes user.
+    - from:
+        - namespaceSelector: {}
+        - ipBlock: {cidr: 0.0.0.0/0}
+      ports:
+        - {protocol: TCP, port: 8443}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock: {cidr: 169.254.20.10/32}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: tailscale-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: tailscale-subnet-router}
+      ports:
+        - {protocol: TCP, port: 8443}
+    # Kubernetes API server, Dex, and HTTPS endpoints
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
+        - {protocol: TCP, port: 10443}

@@ -1,0 +1,46 @@
+# Configures local-identity Helm values for Dex on enabled clusters, providing example users and static clients.
+
+fullnameOverride: dex
+configSecret: {create: false, name: dex-config}
+env:
+  DEX_SESSIONS_ENABLED: 'true'
+grpc: {enabled: false}
+https: {enabled: false}
+image:
+  # LINT.IfChange(dex-kubernetes-storage-crds)
+  repository: ghcr.io/dexidp/dex
+  tag: master@sha256:5753ac2b285805dee4f57bb198e8bf55c1531cf8a62ef16d9cb903bcaf40b2b2
+  # LINT.ThenChange(//src/infra/argocd/components/dex/kustomize/storage-crds.yaml:dex-kubernetes-storage-crds)
+rbac:
+  createClusterScoped: false
+podAnnotations:
+  # LINT.IfChange(dex-config-rollout)
+  checksum/dex-config: 47712a32f92c8c808806049a276bca083986479780c87d6729026e9d5f0bef04
+  # LINT.ThenChange(//src/infra/argocd/components/dex/kustomize/dex-config.secret.yaml:local-dex-static-clients)
+  automount-service-account-token: 'true'
+priorityClassName: cluster-operators
+serviceAccount:
+  annotations:
+    automount-service-account-token: 'true'
+service:
+  type: ClusterIP
+  ports:
+    http: {port: 5556}
+podSecurityContext:
+  fsGroup: 1001
+  runAsNonRoot: true
+  seccompProfile: {type: RuntimeDefault}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities: {drop: [ALL]}
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1001
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 100m, memory: 256Mi}
+volumeMounts:
+  - {name: tmp, mountPath: /tmp}
+volumes:
+  - name: tmp
+    emptyDir: {medium: Memory, sizeLimit: 16Mi}

@@ -1,0 +1,31 @@
+{{- /* Renders one static proxy when the Application enables it. */ -}}
+
+{{- $instances := list -}}
+{{- if eq .Values.mode "single" -}}
+{{- $instances = append $instances (dict
+  "cookieName" .Values.proxy.cookieName
+  "hostname" ""
+  "name" .Values.proxy.name
+  "passUserHeaders" (default false .Values.proxy.passUserHeaders)
+  "redirectFromSecret" (not (hasKey .Values.proxy "redirectURL"))
+  "redirectURL" (default "" .Values.proxy.redirectURL)
+  "tls" (default (dict "enabled" false) .Values.proxy.tls)
+  "upstream" .Values.proxy.upstream
+) -}}
+{{- end -}}
+{{- if gt (len $instances) 0 }}
+{{ include "oauth2-proxy-integration.shared" (dict
+  "application" .Values.application
+  "identity" .Values.identity
+  "root" $
+) }}
+{{- range $instance := $instances }}
+---
+{{ include "oauth2-proxy-integration.proxy" (dict
+  "application" $.Values.application
+  "identity" $.Values.identity
+  "instance" $instance
+  "root" $
+) }}
+{{- end }}
+{{- end }}

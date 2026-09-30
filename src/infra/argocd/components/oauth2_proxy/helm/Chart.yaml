@@ -1,0 +1,8 @@
+# Defines Helm chart metadata for the first-party integration chart around upstream oauth2-proxy, rendered by the Dragonfly and Velero UI Applications.
+
+apiVersion: v2
+name: oauth2-proxy
+description: OAuth2 authentication boundaries for in-cluster portals
+type: application
+version: 0.1.0
+appVersion: "7.15.3"
