@@ -1,0 +1,55 @@
+--- a/rawfile/bd2fs.py
++++ b/rawfile/bd2fs.py
+@@ -32,6 +32,8 @@
+ from utils.logs import GRPCLogger
+ from utils.rawfile import (
+     AccessType,
++    attach_loop,
++    img_file,
+     be_absent,
+     metadata,
+     metadata_or,
+@@ -74,7 +76,12 @@
+         with VolLock(request.volume_id):
+             if not metadata_or(volume_id=request.volume_id).get("ready", False):
+                 raise VolumeNotReadyError(request.volume_id)
+-            staging_dev = f"{request.staging_target_path}/device"
++            staging_dev = _restore_staging_device(
++                Path(request.staging_target_path),
++                img_file(request.volume_id),
++                attach_loop,
++                get_device_for_mountpoint(request.target_path),
++            )
+ 
+             path = Path(request.target_path)
+             access_type_actions = {
+@@ -418,3 +425,29 @@
+             ],
+             next_token=str(snapshot_list.next_token),
+         )
++
++
++def _restore_staging_device(
++    staging_path: Path,
++    image: Path,
++    attach_loop,
++    mounted_device: str | None,
++) -> str:
++    if not image.is_file():
++        raise FileNotFoundError(f"Volume backing image is missing: {image}")
++    device = Path(attach_loop(image)).resolve(strict=True)
++    if mounted_device is not None and Path(mounted_device).resolve() != device:
++        raise RuntimeError("Published volume target is mounted from a different device")
++    block_link = staging_path / "block" / "dev"
++    device_link = staging_path / "device"
++    for link in (block_link, device_link):
++        if link.exists() and not link.is_symlink():
++            raise RuntimeError("CSI staging device path is not a symbolic link")
++    block_link.parent.mkdir(parents=True, exist_ok=True)
++    if not (block_link.is_symlink() and block_link.readlink() == device):
++        block_link.unlink(missing_ok=True)
++        block_link.symlink_to(device)
++    if not (device_link.is_symlink() and device_link.readlink() == block_link):
++        device_link.unlink(missing_ok=True)
++        device_link.symlink_to(block_link)
++    return str(device_link)

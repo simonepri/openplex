@@ -1,0 +1,44 @@
+"""Builds the pinned Rawfile CSI derivative that restores volume identity before publish."""
+
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/oci:defs.bzl", "third_party_image")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["publish-identity-v0.15.3.patch"])
+
+pkg_files(
+    name = "program_files",
+    srcs = ["@rawfile_localpv_source//:rawfile/bd2fs.py"],
+    attributes = pkg_attributes(mode = "0644"),
+    prefix = "/rawfile",
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "program_layer",
+    srcs = [":program_files"],
+)
+
+# LINT.IfChange(rawfile-localpv-base-images)
+third_party_image(
+    name = "image",
+    base = {
+        "amd64": "@rawfile_localpv_base_linux_amd64",
+        "arm64": "@rawfile_localpv_base_linux_arm64",
+    },
+    layers = [":program_layer"],
+    publication_mode = "digest",
+    repo_tags = ["rawfile-csi-boundary:test"],
+    repository = "src/third_party/openebs/rawfile-localpv",
+)
+# LINT.ThenChange(//MODULE.bazel:rawfile-localpv-base-images)
+
+alias(
+    name = "boundary_image",
+    actual = ":load",
+)
+
+package_sources()

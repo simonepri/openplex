@@ -1,0 +1,22 @@
+"""Builds and publishes the reviewed Dragonfly client derivative."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/oci:defs.bzl", "third_party_image")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["source-date-epoch-v1.5.2.patch"])
+
+# LINT.IfChange(dragonfly-client-base-images)
+third_party_image(
+    name = "image",
+    base = {
+        "amd64": "@dragonfly_client_base_linux_amd64",
+        "arm64": "@dragonfly_client_base_linux_arm64",
+    },
+    publication_mode = "digest",
+    repository = "src/third_party/dragonflyoss/client",
+)
+# LINT.ThenChange(//MODULE.bazel:dragonfly-client-base-images)
+
+package_sources()
