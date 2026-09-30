@@ -1,0 +1,39 @@
+"""Define test and validation targets ensuring Kubernetes workloads route ingress exclusively through gateways."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "policy",
+    # keep
+    srcs = ["check_network_exposure.py"],
+    imports = ["."],
+    visibility = ["//src:__subpackages__"],
+    deps = ["@dev_python_deps//pyyaml"],
+)
+
+py_binary(
+    name = "network_exposure",
+    # keep
+    srcs = ["check_network_exposure.py"],
+    main = "check_network_exposure.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+    deps = [":policy"],
+)
+
+py_test(
+    name = "check_network_exposure_test",
+    size = "small",
+    # keep
+    srcs = ["check_network_exposure_test.py"],
+    imports = ["."],
+    main = "check_network_exposure_test.py",
+    precompile = "disabled",
+    deps = [":policy"],
+)

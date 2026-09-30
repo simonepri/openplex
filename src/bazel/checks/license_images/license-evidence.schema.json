@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Validates exact reviewed finding inventories for pinned base images.",
+  "properties": {
+    "artifactRepository": {
+      "pattern": "^(?:ghcr\\.io|index\\.docker\\.io)/[a-z0-9._/-]+$",
+      "type": "string"
+    },
+    "artifacts": {
+      "items": {
+        "pattern": "^(?:ghcr\\.io|index\\.docker\\.io)/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "description": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "exceptionId": {
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "exitCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "owner": {
+          "format": "email",
+          "type": "string"
+        },
+        "replacement": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reviewBy": {
+          "format": "date",
+          "type": "string"
+        }
+      },
+      "required": ["owner", "replacement", "reviewBy"],
+      "type": "object"
+    },
+    "findingCount": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "findings": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "license": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "package": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["license", "package"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "generatedFrom": {
+      "additionalProperties": false,
+      "properties": {
+        "reports": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "pattern": "^(?:ghcr\\.io|index\\.docker\\.io)/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "reportId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["artifact", "reportId"],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "scanner": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": ["reports", "scanner"],
+      "type": "object"
+    },
+    "version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "artifactRepository",
+    "artifacts",
+    "description",
+    "exceptionId",
+    "exitCondition",
+    "findingCount",
+    "findings",
+    "generatedFrom",
+    "version"
+  ],
+  "type": "object"
+}

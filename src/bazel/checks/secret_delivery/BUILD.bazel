@@ -1,0 +1,39 @@
+"""Define test and check targets preventing direct secret delivery in Kubernetes workload environment variables."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "policy",
+    # keep
+    srcs = ["check_secret_delivery.py"],
+    imports = ["."],
+    visibility = ["//src:__subpackages__"],
+    deps = ["@dev_python_deps//pyyaml"],
+)
+
+py_binary(
+    name = "secret_delivery",
+    # keep
+    srcs = ["check_secret_delivery.py"],
+    main = "check_secret_delivery.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+    deps = [":policy"],
+)
+
+py_test(
+    name = "check_secret_delivery_test",
+    size = "small",
+    # keep
+    srcs = ["check_secret_delivery_test.py"],
+    imports = ["."],
+    main = "check_secret_delivery_test.py",
+    precompile = "disabled",
+    deps = [":policy"],
+)

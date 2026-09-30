@@ -1,0 +1,1019 @@
+{
+  "description": "Exact reviewed Alpine and Go-module license findings for the pinned rclone bases used by the workspace backup proxy.",
+  "version": 1,
+  "exceptionId": "workspace-backup-proxy-rclone-base-licenses",
+  "artifactRepository": "index.docker.io/rclone/rclone",
+  "artifacts": [
+    "index.docker.io/rclone/rclone@sha256:4055fb65b7a975caf3cb54a94bf12713e81947d6f3d0bb221907a05b0f6ab390",
+    "index.docker.io/rclone/rclone@sha256:91a77202e418409fa20be95def08e438c107d81046a2ebb5a1da1fdfeb212b3a"
+  ],
+  "findingCount": 247,
+  "findings": [
+    {
+      "package": "bazil.org/fuse",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cloud.google.com/go/auth",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cloud.google.com/go/auth/oauth2adapt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "cloud.google.com/go/compute/metadata",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/Azure/azure-sdk-for-go/sdk/azcore",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/Azure/azure-sdk-for-go/sdk/azidentity",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/Azure/azure-sdk-for-go/sdk/internal",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/Azure/go-ntlmssp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/AzureAD/microsoft-authentication-library-for-go",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/FilenCloudDienste/filen-sdk-go",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/Files-com/files-sdk-go/v3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/IBM/go-sdk-core/v5",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/Max-Sum/base32768",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/ProtonMail/bcrypt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/ProtonMail/gluon",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/ProtonMail/go-crypto",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/ProtonMail/go-srp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/ProtonMail/gopenpgp/v3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/PuerkitoBio/goquery",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/STARRY-S/zip",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/a1ex3/zstd-seekable-format-go/pkg",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/a8m/tree",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aalpar/deheap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/abbot/go-http-auth",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/adrg/xdg",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/anacrolix/dms",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/anacrolix/generics",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/anacrolix/log",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/anchore/go-lzo",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/andybalholm/brotli",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/andybalholm/cascadia",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/apache/arrow-go/v18",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/appscode/go-querystring",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/atotto/clipboard",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/config",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/credentials",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/feature/ec2/imds",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/feature/s3/manager",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/internal/configsources",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/internal/endpoints/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/internal/v4a",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/service/internal/checksum",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/service/internal/presigned-url",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/service/internal/s3shared",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/service/s3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/service/signin",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/service/sso",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/service/ssooidc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/aws-sdk-go-v2/service/sts",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/aws/smithy-go",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/bahlo/generic-list-go",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/beorn7/perks",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/bodgit/plumbing",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/bodgit/sevenzip",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/bodgit/windows",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/boombuler/barcode",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/bradenaw/juniper",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/buengese/sgzip",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/buger/jsonparser",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/calebcase/tmpfile",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cespare/xxhash/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/chilts/sid",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/clipperhouse/uax29/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cloudflare/circl",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cloudinary/cloudinary-go/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cloudsoda/go-smb2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cloudsoda/sddl",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/colinmarc/hdfs/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/coreos/go-semver",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/coreos/go-systemd/v22",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cpuguy83/go-md2man/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/creasty/defaults",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cronokirby/saferith",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/davecgh/go-spew",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/diskfs/go-diskfs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/dromara/dongle",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/dropbox/dropbox-sdk-go-unofficial/v6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/dsnet/compress",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/emersion/go-message",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/emersion/go-vcard",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/felixge/httpsnoop",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/flynn/noise",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/gabriel-vasile/mimetype",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/gdamore/encoding",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/gdamore/tcell/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/geoffgarside/ber",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-chi/chi/v5",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-git/go-billy/v5",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-logr/logr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-logr/stdr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-openapi/errors",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-openapi/strfmt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-playground/locales",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-playground/universal-translator",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-playground/validator/v10",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-resty/resty/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/go-viper/mapstructure/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/goccy/go-json",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/gofrs/flock",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/gogo/protobuf",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/golang-jwt/jwt/v4",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/golang-jwt/jwt/v5",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/google/btree",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/google/flatbuffers",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/google/s2a-go",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/google/uuid",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/googleapis/enterprise-certificate-proxy",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/googleapis/gax-go/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/gorilla/schema",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/hanwen/go-fuse/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/hashicorp/errwrap",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/hashicorp/go-cleanhttp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/hashicorp/go-multierror",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/hashicorp/go-retryablehttp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/hashicorp/go-uuid",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/hashicorp/golang-lru/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/internxt/rclone-adapter",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/jcmturner/aescts/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/jcmturner/dnsutils/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/jcmturner/gofork",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/jcmturner/goidentity/v6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/jcmturner/gokrb5/v8",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/jcmturner/rpc/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/jlaffaye/ftp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/jtolio/noiseconn",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/jzelinskie/whirlpool",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/klauspost/compress",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/klauspost/cpuid/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/klauspost/pgzip",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/koofr/go-httpclient",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/koofr/go-koofrclient",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/kr/fs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/kylelemons/godebug",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/lanrat/extsort",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/leodido/go-urn",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/lpar/calendar",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/lucasb-eyer/go-colorful",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/mailru/easyjson",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/mattn/go-colorable",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/mattn/go-isatty",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/mattn/go-runewidth",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/mholt/archives",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/mikelolasagasti/xz",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/minio/minlz",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/minio/xxml",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/mitchellh/go-homedir",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/moby/sys/mountinfo",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/munnerz/goautoneg",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/ncw/swift/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/nwaples/rardecode/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/oklog/ulid/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/oracle/oci-go-sdk/v65",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/panjf2000/ants/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/patrickmn/go-cache",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/pengsrc/go-shared",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/peterh/liner",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/pierrec/lz4/v4",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/pkg/browser",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/pkg/errors",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/pkg/sftp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/pkg/xattr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/pmezard/go-difflib",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/pquerna/otp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/prometheus/client_golang",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/prometheus/client_model",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/prometheus/common",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/prometheus/procfs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/putdotio/go-putio/putio",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/rasky/go-xdr",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/rclone/Proton-API-Bridge",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/rclone/go-proton-api",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/rclone/gofakes3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/rclone/rclone",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/relvacode/iso8601",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/rfjakob/eme",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/rivo/uniseg",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/russross/blackfriday/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/ryszard/goskiplist",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/sabhiram/go-gitignore",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/samber/lo",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/shirou/gopsutil/v4",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/sirupsen/logrus",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/skratchdot/open-golang",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/sony/gobreaker/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/sorairolake/lzip-go",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/spacemonkeygo/monkit/v3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/spf13/afero",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/spf13/cobra",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/spf13/pflag",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/stangelandcl/ppmd",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/stretchr/testify",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/t3rm1n4l/go-mega",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/tyler-smith/go-bip39",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/ulikunitz/xz",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/unknwon/goconfig",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/willscott/go-nfs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/willscott/go-nfs-client",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/wk8/go-ordered-map/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/xanzy/ssh-agent",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/youmark/pkcs8",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/yunify/qingstor-sdk-go/v3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/zeebo/blake3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/zeebo/errs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/zeebo/xxh3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "go.etcd.io/bbolt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "go.opentelemetry.io/auto/sdk",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "go.opentelemetry.io/otel",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "go.opentelemetry.io/otel/metric",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "go.opentelemetry.io/otel/trace",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "go.yaml.in/yaml/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "go.yaml.in/yaml/v3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "go4.org",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "goftp.io/server/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/crypto",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/exp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/image",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/net",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/oauth2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/sync",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/term",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/text",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/time",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "google.golang.org/api",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "google.golang.org/genproto/googleapis/rpc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "google.golang.org/grpc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "google.golang.org/protobuf",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gopkg.in/natefinch/lumberjack.v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gopkg.in/validator.v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gopkg.in/yaml.v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gopkg.in/yaml.v3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "moul.io/http2curl/v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "sigs.k8s.io/yaml",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "stdlib",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "storj.io/common",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "storj.io/drpc",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "storj.io/eventkit",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "storj.io/infectious",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "storj.io/picobuf",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "storj.io/uplink",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tzdata",
+      "license": "Public-Domain"
+    }
+  ],
+  "generatedFrom": {
+    "scanner": "Trivy 0.74.0",
+    "reports": [
+      {
+        "artifact": "index.docker.io/rclone/rclone@sha256:4055fb65b7a975caf3cb54a94bf12713e81947d6f3d0bb221907a05b0f6ab390",
+        "reportId": "01a0bd81-d6da-742a-b7a7-ef6fd5235b49"
+      },
+      {
+        "artifact": "index.docker.io/rclone/rclone@sha256:91a77202e418409fa20be95def08e438c107d81046a2ebb5a1da1fdfeb212b3a",
+        "reportId": "01a0bd81-e493-789f-8d8e-e4598b017449"
+      }
+    ]
+  },
+  "exitCondition": {
+    "owner": "simone.primarosa@gmail.com",
+    "replacement": "rclone runtime bases that preserve machine-readable license metadata for embedded Go modules and use SPDX OS-package identifiers.",
+    "reviewBy": "2027-03-05"
+  }
+}

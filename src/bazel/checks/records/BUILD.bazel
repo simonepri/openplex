@@ -1,0 +1,95 @@
+"""Define targets validating team records, project ownership metadata, and CODEOWNERS generation."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+exports_files([
+    "clusters.schema.json",
+    "installation.schema.json",
+    "project.schema.json",
+])
+
+py_test(
+    name = "check_team_records_test",
+    srcs = ["check_team_records_test.py"],
+    args = ["$(locations @rules_helm//helm:current_toolchain)"],
+    data = [
+        "installation.schema.json",
+        "project.schema.json",
+        "//src/infra/argocd:sources",
+        "//src/infra/definitions/teams:team.schema.json",
+        "//src/infra/terraform:sources",
+        "@rules_helm//helm:current_toolchain",
+    ],
+    imports = ["."],
+    deps = [
+        ":validators",
+    ],
+)
+
+py_library(
+    name = "validators",
+    # keep
+    srcs = ["check_team_records.py"],
+    imports = ["."],
+    visibility = ["//src/bazel/checks:__subpackages__"],
+    # keep
+    deps = [
+        "@dev_python_deps//jsonschema",
+        "@dev_python_deps//pyyaml",
+    ],
+)
+
+# One validator, three check names: records alone, records+index, records+owners.
+py_binary(
+    name = "team_records",
+    # keep
+    srcs = ["check_team_records.py"],
+    args = [
+        "--check-workload-images",
+        "src/infra/images/workload-images.json",
+    ],
+    imports = ["."],
+    main = "check_team_records.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+    # keep
+    deps = [":validators"],
+)
+
+py_binary(
+    name = "codeowners",
+    # keep
+    srcs = ["check_team_records.py"],
+    args = [
+        "--codeowners",
+        ".github/CODEOWNERS",
+    ],
+    imports = ["."],
+    main = "check_team_records.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+    # keep
+    deps = [":validators"],
+)
+
+py_binary(
+    name = "generate_indices",
+    # keep
+    srcs = ["check_team_records.py"],
+    args = [
+        "--write-workload-images",
+        "src/infra/images/workload-images.json",
+    ],
+    imports = ["."],
+    main = "check_team_records.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+    # keep
+    deps = [":validators"],
+)

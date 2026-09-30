@@ -1,0 +1,135 @@
+{
+  "description": "Exact reviewed Alpine license findings for the pinned Python bases used by the Dragonfly SSO bridge.",
+  "version": 1,
+  "exceptionId": "dragonfly-sso-python-alpine-base-licenses",
+  "artifactRepository": "index.docker.io/library/python",
+  "artifacts": [
+    "index.docker.io/library/python@sha256:067d97da25897fa5342cdbef0eeb6a50a527faa965696c7bfa0a3b576ce65c8a",
+    "index.docker.io/library/python@sha256:4677924bcc0e94505a3270e87cb1601c2af54cd92d021b8dc306618a14333bbe"
+  ],
+  "findingCount": 26,
+  "findings": [
+    {
+      "package": ".python-rundeps",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "CacheControl",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "certifi",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "distlib",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "distro",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "idna",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libbz2",
+      "license": "bzip-2-1.0.6"
+    },
+    {
+      "package": "libncursesw",
+      "license": "X-11"
+    },
+    {
+      "package": "libpanelw",
+      "license": "X-11"
+    },
+    {
+      "package": "msgpack",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "ncurses-terminfo-base",
+      "license": "X-11"
+    },
+    {
+      "package": "packaging",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "platformdirs",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pygments",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "pyproject-hooks",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "requests",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "resolvelib",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "rich",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "setuptools",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "sqlite-libs",
+      "license": "blessing"
+    },
+    {
+      "package": "tomli",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tomli-w",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "truststore",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "tzdata",
+      "license": "Public-Domain"
+    },
+    {
+      "package": "urllib3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "xz-libs",
+      "license": "Public-Domain"
+    }
+  ],
+  "generatedFrom": {
+    "scanner": "Trivy 0.74.0",
+    "reports": [
+      {
+        "artifact": "index.docker.io/library/python@sha256:067d97da25897fa5342cdbef0eeb6a50a527faa965696c7bfa0a3b576ce65c8a",
+        "reportId": "01a0bd7f-c5d9-7a0a-9fb8-c97e0961e923"
+      },
+      {
+        "artifact": "index.docker.io/library/python@sha256:4677924bcc0e94505a3270e87cb1601c2af54cd92d021b8dc306618a14333bbe",
+        "reportId": "01a0bd7f-bc8f-75d8-82d6-d1fe121a201d"
+      }
+    ]
+  },
+  "exitCondition": {
+    "owner": "simone.primarosa@gmail.com",
+    "replacement": "Python runtime bases whose OS package inventory uses machine-readable SPDX license identifiers throughout.",
+    "reviewBy": "2027-03-05"
+  }
+}

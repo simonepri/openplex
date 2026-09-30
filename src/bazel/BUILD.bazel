@@ -1,0 +1,6 @@
+"""Define build targets and source groupings for repository-wide Bazel macros, rules, and machinery."""
+
+# Flat-module imports like the validators; the package hand-writes its targets.
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
