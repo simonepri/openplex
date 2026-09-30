@@ -1,0 +1,17 @@
+"""Defines OpenTofu module check targets for GCP Secret Manager secrets and version resources."""
+
+load("@rules_tf//tf:def.bzl", "tf_module")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+tf_module(
+    name = "gcp",
+    providers = [
+        "google",
+    ],
+    skip_validation = True,
+    deps = [
+        "//src/infra/terraform/components/secret_manager/_interface",
+    ],
+)
+
+package_sources()
