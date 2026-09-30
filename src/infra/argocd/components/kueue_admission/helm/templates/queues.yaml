@@ -1,0 +1,141 @@
+{{- /* Configures per-cell elastic ClusterQueues, LocalQueues, and cohort sharing rules. */ -}}
+
+{{- if eq .Values.role "cell" }}
+{{- $classes := list
+  (dict "name" "ha" "queueingStrategy" "StrictFIFO" "withinClusterQueue" "Never" "borrows" false "lends" true "stableFirst" true)
+  (dict "name" "ma" "queueingStrategy" "StrictFIFO" "withinClusterQueue" "LowerPriority" "borrows" true "lends" true "stableFirst" true)
+  (dict "name" "wa" "queueingStrategy" "BestEffortFIFO" "withinClusterQueue" "LowerPriority" "borrows" true "lends" true "stableFirst" false)
+  (dict "name" "be" "queueingStrategy" "BestEffortFIFO" "withinClusterQueue" "LowerPriority" "borrows" true "lends" false "stableFirst" false)
+}}
+{{- $resources := list "cpu" "memory" }}
+{{- if gt (include "kueue-admission.quantityInt" (list (default "0" (index .Values.compute.ceiling "nvidia.com/gpu"))) | int) 0 }}
+{{- $resources = append $resources "nvidia.com/gpu" }}
+{{- end }}
+{{- $fixedPools := default dict .Values.compute.fixed_pools }}
+{{- if gt (len $fixedPools) 0 }}
+{{- $resources = append $resources "google.com/tpu" }}
+{{- end }}
+{{- $acceleratorClasses := list }}
+{{- range $class, $_ := .Values.compute.gpu_classes }}
+{{- $acceleratorClasses = append $acceleratorClasses $class }}
+{{- end }}
+{{- range $class, $_ := .Values.compute.tpu_classes }}
+{{- $acceleratorClasses = append $acceleratorClasses $class }}
+{{- end }}
+{{- $acceleratorClasses = sortAlpha $acceleratorClasses }}
+{{- $queueResources := list }}
+{{- range $resources }}
+{{- $queueResources = append $queueResources . }}
+{{- end }}
+{{- range $acceleratorClasses }}
+{{- $queueResources = append $queueResources . }}
+{{- end }}
+{{- $stable := first .Values.flavors }}
+{{- $elastic := last .Values.flavors }}
+{{- $hasElastic := gt (len .Values.flavors) 1 }}
+{{- $rootCohortName := default "cluster-pool" .Values.cohortRootName }}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: Cohort
+metadata:
+  name: {{ $rootCohortName }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  resourceGroups:
+    - coveredResources:
+        {{- range $resources }}
+        - {{ . }}
+        {{- end }}
+      flavors:
+        {{- range $flavor := .Values.flavors }}
+        - name: {{ $flavor.name }}
+          resources:
+            {{- range $resource := $resources }}
+            - name: {{ $resource }}
+              nominalQuota: {{ include "kueue-admission.resourceQuantity" (list $resource (ternary (include "kueue-admission.elastic" (list $.Values.compute $resource)) "0" (eq $flavor.name $elastic.name))) | quote }}
+            {{- end }}
+        {{- end }}
+{{- range $class := $classes }}
+{{- $classFlavors := list $stable }}
+{{- if $hasElastic }}
+{{- if $class.stableFirst }}
+{{- $classFlavors = list $stable $elastic }}
+{{- else }}
+{{- $classFlavors = list $elastic $stable }}
+{{- end }}
+{{- end }}
+{{- if eq $class.name "ha" }}
+{{- $classFlavors = list $stable }}
+{{- end }}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: Cohort
+metadata:
+  name: {{ $class.name }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  parentName: {{ $rootCohortName }}
+  resourceGroups:
+    - coveredResources:
+        {{- range $resources }}
+        - {{ . }}
+        {{- end }}
+      flavors:
+        {{- range $flavor := $classFlavors }}
+        - name: {{ $flavor.name }}
+          resources:
+            {{- range $resource := $resources }}
+            - name: {{ $resource }}
+              nominalQuota: {{ include "kueue-admission.resourceQuantity" (list $resource (ternary (include "kueue-admission.classShared" (list $.Values.compute $.Values.teams $class.name $resource)) "0" (eq $flavor.name (first $classFlavors).name))) | quote }}
+              {{- if not $class.borrows }}
+              borrowingLimit: "0"
+              {{- end }}
+              {{- if not $class.lends }}
+              lendingLimit: "0"
+              {{- end }}
+            {{- end }}
+        {{- end }}
+{{- range $team := $.Values.teams }}
+{{- if hasKey $team.quota.classes $class.name }}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: {{ printf "team-%s-%s" $team.slug $class.name }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  cohortName: {{ $class.name }}
+  namespaceSelector:
+    matchLabels:
+      kueue.x-k8s.io/managed: "true"
+      team: {{ $team.slug | quote }}
+  preemption:
+    reclaimWithinCohort: LowerPriority
+    withinClusterQueue: {{ $class.withinClusterQueue }}
+  queueingStrategy: {{ $class.queueingStrategy }}
+  resourceGroups:
+    - coveredResources:
+        {{- range $queueResources }}
+        - {{ . }}
+        {{- end }}
+      flavors:
+        {{- range $flavor := $classFlavors }}
+        - name: {{ $flavor.name }}
+          resources:
+            {{- range $resource := $queueResources }}
+            {{- $teamQuota := include "kueue-admission.teamQuota" (list $team $class.name $resource) }}
+            {{- $teamQuotaInt := include "kueue-admission.quantityInt" (list $teamQuota) | int }}
+            - name: {{ $resource }}
+              nominalQuota: {{ include "kueue-admission.resourceQuantity" (list $resource (ternary $teamQuota "0" (eq $flavor.name (first $classFlavors).name))) | quote }}
+              {{- if and (eq $teamQuotaInt 0) (ne $resource "cpu") (ne $resource "memory") }}
+              borrowingLimit: "0"
+              {{- end }}
+            {{- end }}
+        {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

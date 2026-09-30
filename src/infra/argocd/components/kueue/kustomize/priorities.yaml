@@ -1,0 +1,91 @@
+# Standard Kubernetes priority ladder for team workloads in every cell.
+# LINT.IfChange(team_priority_class_ladder)
+
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ha-ls
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 42
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Highly available, latency-sensitive team pods.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ha-lt
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 41
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Highly available, latency-tolerant team pods.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ma-ls
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 32
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Mostly available, latency-sensitive team pods.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ma-lt
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 31
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Mostly available, latency-tolerant team pods.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: wa-ls
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 22
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Weakly available, latency-sensitive team pods.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: wa-lt
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 21
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Weakly available, latency-tolerant team pods.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: be-ls
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 12
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Best-effort, latency-sensitive team pods.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: be-lt
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 11
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Best-effort, latency-tolerant team pods.
+# LINT.ThenChange(//src/infra/argocd/components/kueue/kustomize/scheduling-defaults.yaml:team_scheduling_classes,//src/infra/argocd/components/kueue/kustomize/team-governance.yaml:team_scheduling_classes)

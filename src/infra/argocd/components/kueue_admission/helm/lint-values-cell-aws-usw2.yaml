@@ -1,0 +1,88 @@
+# Derived from cell topology records and scheduling-teams.json for Helm linting.
+
+clusterName: cell-aws-usw2
+compute:
+  ceiling:
+    cpu: '128'
+    memory: 512Gi
+    nvidia.com/gpu: '16'
+  cpu_capabilities:
+  - avx2
+  floors:
+    be:
+      cpu: '0'
+      memory: '0'
+    ha:
+      cpu: '16'
+      memory: 64Gi
+      nvidia.com/gpu: '2'
+    ma:
+      cpu: '32'
+      memory: 128Gi
+      nvidia.com/gpu: '4'
+    wa:
+      cpu: '16'
+      memory: 64Gi
+      nvidia.com/gpu: '2'
+  gpu_classes:
+    a100-40gb:
+      max_count: 8
+    a100-80gb:
+      max_count: 8
+    a10g:
+      max_count: 8
+    b200:
+      max_count: 8
+    b300:
+      max_count: 8
+    h100:
+      max_count: 8
+    h200:
+      max_count: 8
+    l4:
+      max_count: 8
+    l40s:
+      max_count: 8
+    rtx-pro-server-6000:
+      max_count: 8
+    t4:
+      max_count: 8
+    v100:
+      max_count: 8
+  tpu_classes: {}
+flavors:
+- name: on-demand
+  nodeLabels:
+    karpenter.sh/capacity-type: on-demand
+- name: spot
+  nodeLabels:
+    karpenter.sh/capacity-type: spot
+provider: aws
+role: cell
+teams:
+- quota:
+    classes:
+      be:
+        cpu: '0'
+        memory: '0'
+      ha:
+        accelerators:
+          a100-80gb: '2'
+        cpu: '16'
+        memory: 64Gi
+      ma:
+        accelerators:
+          h100: '4'
+        cpu: '32'
+        memory: 128Gi
+      wa:
+        accelerators:
+          l4: '2'
+        cpu: '16'
+        memory: 64Gi
+  slug: examples
+topologies:
+- levels:
+  - topology.kubernetes.io/zone
+  - kubernetes.io/hostname
+  name: cell-topology

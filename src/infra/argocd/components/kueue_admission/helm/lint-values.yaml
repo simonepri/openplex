@@ -1,0 +1,43 @@
+# Render-enabling values for Bazel's first-party Helm checks. They exercise exact class floors, elastic capacity, and both native accelerator resources.
+
+role: cell
+clusterName: cell-gcp-lint
+provider: gcp
+compute:
+  cpu_capabilities: [avx2]
+  gpu_classes:
+    a100-40gb: {max_count: 8}
+    l4: {max_count: 4}
+  tpu_classes:
+    v5e-2x2: {max_count: 4}
+  floors:
+    ha: {cpu: "2", memory: 4Gi, nvidia.com/gpu: "1", google.com/tpu: "0"}
+    ma: {cpu: "4", memory: 8Gi, nvidia.com/gpu: "1", google.com/tpu: "4"}
+    wa: {cpu: "2", memory: 4Gi, nvidia.com/gpu: "1", google.com/tpu: "4"}
+    be: {cpu: "0", memory: "0", nvidia.com/gpu: "0", google.com/tpu: "0"}
+  ceiling: {cpu: "12", memory: 24Gi, nvidia.com/gpu: "5", google.com/tpu: "8"}
+  fixed_pools:
+    tpu:
+      class: v5e-2x2
+      nodes: 1
+    tpu-spot:
+      class: v5e-2x2
+      nodes: 1
+flavors:
+  - name: on-demand
+    nodeLabels: {karpenter.sh/capacity-type: on-demand}
+  - name: spot
+    nodeLabels: {karpenter.sh/capacity-type: spot}
+topologies:
+  - name: cell-topology
+    levels:
+      - topology.kubernetes.io/zone
+      - kubernetes.io/hostname
+teams:
+  - slug: fixtureteam
+    quota:
+      classes:
+        be: {cpu: "0", memory: "0", nvidia.com/gpu: "0", google.com/tpu: "0"}
+        ha: {cpu: "1", memory: 2Gi, nvidia.com/gpu: "1", google.com/tpu: "0"}
+        ma: {cpu: "2", memory: 4Gi, nvidia.com/gpu: "0", google.com/tpu: "4"}
+        wa: {cpu: "1", memory: 2Gi, nvidia.com/gpu: "1", google.com/tpu: "0"}

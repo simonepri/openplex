@@ -1,0 +1,72 @@
+# Declares the Cleaner custom resource for reclaiming Released PersistentVolumes via CSI.
+
+apiVersion: apps.projectsveltos.io/v1alpha1
+kind: Cleaner
+metadata:
+  name: pv-reclaimer
+  labels:
+    app.kubernetes.io/name: k8s-cleaner
+    app.kubernetes.io/part-of: cluster-runtime
+spec:
+  schedule: "0 * * * *"
+  action: Transform
+  transform: |
+    function transform()
+      local hs = {}
+      obj.spec.persistentVolumeReclaimPolicy = "Delete"
+      hs.resource = obj
+      return hs
+    end
+  resourcePolicySet:
+    resourceSelectors:
+      - kind: PersistentVolume
+        group: ""
+        version: v1
+        evaluate: |
+          function parseTimestamp(timestampStr)
+            local epoch = string.gsub(
+              timestampStr,
+              '(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)Z',
+              function(y, mon, d, h, mi, s)
+                return os.time({
+                  year = tonumber(y), month = tonumber(mon), day = tonumber(d),
+                  hour = tonumber(h), min = tonumber(mi), sec = tonumber(s)
+                })
+              end
+            )
+            return tonumber(epoch)
+          end
+
+          function evaluate()
+            local hs = {}
+            hs.matching = false
+
+            if not (obj.status and obj.status.phase == "Released") then
+              return hs
+            end
+
+            if obj.spec and obj.spec.persistentVolumeReclaimPolicy == "Delete" then
+              return hs
+            end
+
+            if obj.metadata and obj.metadata.annotations then
+              local optOut = obj.metadata.annotations["reclaim.storage.k8s.io/do-not-reclaim"]
+              local fallback = obj.metadata.annotations["do-not-reclaim"]
+              if optOut == "true" or fallback == "true" then
+                return hs
+              end
+            end
+
+            local now = os.time()
+            local transitionStr = (obj.status and obj.status.lastPhaseTransitionTime) or (obj.metadata and obj.metadata.creationTimestamp)
+            if transitionStr ~= nil then
+              local transitionEpoch = parseTimestamp(transitionStr)
+              local ttl = 3600
+              if os.difftime(now, transitionEpoch) >= ttl then
+                hs.matching = true
+                hs.message = "PersistentVolume Released TTL expired"
+              end
+            end
+
+            return hs
+          end

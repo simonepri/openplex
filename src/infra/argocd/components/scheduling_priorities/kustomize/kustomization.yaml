@@ -1,0 +1,6 @@
+# Composes cluster-scoped PriorityClass resources for platform components.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - priorities.yaml

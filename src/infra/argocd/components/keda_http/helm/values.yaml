@@ -1,0 +1,90 @@
+# Configures KEDA HTTP add-on values to buffer scale-from-zero requests until workloads pass admission.
+
+crds:
+  install: true
+images:
+  # LINT.IfChange(keda-http-add-on-image-tag-contract)
+  tag: 0.15.0
+  # LINT.ThenChange(//src/infra/argocd/components/keda/kustomize/image-digest-policy.yaml:keda-http-add-on-image-tag-contract)
+interceptor:
+  replicas: {min: 2, max: 8}
+  pdb: {enabled: true, maxUnavailable: null, minAvailable: 1}
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: interceptor
+                app.kubernetes.io/instance: keda-http
+                app.kubernetes.io/name: http-add-on
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints: []
+  podAnnotations:
+    signoz.io/path: /metrics
+    signoz.io/port: "2223"
+    signoz.io/scrape: "true"
+  priorityClassName: cluster-operators
+  pullPolicy: IfNotPresent
+  readinessTimeout: 120s
+  requestTimeout: 120s
+  responseHeaderTimeout: 120s
+  resources:
+    requests: {cpu: 100m, memory: 64Mi}
+    limits: {memory: 256Mi}
+operator:
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: operator
+                app.kubernetes.io/instance: keda-http
+                app.kubernetes.io/name: http-add-on
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints: []
+  priorityClassName: cluster-operators
+  pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 100m, memory: 64Mi}
+    limits: {memory: 256Mi}
+podSecurityContext:
+  fsGroup: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile: {type: RuntimeDefault}
+scaler:
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: scaler
+                app.kubernetes.io/instance: keda-http
+                app.kubernetes.io/name: http-add-on
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  topologySpreadConstraints: []
+  podAnnotations:
+    signoz.io/path: /metrics
+    signoz.io/port: "2223"
+    signoz.io/scrape: "true"
+  priorityClassName: cluster-operators
+  pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 100m, memory: 64Mi}
+    limits: {memory: 256Mi}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities: {drop: [ALL]}
+  privileged: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  seccompProfile: {type: RuntimeDefault}

@@ -1,0 +1,21 @@
+# Defines cluster-scoped PriorityClasses for platform operators and node daemon workloads.
+
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: cluster-operators
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 1000000
+globalDefault: false
+description: Critical cluster operators outside Kueue quota.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: node-agents
+  labels:
+    app.kubernetes.io/managed-by: argocd
+value: 1000100
+globalDefault: false
+description: Critical node agents outside Kueue quota.

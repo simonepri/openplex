@@ -1,0 +1,54 @@
+# Generates VerticalPodAutoscaler resources for fleet workloads tailored by target kind.
+
+{{- if .Values.enabled }}
+{{- $globalUpdateMode := .Values.updateMode | default "InPlace" }}
+{{- $statefulSetDefaultMode := "InPlace" }}
+{{- if eq $globalUpdateMode "Off" }}
+  {{- $statefulSetDefaultMode = "Off" }}
+{{- else if .Values.statefulSetUpdateMode }}
+  {{- $statefulSetDefaultMode = .Values.statefulSetUpdateMode }}
+{{- end }}
+{{- $controlledValues := .Values.controlledValues | default "RequestsOnly" }}
+{{- $controlledResources := .Values.controlledResources | default (list "cpu" "memory") }}
+{{- $defaultMinCpu := "10m" }}
+{{- $defaultMinMemory := "32Mi" }}
+{{- if .Values.minAllowed }}
+{{- $defaultMinCpu = .Values.minAllowed.cpu | default $defaultMinCpu }}
+{{- $defaultMinMemory = .Values.minAllowed.memory | default $defaultMinMemory }}
+{{- end }}
+{{- range $target := .Values.targets }}
+{{- $targetKind := $target.kind | default "Deployment" }}
+{{- $targetUpdateMode := $target.updateMode }}
+{{- if not $targetUpdateMode }}
+  {{- if eq $targetKind "StatefulSet" }}
+    {{- $targetUpdateMode = $statefulSetDefaultMode }}
+  {{- else }}
+    {{- $targetUpdateMode = $globalUpdateMode }}
+  {{- end }}
+{{- end }}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ $target.name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: {{ $target.name }}
+spec:
+  targetRef:
+    apiVersion: {{ $target.apiVersion | default "apps/v1" }}
+    kind: {{ $targetKind }}
+    name: {{ $target.name }}
+  updatePolicy:
+    updateMode: {{ $targetUpdateMode }}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "*"
+        controlledResources: {{ $controlledResources | toJson }}
+        controlledValues: {{ $controlledValues }}
+        minAllowed:
+          cpu: {{ if $target.minAllowed }}{{ $target.minAllowed.cpu | default $defaultMinCpu }}{{ else }}{{ $defaultMinCpu }}{{ end }}
+          memory: {{ if $target.minAllowed }}{{ $target.minAllowed.memory | default $defaultMinMemory }}{{ else }}{{ $defaultMinMemory }}{{ end }}
+{{- end }}
+{{- end }}
