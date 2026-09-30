@@ -1,0 +1,34 @@
+# Runs an intentionally unready Pod to defend Kueue waitForPodsReady timeout handling, quota release, and head-of-line blocking prevention.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pods-ready-timeout
+  namespace: pods-ready-e2e
+  labels:
+    availability-class: wa
+    latency-class: lt
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: workload
+          image: ($values.busyboxImage)
+          command: [sh, -c, "sleep 1200"]
+          readinessProbe:
+            exec: {command: [sh, -c, "exit 1"]}
+            periodSeconds: 2
+            timeoutSeconds: 1
+          resources:
+            requests: {cpu: 10m, memory: 8Mi}
+            limits: {cpu: 50m, memory: 16Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}

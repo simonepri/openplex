@@ -1,0 +1,98 @@
+# Proves Headlamp provides bounded multi-cluster fleet visibility, RBAC impersonation safety, and live SigNoz CPU metrics without privilege leaks.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: headlamp-fleet-access-and-cpu
+  labels:
+    cadence: commit
+    capability: access
+    mutates: none
+spec:
+  namespace: headlamp
+  cluster: ctrl-eaws-lh1
+  concurrent: false
+  timeouts:
+    exec: 8m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            env:
+              - {name: INSTALLATION_PUBLIC_DOMAIN, value: ($values.publicDomain)}
+            args:
+              - -ceu
+              - |-
+                deployment_domain="$INSTALLATION_PUBLIC_DOMAIN"
+                ca_certificate="$(mktemp)"
+                response="$(mktemp)"
+                trap 'rm -f "${ca_certificate}" "${response}"' EXIT
+                kubectl get configmap/cluster-local-ca --namespace=headlamp \
+                  --output='jsonpath={.data.ca\.crt}' >"${ca_certificate}"
+                curl --cacert "${ca_certificate}" --noproxy '*' \
+                  --fail --silent --show-error \
+                  --output "${response}" \
+                  "https://headlamp.ctrl-eaws-lh1.c.${deployment_domain}/config"
+                jq --exit-status '
+                  [.clusters[].name] | sort ==
+                    ["cell-eaws-lh1", "ctrl-eaws-lh1"]
+                ' "${response}" >/dev/null
+        - command:
+            cluster: ctrl-eaws-lh1
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                set -- --as=oidc:headlamp-conformance --as-group=cluster:group:operators
+                test "$(kubectl auth can-i list resourcequotas --namespace=team-examples-workloads "$@")" = yes
+                test "$(kubectl auth can-i list ingressclasses.networking.k8s.io --all-namespaces "$@")" = yes
+                test "$(kubectl auth can-i list volumeattributesclasses.storage.k8s.io --all-namespaces "$@")" = yes
+                test "$(kubectl auth can-i get secrets --namespace=team-examples-workloads "$@" || true)" = no
+                test "$(kubectl auth can-i create deployments --namespace=team-examples-workloads "$@" || true)" = no
+        - command:
+            cluster: cell-eaws-lh1
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                set -- --as=oidc:headlamp-conformance --as-group=cluster:group:operators
+                test "$(kubectl auth can-i list resourcequotas --namespace=team-examples-workloads "$@")" = yes
+                test "$(kubectl auth can-i list ingressclasses.networking.k8s.io --all-namespaces "$@")" = yes
+                test "$(kubectl auth can-i list volumeattributesclasses.storage.k8s.io --all-namespaces "$@")" = yes
+                test "$(kubectl auth can-i get secrets --namespace=team-examples-workloads "$@" || true)" = no
+                test "$(kubectl auth can-i create deployments --namespace=team-examples-workloads "$@" || true)" = no
+        - command:
+            cluster: cell-eaws-lh1
+            entrypoint: sh
+            args: [scripts/check_headlamp_proxy_authorization.sh]
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                query='sum(rate(container_cpu_usage_seconds_total{container!="",namespace="headlamp",pod=~"headlamp.*"}[1m])) by (pod,namespace)'
+                encoded_query="$(jq --null-input --raw-output --arg query "${query}" '$query | @uri')"
+                api="/api/v1/namespaces/signoz/services/prometheus-api-bridge:9090/proxy/api/v1/query?query=${encoded_query}"
+                response="$(mktemp)"
+                trap 'rm -f "${response}"' EXIT
+                deadline="$(( $(date +%s) + 300 ))"
+                while :; do
+                  if kubectl get --request-timeout=35s --raw "${api}" \
+                    --as=oidc:headlamp-conformance \
+                    --as-group=cluster:group:operators >"${response}" &&
+                    jq --exit-status \
+                      '.status == "success" and
+                        (.data.result | length) > 0 and
+                        all(.data.result[];
+                          .metric.namespace == "headlamp" and
+                          (.metric.pod | startswith("headlamp")) and
+                          ((.value[1] | tonumber) >= 0))' \
+                      "${response}" >/dev/null; then
+                    exit 0
+                  fi
+                  if test "$(date +%s)" -ge "${deadline}"; then
+                    cat "${response}" >&2
+                    exit 1
+                  fi
+                  sleep 5
+                done

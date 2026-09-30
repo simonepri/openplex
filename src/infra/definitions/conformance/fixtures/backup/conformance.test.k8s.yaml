@@ -1,0 +1,59 @@
+# Stages namespaced resources with dynamically provisioned storage volumes to defend Velero volume backup and restore verification suites.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backup-e2e
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: catalog-backup-data
+  namespace: backup-e2e
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: general-expandable
+  resources:
+    requests:
+      storage: 64Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-backup-writer
+  namespace: backup-e2e
+  annotations:
+    backup.velero.io/backup-volumes: data
+spec:
+  terminationGracePeriodSeconds: 1
+  automountServiceAccountToken: false
+  containers:
+    - name: writer
+      image: ($values.busyboxImage)
+      command: [sh, -ec]
+      args:
+        - >-
+          test -s /data/payload || (head -c 32 /dev/urandom | base64 > /data/payload); exec sleep 600
+      volumeMounts:
+        - {name: data, mountPath: /data}
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 50m, memory: 64Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+  restartPolicy: Never
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: {type: RuntimeDefault}
+    fsGroup: 65532
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: catalog-backup-data

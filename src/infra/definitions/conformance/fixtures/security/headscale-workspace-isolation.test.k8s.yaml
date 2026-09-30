@@ -1,0 +1,73 @@
+# Declares RBAC roles restricting test identities to minimal verbs needed to defend Headscale workspace isolation and admission enforcement.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: headscale-workspace-isolation-conformance
+  namespace: headscale-workspace-isolation-e2e
+rules:
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: [create]
+  - apiGroups: ['']
+    resources: [pods]
+    verbs: [create, delete, get]
+  - apiGroups: ['']
+    resources: [pods/exec]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: headscale-workspace-isolation-conformance
+  namespace: headscale-workspace-isolation-e2e
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: headscale-isolation-team
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:kube-controller-manager
+  - kind: ServiceAccount
+    name: argocd-application-controller
+    namespace: argocd
+  - kind: ServiceAccount
+    name: deployment-controller
+    namespace: kube-system
+  - kind: ServiceAccount
+    name: replicaset-controller
+    namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: headscale-workspace-isolation-conformance
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: headscale-workspace-session-conformance
+  namespace: headscale
+rules:
+  - apiGroups: ['']
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: ['']
+    resources: [pods/attach, pods/exec, pods/portforward]
+    verbs: [create]
+  - apiGroups: ['']
+    resources: [pods/ephemeralcontainers]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: headscale-workspace-session-conformance
+  namespace: headscale
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: headscale-isolation-team
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: headscale-workspace-session-conformance

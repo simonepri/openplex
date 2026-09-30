@@ -1,0 +1,145 @@
+# Proves Argo CD admits role-matched fleet Applications while default and cross-role AppProject destinations remain fail-closed against unauthorized deployment.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: argocd-project-boundaries
+  labels:
+    cadence: commit
+    capability: gitops
+    mutates: scratch
+spec:
+  namespace: argocd
+  cluster: ctrl-eaws-lh1
+  concurrent: false
+  timeouts:
+    cleanup: 1m
+    exec: 2m
+  steps:
+    - try:
+        - command:
+            entrypoint: kubectl
+            args:
+              - get
+              - application/ctrl-eaws-lh1-dex
+              - --namespace=argocd
+              - --output=json
+            check:
+              (json_parse($stdout).status.health.status): Healthy
+        - command:
+            entrypoint: kubectl
+            args:
+              - get
+              - application/cell-eaws-lh1-kueue
+              - --namespace=argocd
+              - --output=json
+            check:
+              (json_parse($stdout).status.health.status): Healthy
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                kubectl delete applications \
+                  argocd-project-default-denied \
+                  argocd-project-cell-to-ctrl-denied \
+                  argocd-project-ctrl-to-cell-denied \
+                  --namespace=argocd \
+                  --ignore-not-found \
+                  --wait=true
+
+                ctrl_application="$(kubectl get application/ctrl-eaws-lh1-dex \
+                  --namespace=argocd \
+                  --output=json)"
+                cell_application="$(kubectl get application/cell-eaws-lh1-kueue \
+                  --namespace=argocd \
+                  --output=json)"
+
+                create_application() {
+                  application="$1"
+                  name="$2"
+                  project="$3"
+                  destination="$4"
+                  namespace="$5"
+
+                  printf '%s' "$application" | jq \
+                    --arg name "$name" \
+                    --arg project "$project" \
+                    --arg destination "$destination" \
+                    --arg namespace "$namespace" \
+                    '{
+                      apiVersion,
+                      kind,
+                      metadata: {
+                        name: $name,
+                        namespace: "argocd",
+                        labels: {
+                          "app.kubernetes.io/managed-by": "chainsaw"
+                        }
+                      },
+                      spec: {
+                        project: $project,
+                        destination: {
+                          name: $destination,
+                          namespace: $namespace
+                        },
+                        sources: .spec.sources
+                      }
+                    }' | kubectl apply --filename=-
+                }
+
+                create_application \
+                  "$ctrl_application" \
+                  argocd-project-default-denied \
+                  default \
+                  ctrl-eaws-lh1 \
+                  identity
+                create_application \
+                  "$cell_application" \
+                  argocd-project-cell-to-ctrl-denied \
+                  cluster-cell \
+                  ctrl-eaws-lh1 \
+                  kueue-system
+                create_application \
+                  "$ctrl_application" \
+                  argocd-project-ctrl-to-cell-denied \
+                  cluster-ctrl \
+                  cell-eaws-lh1 \
+                  identity
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                for application in \
+                  argocd-project-default-denied \
+                  argocd-project-cell-to-ctrl-denied \
+                  argocd-project-ctrl-to-cell-denied; do
+                  deadline="$(( $(date +%s) + 120 ))"
+                  while :; do
+                    application_json="$(kubectl get "application/${application}" \
+                      --namespace=argocd --output=json)"
+                    if printf '%s' "${application_json}" | jq --exit-status \
+                      'any(.status.conditions[]?; .type == "InvalidSpecError")' \
+                      >/dev/null; then
+                      break
+                    fi
+                    if test "$(date +%s)" -ge "${deadline}"; then
+                      printf '%s\n' "${application_json}" >&2
+                      exit 1
+                    fi
+                    sleep 2
+                  done
+                done
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - applications
+              - argocd-project-default-denied
+              - argocd-project-cell-to-ctrl-denied
+              - argocd-project-ctrl-to-cell-denied
+              - --namespace=argocd
+              - --ignore-not-found
+              - --wait=true

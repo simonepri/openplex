@@ -1,0 +1,32 @@
+# Defines parameterized batch Jobs to defend Kueue availability class quota borrowing, resource reclaim, and priority preemption behaviors.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __NAME__
+  namespace: availability-classes-e2e
+  labels:
+    app.kubernetes.io/component: availability-class-conformance
+    availability-class: __AVAILABILITY__
+    latency-class: __LATENCY__
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: workload
+          image: __IMAGE__
+          command: [sh, -c, "sleep 1200"]
+          resources:
+            requests: {cpu: __CPU__, memory: 16Mi}
+            limits: {cpu: __CPU__, memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}

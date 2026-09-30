@@ -1,0 +1,18 @@
+# Declares shared container image digests and test fixture parameters to defend Chainsaw test suites against unpinned dependencies and registry drift.
+
+# keep-sorted start
+awsCliImage: >-
+  docker.io/amazon/aws-cli:2.37.5@sha256:fb7ccfc7b4e3a05017e6c9ded4ba959b99af622130e211fb976c68c2f4d3f224
+busyboxImage: >-
+  docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+clusterDomain: c.corp.local.internal
+intranetDomain: corp.local.internal
+pauseImage: >-
+  registry.k8s.io/pause:3.10.2@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4
+postgresImage: >-
+  ghcr.io/cloudnative-pg/postgresql:18.6-standard-bookworm@sha256:2257decb7de100886c14262e646a6dc10b70057005dbc7cae4b6693282727e2b
+# nosemgrep: repository.lint.forbidden-domain-patterns
+publicDomain: local.internal
+pythonImage: >-
+  docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df
+# keep-sorted end

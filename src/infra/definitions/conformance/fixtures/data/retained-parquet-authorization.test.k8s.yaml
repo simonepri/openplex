@@ -1,0 +1,145 @@
+# Stages authorized reader and outsider Jobs to verify S3 prefix permissions defend retained Parquet dataset boundaries against cross-team data access.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: retained-parquet-authorization
+  namespace: s3-system
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: reader
+          image: ($values.awsCliImage)
+          command: [/bin/sh, -ceu]
+          args:
+            - |-
+              keys="$(aws --endpoint-url "${S3_ENDPOINT}" s3api list-objects-v2 \
+                --bucket cloud-cell-eaws-lh1-home --prefix "${EXPECTED_PARQUET_PREFIX}" \
+                --query 'Contents[].Key' --output text)"
+              key="$(printf '%s\n' "${keys}" | tr '\t' '\n' \
+                | grep -E "^${EXPECTED_PARQUET_PREFIX}[^/]+\\.parquet$" | head -1)"
+              test -n "${key}"
+              aws --endpoint-url "${S3_ENDPOINT}" s3api get-object \
+                --bucket cloud-cell-eaws-lh1-home --key "${key}" /evidence/data.parquet >/dev/null
+              test -s /evidence/data.parquet
+              printf %s "${key}" > /evidence/parquet-key
+
+              printf %s forbidden > /tmp/forbidden
+              if aws --endpoint-url "${S3_ENDPOINT}" s3api put-object \
+                --bucket cloud-cell-eaws-lh1-home \
+                --key "${EXPECTED_PARQUET_PREFIX}forbidden-reader" \
+                --body /tmp/forbidden >/tmp/put.out 2>/tmp/put.err; then
+                echo 'dataset-reader unexpectedly wrote beside the retained Parquet object' >&2
+                exit 1
+              fi
+              grep -F AccessDenied /tmp/put.err
+              if aws --endpoint-url "${S3_ENDPOINT}" s3api delete-object \
+                --bucket cloud-cell-eaws-lh1-home --key "${key}" \
+                >/tmp/delete.out 2>/tmp/delete.err; then
+                echo 'dataset-reader unexpectedly deleted the retained Parquet object' >&2
+                exit 1
+              fi
+              grep -F AccessDenied /tmp/delete.err
+              echo "RETAINED_PARQUET_READER_OK key=${key}"
+          env:
+            - {name: S3_ENDPOINT, value: 'http://localhost:4566'}
+            - name: EXPECTED_PARQUET_PREFIX
+              value: (join('', ['home/examples/output/ray-data/', $rayPartition, '/', $rayRunId, '/']))
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: ray-data-local-object-credentials, key: reader-access-key}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: ray-data-local-object-credentials, key: reader-secret-key}
+            - {name: AWS_DEFAULT_REGION, value: us-east-1}
+            - {name: AWS_EC2_METADATA_DISABLED, value: "true"}
+            - {name: AWS_MAX_ATTEMPTS, value: "1"}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          volumeMounts:
+            - {name: evidence, mountPath: /evidence}
+            - {name: temporary, mountPath: /tmp}
+        - name: outsider
+          image: ($values.awsCliImage)
+          command: [/bin/sh, -ceu]
+          args:
+            - |-
+              deadline="$(( $(date +%s) + 180 ))"
+              while :; do
+                if test -s /evidence/parquet-key; then
+                  break
+                fi
+                if test "$(date +%s)" -ge "${deadline}"; then
+                  printf '%s\n' 'Timed out waiting for the retained Parquet key.' >&2
+                  exit 1
+                fi
+                sleep 1
+              done
+              key="$(cat /evidence/parquet-key)"
+              printf %s forbidden > /tmp/forbidden
+              if aws --endpoint-url "${S3_ENDPOINT}" s3api list-objects-v2 \
+                --bucket cloud-cell-eaws-lh1-home --prefix "${EXPECTED_PARQUET_PREFIX}" \
+                >/tmp/list.out 2>/tmp/list.err; then
+                echo 'dataset-outsider unexpectedly listed the retained run' >&2
+                exit 1
+              fi
+              grep -F AccessDenied /tmp/list.err
+              if aws --endpoint-url "${S3_ENDPOINT}" s3api get-object \
+                --bucket cloud-cell-eaws-lh1-home --key "${key}" /tmp/data.parquet \
+                >/tmp/get.out 2>/tmp/get.err; then
+                echo 'dataset-outsider unexpectedly read the retained Parquet object' >&2
+                exit 1
+              fi
+              grep -F AccessDenied /tmp/get.err
+              if aws --endpoint-url "${S3_ENDPOINT}" s3api put-object \
+                --bucket cloud-cell-eaws-lh1-home \
+                --key "${EXPECTED_PARQUET_PREFIX}forbidden-outsider" \
+                --body /tmp/forbidden >/tmp/put.out 2>/tmp/put.err; then
+                echo 'dataset-outsider unexpectedly wrote beside the retained Parquet object' >&2
+                exit 1
+              fi
+              grep -F AccessDenied /tmp/put.err
+              echo "RETAINED_PARQUET_OUTSIDER_OK key=${key}"
+          env:
+            - {name: S3_ENDPOINT, value: 'http://localhost:4566'}
+            - name: EXPECTED_PARQUET_PREFIX
+              value: (join('', ['home/examples/output/ray-data/', $rayPartition, '/', $rayRunId, '/']))
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: ray-data-local-object-credentials, key: outsider-access-key}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: ray-data-local-object-credentials, key: outsider-secret-key}
+            - {name: AWS_DEFAULT_REGION, value: us-east-1}
+            - {name: AWS_EC2_METADATA_DISABLED, value: "true"}
+            - {name: AWS_MAX_ATTEMPTS, value: "1"}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          volumeMounts:
+            - {name: evidence, mountPath: /evidence}
+            - {name: temporary, mountPath: /tmp}
+      volumes:
+        - {name: evidence, emptyDir: {}}
+        - {name: temporary, emptyDir: {}}

@@ -1,0 +1,466 @@
+# Proves team NetworkPolicies isolate cross-namespace traffic while permitting DNS, S3, and tailnet egress to defend workload network boundaries.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: team-network-policy-paths
+  labels:
+    cadence: commit
+    capability: team-isolation
+    mutates: scratch
+spec:
+  namespace: team-networking-e2e
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    apply: 30s
+    cleanup: 1m
+    delete: 1m
+    exec: 2m
+  steps:
+    - try:
+        - command: &cleanup-team-probes
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod/team-networking-server
+              - pod/team-networking-client
+              - service/team-networking-server
+              - --namespace=team-examples-workspaces
+              - --ignore-not-found=true
+              - --grace-period=1
+              - --wait=true
+              - --timeout=15s
+        - command: &cleanup-compile-probes
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod/team-networking-compile-client
+              - pod/team-networking-compile-wrong-label
+              - --namespace=team-examples-workloads
+              - --ignore-not-found=true
+              - --grace-period=1
+              - --wait=true
+              - --timeout=15s
+        - apply:
+            file: fixtures/networking/team-access-paths.test.k8s.yaml
+        - command:
+            entrypoint: kubectl
+            args:
+              - label
+              - namespace/team-networking-e2e
+              - app.kubernetes.io/part-of=team-lane
+              - team=foreign
+              - --overwrite=true
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - pod/team-networking-server
+              - pod/team-networking-client
+              - --namespace=team-examples-workspaces
+              - --for=condition=Ready
+              - --timeout=60s
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - pod/team-networking-compile-client
+              - pod/team-networking-compile-wrong-label
+              - --namespace=team-examples-workloads
+              - --for=condition=Ready
+              - --timeout=60s
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - pod/team-networking-external-server
+              - pod/team-networking-external-client
+              - --namespace=team-networking-e2e
+              - --for=condition=Ready
+              - --timeout=60s
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - valkeycluster.valkey.io/torch-compile-cache
+              - --namespace=team-examples-workloads
+              - --for=condition=Ready
+              - --timeout=120s
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - deployment/subnet-router
+              - --namespace=tailscale
+              - --for=condition=Available
+              - --timeout=60s
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-examples-workloads
+              - team-networking-compile-client
+              - --
+              - nc
+              - -z
+              - -w
+              - "5"
+              - torch-compile-cache
+              - "6379"
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-networking-e2e
+              - team-networking-external-client
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! nc -z -w 2 torch-compile-cache.team-examples-workloads.svc 6379
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-examples-workloads
+              - team-networking-compile-wrong-label
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! nc -z -w 2 torch-compile-cache 6379
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-examples-workloads
+              - deployment/valkey-torch-compile-cache-0-0
+              - --container=server
+              - --
+              - sh
+              - -ceu
+              - >-
+                set +e;
+                timeout 2 valkey-cli -h team-networking-server.team-examples-workspaces.svc -p 8080 ping;
+                status=$?;
+                test "$status" -eq 124
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-networking-e2e
+              - team-networking-external-client
+              - --
+              - wget
+              - --quiet
+              - --output-document=-
+              - --timeout=5
+              - http://team-networking-external-server:8080
+            check:
+              (trim_space($stdout)): external-control-ok
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                deadline="$(( $(date +%s) + 30 ))"
+                while :; do
+                  ingress_blocked=false
+                  egress_blocked=false
+                  if ! kubectl exec --namespace=team-networking-e2e \
+                    team-networking-external-client -- wget --quiet \
+                    --output-document=- --timeout=1 \
+                    http://team-networking-server.team-examples-workspaces.svc:8080 \
+                    >/dev/null 2>&1; then
+                    ingress_blocked=true
+                  fi
+                  if ! kubectl exec --namespace=team-examples-workspaces \
+                    team-networking-client -- wget --quiet \
+                    --output-document=- --timeout=1 \
+                    http://team-networking-external-server.team-networking-e2e.svc:8080 \
+                    >/dev/null 2>&1; then
+                    egress_blocked=true
+                  fi
+                  if "$ingress_blocked" && "$egress_blocked"; then
+                    break
+                  fi
+                  test "$(date +%s)" -lt "${deadline}" || exit 1
+                  sleep 1
+                done
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-networking-e2e
+              - team-networking-external-client
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! wget --quiet --output-document=- --timeout=2 http://team-networking-server.team-examples-workspaces.svc:8080
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-examples-workspaces
+              - team-networking-client
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! wget --quiet --output-document=- --timeout=2 http://team-networking-external-server.team-networking-e2e.svc:8080
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-examples-workspaces
+              - team-networking-client
+              - --
+              - sh
+              - -ceu
+              - |-
+                wget --quiet --no-check-certificate \
+                  --header="Authorization: Bearer $(cat /var/run/workspace/kubernetes/token)" \
+                  --output-document=- --timeout=5 \
+                  'https://kubernetes.default.svc/apis/batch/v1/namespaces/team-examples-workloads/jobs?limit=1' |
+                  grep -q '"kind"[[:space:]]*:[[:space:]]*"JobList"'
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-examples-workspaces
+              - team-networking-client
+              - --
+              - wget
+              - --quiet
+              - --output-document=-
+              - --timeout=5
+              - http://team-networking-server:8080
+            check:
+              (trim_space($stdout)): team-networking-ok
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-examples-workspaces
+              - team-networking-client
+              - --
+              - nslookup
+              - s3-gateway.s3-system.svc.cluster.local
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-examples-workspaces
+              - team-networking-client
+              - --
+              - sh
+              - -ceu
+              - |-
+                status="$(
+                  printf 'GET / HTTP/1.0\r\nHost: s3-gateway.s3-system.svc\r\n\r\n' |
+                    nc -w 5 s3-gateway.s3-system.svc 80 |
+                    awk 'NR == 1 && $1 ~ /^HTTP\// {print $2}'
+                )"
+                test "${status}" = 403
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=tailscale
+              - deployment/subnet-router
+              - --container=tailscaled
+              - --
+              - wget
+              - --quiet
+              - --output-document=-
+              - --timeout=5
+              - http://team-networking-server.team-examples-workspaces.svc:8080
+            check:
+              (trim_space($stdout)): team-networking-ok
+      finally:
+        - command: *cleanup-team-probes
+        - command: *cleanup-compile-probes
+        - delete:
+            file: fixtures/networking/team-access-paths.test.k8s.yaml
+---
+# Proves two separate processes in the Ray Train image share an FX graph through
+# the real namespace-local Valkey service, then retain local compilation when
+# that service is unavailable. The preceding test proves both network denies.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: ray-train-shares-remote-compile-artifacts
+  labels:
+    cadence: daily
+    capability: compute
+    mutates: scratch
+spec:
+  namespace: team-examples-workloads
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    apply: 1m
+    cleanup: 1m
+    exec: 12m
+  steps:
+    - try:
+        - command: &cleanup-compile-cache-conformance
+            entrypoint: kubectl
+            args:
+              - delete
+              - job/ray-train-compile-cache-conformance
+              - configmap/ray-train-compile-cache-conformance
+              - --namespace=team-examples-workloads
+              - --ignore-not-found=true
+              - --wait=true
+              - --timeout=30s
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - valkeycluster.valkey.io/torch-compile-cache
+              - --namespace=team-examples-workloads
+              - --for=condition=Ready
+              - --timeout=120s
+        - command:
+            entrypoint: /bin/sh
+            args:
+              - scripts/resolve_local_workload_image.sh
+              - src/examples/ray_train
+            outputs:
+              - name: rayTrainImage
+                value: (trim_space($stdout))
+        - command:
+            entrypoint: kubectl
+            args:
+              - apply
+              - --kustomize=fixtures/ray_compile_cache
+        - command:
+            entrypoint: kubectl
+            args:
+              - get
+              - configmap/ray-train-compile-cache-conformance
+              - --namespace=team-examples-workloads
+              - --output=jsonpath={.metadata.uid}
+            outputs:
+              - name: cacheToken
+                value: (trim_space($stdout))
+        - apply:
+            file: fixtures/ray_compile_cache/workload.test.k8s.yaml
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - job/ray-train-compile-cache-conformance
+              - --namespace=team-examples-workloads
+              - --for=condition=Complete
+              - --timeout=660s
+        - command:
+            entrypoint: kubectl
+            args:
+              - logs
+              - job/ray-train-compile-cache-conformance
+              - --namespace=team-examples-workloads
+      finally:
+        - command: *cleanup-compile-cache-conformance
+---
+# Proves Gateway API admits the public team entry and the OIDC application
+# entry, then checks their unauthenticated connection outcomes.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: routing-registry-entry-modes
+  labels:
+    cadence: commit
+    capability: networking
+    mutates: none
+spec:
+  namespace: team-networking-routes-e2e
+  cluster: ctrl-eaws-lh1
+  concurrent: false
+  timeouts:
+    exec: 1m
+  steps:
+    - try:
+        - command:
+            cluster: cell-eaws-lh1
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                kubectl get httproute/svelte-web --namespace=envoy-gateway-system --output=json |
+                  jq --exit-status '
+                    .metadata.generation as $generation |
+                    any(.status.parents[]?.conditions[]?;
+                      .type == "Accepted" and .status == "True" and .observedGeneration == $generation) and
+                    any(.status.parents[]?.conditions[]?;
+                      .type == "ResolvedRefs" and .status == "True" and .observedGeneration == $generation)
+                  '
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                kubectl get httproute/headlamp --namespace=envoy-gateway-system --output=json |
+                  jq --exit-status '
+                    .metadata.generation as $generation |
+                    any(.status.parents[]?.conditions[]?;
+                      .type == "Accepted" and .status == "True" and .observedGeneration == $generation) and
+                    any(.status.parents[]?.conditions[]?;
+                      .type == "ResolvedRefs" and .status == "True" and .observedGeneration == $generation)
+                  '
+        - command:
+            entrypoint: sh
+            env:
+              - {name: INSTALLATION_PUBLIC_DOMAIN, value: ($values.publicDomain)}
+            args:
+              - -ceu
+              - |-
+                deployment_domain="k8s.${INSTALLATION_PUBLIC_DOMAIN:?}"
+                ca_certificate="$(mktemp)"
+                trap 'rm -f "${ca_certificate}"' EXIT
+                kubectl --kubeconfig .tmp/kubeconfigs/cell-eaws-lh1.yaml \
+                  get configmap/cluster-local-ca-source --namespace=cert-manager \
+                  --output='jsonpath={.data.ca\.crt}' >"${ca_certificate}"
+                status="$(curl --cacert "${ca_certificate}" --noproxy '*' \
+                  --silent --show-error \
+                  --output /dev/null --write-out '%{http_code}' \
+                  "https://svelte-web.cell-eaws-lh1.${deployment_domain}/")"
+                test "${status}" = 200
+        - command:
+            entrypoint: sh
+            env:
+              - {name: INSTALLATION_PUBLIC_DOMAIN, value: ($values.publicDomain)}
+            args:
+              - -ceu
+              - |-
+                pretty_domain="${INSTALLATION_PUBLIC_DOMAIN:?}"
+                cluster_domain="ctrl-eaws-lh1.k8s.${INSTALLATION_PUBLIC_DOMAIN:?}"
+                ca_certificate="$(mktemp)"
+                trap 'rm -f "${ca_certificate}"' EXIT
+                kubectl get configmap/cluster-local-ca-source --namespace=cert-manager \
+                  --output='jsonpath={.data.ca\.crt}' >"${ca_certificate}"
+                response="$(curl --cacert "${ca_certificate}" --noproxy '*' \
+                  --silent --show-error --max-redirs 0 --output /dev/null \
+                  --write-out '%{http_code}\n%{redirect_url}' \
+                  "https://headlamp.${pretty_domain}/oidc?cluster=ctrl-eaws-lh1")"
+                python3 - "${response}" "${cluster_domain}" <<'PY'
+                import sys
+                import urllib.parse
+
+                status, location = sys.argv[1].splitlines()
+                cluster_domain = sys.argv[2]
+                parsed = urllib.parse.urlsplit(location)
+                query = urllib.parse.parse_qs(parsed.query)
+                assert status == "302"
+                assert parsed.scheme == "https"
+                assert parsed.netloc == f"dex.{cluster_domain}"
+                assert parsed.path == "/auth"
+                assert query.get("client_id") == ["headlamp"]
+                assert query.get("redirect_uri") == [f"https://headlamp.{cluster_domain}/oidc-callback"]
+                assert query.get("response_type") == ["code"]
+                PY

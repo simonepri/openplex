@@ -1,0 +1,35 @@
+# Defines a lightweight batch Job to defend Kueue workload admission and execution in dedicated conformance queues.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: admit-and-run-workload-through-kueue
+  namespace: conformance-workloads
+  labels:
+    kueue.x-k8s.io/queue-name: probe
+    availability-class: be
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: probe
+          image: ($values.busyboxImage)
+          command: [sh, -c, "exit 0"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 50m, memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}

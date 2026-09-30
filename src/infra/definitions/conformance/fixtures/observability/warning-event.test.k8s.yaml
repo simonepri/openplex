@@ -1,0 +1,44 @@
+# Emits paired Normal and Warning Kubernetes events to defend OpenTelemetry collector severity filtering and attribute preservation contracts.
+
+apiVersion: events.k8s.io/v1
+kind: Event
+metadata:
+  name: observability-warning-probe
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: observability-warning-event-probe
+action: ProbeWarning
+reason: ObservabilityWarning
+note: Warning event exported by the observability conformance suite
+type: Warning
+reportingController: chainsaw.observability
+reportingInstance: observability-warning-event-test
+eventTime: "2026-01-01T00:00:00.000000Z"
+regarding:
+  apiVersion: v1
+  kind: ConfigMap
+  name: observability-event-probe
+  namespace: observability
+series:
+  count: 3
+  lastObservedTime: "2026-01-01T00:01:00.000000Z"
+---
+apiVersion: events.k8s.io/v1
+kind: Event
+metadata:
+  name: observability-normal-probe
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: observability-warning-event-probe
+action: ProbeNormal
+reason: ObservabilityNormal
+note: Normal event must not be exported by the observability collector
+type: Normal
+reportingController: chainsaw.observability
+reportingInstance: observability-warning-event-test
+eventTime: "2026-01-01T00:00:00.000000Z"
+regarding:
+  apiVersion: v1
+  kind: ConfigMap
+  name: observability-event-probe
+  namespace: observability

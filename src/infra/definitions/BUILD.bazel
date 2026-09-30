@@ -1,0 +1,5 @@
+"""Claims infrastructure definitions so bazel-diff and lint aspects track the tree."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
