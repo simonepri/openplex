@@ -1,0 +1,154 @@
+# Routes the Floci control cluster's Dex-gated Dragonfly Console through the shared HTTPS listener. The fleet Application patches the canonical access-domain host.
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: dragonfly-console
+  namespace: envoy-gateway-system
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: private-access
+      namespace: envoy-gateway-system
+      sectionName: https
+  hostnames: [dragonfly.invalid]
+  rules:
+    - matches: [{path: {type: PathPrefix, value: /}}]
+      backendRefs:
+        - {group: "", kind: Service, name: dragonfly-sso, namespace: dragonfly-system, port: 8081, weight: 1}
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: dragonfly-console
+  namespace: dragonfly-system
+spec:
+  from:
+    - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: envoy-gateway-system}
+  to:
+    - {group: "", kind: Service, name: dragonfly-sso}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: dragonfly-oidc
+  namespace: envoy-gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/component: authentication
+    app.kubernetes.io/managed-by: external-secrets
+    app.kubernetes.io/name: dragonfly
+    app.kubernetes.io/part-of: dragonfly
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: runtime-secrets
+  target:
+    name: dragonfly-oidc
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: client-id
+      remoteRef:
+        key: application-oidc
+        property: dragonfly_client_id
+    - secretKey: client-secret
+      remoteRef:
+        key: application-oidc
+        property: dragonfly_client_secret
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: dragonfly-console-oidc
+  namespace: envoy-gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: authentication
+    app.kubernetes.io/name: dragonfly-console
+    app.kubernetes.io/part-of: dragonfly
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: dragonfly-console
+  oidc:
+    provider:
+      issuer: https://dex.invalid
+      authorizationEndpoint: https://dex.invalid/auth
+      tokenEndpoint: http://dex.dex.svc.cluster.local:5556/token
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: dex
+          namespace: dex
+          port: 5556
+          weight: 1
+    clientIDRef:
+      group: ""
+      kind: Secret
+      name: dragonfly-oidc
+    clientSecret:
+      group: ""
+      kind: Secret
+      name: dragonfly-oidc
+    cookieNames:
+      accessToken: AccessToken-dragonfly-console
+      idToken: IdToken-dragonfly-console
+    disableTokenEncryption: true
+    forwardAccessToken: false
+    passThroughAuthHeader: false
+    refreshToken: true
+    redirectURL: https://dragonfly.invalid/oauth2/callback
+    scopes:
+      - openid
+      - profile
+      - email
+      - groups
+  jwt:
+    providers:
+      - name: dragonfly-console
+        issuer: https://dex.invalid
+        audiences: [dragonfly]
+        remoteJWKS:
+          cacheDuration: 300s
+          uri: http://dex.dex.svc.cluster.local:5556/keys
+          backendRefs:
+            - group: ""
+              kind: Service
+              name: dex
+              namespace: dex
+              port: 5556
+              weight: 1
+        extractFrom:
+          cookies: [IdToken-dragonfly-console]
+        claimToHeaders:
+          # keep-sorted start
+          - claim: email
+            header: X-Forwarded-Email
+          - claim: groups
+            header: X-Forwarded-Groups
+          - claim: preferred_username
+            header: X-Forwarded-Preferred-Username
+          - claim: sub
+            header: X-Forwarded-User
+            # keep-sorted end
+  authorization:
+    defaultAction: Deny
+    rules:
+      - name: oidc-callback
+        action: Allow
+        cel: request.url_path == '/oauth2/callback'
+      - name: operator-group
+        action: Allow
+        principal:
+          jwt:
+            provider: dragonfly-console
+            claims:
+              - name: groups
+                valueType: StringArray
+                values: ["operators"]

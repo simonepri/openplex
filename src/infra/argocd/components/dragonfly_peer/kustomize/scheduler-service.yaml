@@ -1,0 +1,14 @@
+# Publishes one cell Scheduler for ctrl Manager callbacks. The Floci fleet consumer supplies its reviewed private external address.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: dragonfly-scheduler-private
+  namespace: dragonfly-system
+  annotations:
+    configured-by-fleet: replace
+    ignore-check.kube-linter.io/dangling-service: The selected scheduler pods are rendered by the Dragonfly Helm source in the same Argo CD Application.
+spec:
+  type: ClusterIP
+  selector: {app: dragonfly, component: scheduler}
+  ports: [{name: grpc, port: 8002, protocol: TCP, targetPort: 8002}]

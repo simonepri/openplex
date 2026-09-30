@@ -1,0 +1,58 @@
+# Restricts the operator-managed cache to its controller, cluster peers, trusted compile clients, and the node-local observability collector.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: torch-compile-cache
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: torch-compile-cache
+spec:
+  podSelector:
+    matchLabels: {valkey.io/cluster: torch-compile-cache}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: coder-workspace
+              app.kubernetes.io/part-of: coder
+              com.coder.resource: "true"
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [ray-data-head, ray-data-worker, ray-serve-head, ray-serve-worker, ray-train-head, ray-train-worker]
+              - key: kueue.x-k8s.io/queue-name
+                operator: Exists
+      ports:
+        - {port: 6379, protocol: TCP}
+    - from:
+        - podSelector:
+            matchLabels: {valkey.io/cluster: torch-compile-cache}
+      ports:
+        - {port: 6379, protocol: TCP}
+        - {port: 16379, protocol: TCP}
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: valkey-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: valkey-operator}
+      ports:
+        - {port: 6379, protocol: TCP}
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: otel-system}
+          podSelector:
+            matchLabels:
+              component: agent-collector
+              app.kubernetes.io/name: opentelemetry-collector
+      ports:
+        - {port: 9121, protocol: TCP}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {valkey.io/cluster: torch-compile-cache}
+      ports:
+        - {port: 6379, protocol: TCP}
+        - {port: 16379, protocol: TCP}

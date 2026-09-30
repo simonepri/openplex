@@ -1,0 +1,127 @@
+# Dragonfly manager upstream helm values consumed by the ctrl Dragonfly Manager Application.
+
+fullnameOverride: dragonfly
+
+injector:
+  enable: false
+
+mysql:
+  enable: false
+
+redis:
+  enable: false
+
+externalPostgres:
+  database: manager
+  enable: true
+  host: dragonfly-postgres-rw
+  migrate: true
+  password: ${POSTGRES_PASSWORD}
+  port: 5432
+  sslMode: require
+  timezone: UTC
+  username: dragonfly
+
+externalRedis:
+  addrs:
+    - dragonfly-valkey:6379
+    - valkey-dragonfly-metadata:6379
+    - dragonfly-valkey:6379
+  backendDB: 0
+  brokerDB: 0
+  db: 0
+  password: ${VALKEY_PASSWORD}
+
+manager:
+  enable: true
+  replicas: 2
+  livenessProbe:
+    enable: true
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    enable: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels: {app: dragonfly, component: manager}
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  deploymentAnnotations:
+    argocd.argoproj.io/sync-wave: "0"
+  image:
+    digest: sha256:15c2fc90208155fa9124af8c0c812cb515049f6411e737325b8342f137b7def2
+    registry: docker.io
+    repository: dragonflyoss/manager
+    tag: v2.5.2
+  initContainer:
+    image:
+      digest: sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+      registry: docker.io
+      repository: busybox
+      tag: 1.38.0
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+  config:
+    auth:
+      jwt:
+        key: ${JWT_KEY}
+  extraEnvVars:
+    - name: MANAGER_CONFIG
+      value: /etc/dragonfly-runtime/manager.yaml
+  extraVolumeMounts:
+    # keep-sorted start
+    - mountPath: /etc/dragonfly-mtls
+      name: mtls
+      readOnly: true
+    - mountPath: /etc/dragonfly-runtime
+      name: runtime-config
+      readOnly: true
+    - mountPath: /etc/dragonfly-trust
+      name: trust
+      readOnly: true
+    - mountPath: /usr/local/dragonfly
+      name: work
+    - mountPath: /var/log/dragonfly
+      name: logs
+      # keep-sorted end
+  extraVolumes:
+    # keep-sorted start
+    - name: logs
+      emptyDir: {}
+    - name: mtls
+      secret:
+        secretName: dragonfly-grpc-mtls
+    - name: runtime-config
+      secret:
+        items:
+          - key: manager.yaml
+            path: manager.yaml
+        secretName: dragonfly-runtime
+    - name: trust
+      configMap:
+        name: dragonfly-grpc-ca-bundle
+    - name: work
+      emptyDir: {}
+      # keep-sorted end
+  priorityClassName: cluster-operators
+  resources:
+    limits: {cpu: 1, memory: 2Gi}
+    requests: {cpu: 100m, memory: 256Mi}
+
+scheduler:
+  enable: false
+
+seedClient:
+  enable: false
+
+client:
+  enable: false

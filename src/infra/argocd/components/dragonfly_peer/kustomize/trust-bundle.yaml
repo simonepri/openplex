@@ -1,0 +1,25 @@
+# Dragonfly-scoped trust for cell identities and the control-plane Manager. Cell fleet patches may replace the second source with the imported control CA.
+
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: dragonfly-grpc-ca-bundle
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+  labels:
+    app.kubernetes.io/component: grpc-trust
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: dragonfly-grpc-ca-bundle
+    app.kubernetes.io/part-of: dragonfly
+spec:
+  sources:
+    - secret: {name: cluster-local-ca, key: ca.crt}
+    - secret: {name: cluster-local-ca, key: ca.crt}
+  target:
+    configMap:
+      key: ca.crt
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: trust-manager
+          app.kubernetes.io/name: dragonfly-grpc-ca-bundle
+    namespaceSelector:
+      matchLabels: {kubernetes.io/metadata.name: dragonfly-system}
