@@ -1,0 +1,101 @@
+# Completes the upstream Manager chart's restricted Pod Security profile and authenticates its fixed gRPC health probes before admission.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: dragonfly-manager-pod-security
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    pod-policies.kyverno.io/autogen-controllers: none
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: dragonfly-manager-pod-security
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: authenticate-manager-health-probes
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              names: [dragonfly-manager]
+              namespaces: [dragonfly-system]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels: {app: dragonfly, component: manager}
+      mutate:
+        patchStrategicMerge:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: manager
+                    livenessProbe:
+                      timeoutSeconds: 5
+                      exec:
+                        command: &managerHealthProbe
+                          - /bin/grpc_health_probe
+                          - -addr=127.0.0.1:65003
+                          - -tls
+                          - -tls-ca-cert=/etc/dragonfly-trust/ca.crt
+                          - -tls-client-cert=/etc/dragonfly-mtls/tls.crt
+                          - -tls-client-key=/etc/dragonfly-mtls/tls.key
+                          - -tls-server-name=dragonfly-manager.dragonfly-system.svc
+                          - -connect-timeout=3s
+                          - -rpc-timeout=3s
+                    readinessProbe:
+                      timeoutSeconds: 5
+                      exec:
+                        command: *managerHealthProbe
+    - name: set-manager-pod-security-context
+      skipBackgroundRequests: true
+      match: &managerPods
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [dragonfly-system]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels: {app: dragonfly, component: manager}
+      mutate:
+        patchStrategicMerge:
+          spec:
+            securityContext:
+              fsGroup: 65532
+              fsGroupChangePolicy: OnRootMismatch
+              runAsGroup: 65532
+              runAsNonRoot: true
+              runAsUser: 65532
+              seccompProfile: {type: RuntimeDefault}
+    - name: set-manager-container-security-context
+      skipBackgroundRequests: true
+      match: *managerPods
+      mutate:
+        foreach:
+          - list: request.object.spec.containers
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: '{{ element.name }}'
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities: {drop: [ALL]}
+                      runAsNonRoot: true
+                      runAsUser: 65532
+          - list: request.object.spec.initContainers || `[]`
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: '{{ element.name }}'
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities: {drop: [ALL]}
+                      runAsNonRoot: true
+                      runAsUser: 65532

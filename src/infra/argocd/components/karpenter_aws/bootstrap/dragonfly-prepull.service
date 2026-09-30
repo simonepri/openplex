@@ -1,0 +1,15 @@
+# Pre-pulls Dragonfly container images to warm node cache before model image downloads.
+
+[Unit]
+Description=Pre-pull Dragonfly images so dfdaemon is up before the first model pull
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=600
+ExecStart=/usr/bin/bash -c 'until ctr version >/dev/null 2>&1; do sleep 1; done; TOKEN="$$(aws ecr get-login-password --region us-west-2)"; for img in 000000000000.dkr.ecr.us-west-2.amazonaws.com/mirror/busybox:1.37.0 000000000000.dkr.ecr.us-west-2.amazonaws.com/mirror/dragonflyoss/client:v1.5.7; do ctr -n k8s.io image pull --snapshotter stargz --user "AWS:$$TOKEN" "$$img"; done'
+
+[Install]
+WantedBy=multi-user.target

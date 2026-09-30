@@ -1,0 +1,6 @@
+# Dragonfly resolver mirror configuration for eStargz snapshotter.
+# Routes lazy range reads to the node-local Dragonfly proxy (127.0.0.1:4001).
+
+[[resolver.host."000000000000.dkr.ecr.us-west-2.amazonaws.com".mirrors]]
+host = "127.0.0.1:4001"
+insecure = true

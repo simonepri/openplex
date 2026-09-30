@@ -1,0 +1,12 @@
+# Dragonfly client image configuration pinned for the Dragonfly peer component.
+
+client:
+  image: &dragonfly-client-image
+    digest: sha256:b2d2f3c24f29db02ff94b815451b10e1914fd96dfc8bef01806837392d095bd3
+    # LINT.IfChange(local-origin-registry-publication-root)
+    registry: localhost:15100
+    repository: 000000000000/us-east-1/dragonfly-client
+    # LINT.ThenChange(//src/infra/mise.toml:local-origin-registry-publication-root)
+    tag: v1.5.2-mtls-r3
+seedClient:
+  image: *dragonfly-client-image

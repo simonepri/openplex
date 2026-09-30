@@ -63,6 +63,7 @@ helm_template(
 sh_library(
     name = "shell",
     srcs = [
+        "bootstrap/setup-dragonfly-prepull.sh",
         "bootstrap/stargz-bootstrap.sh",
     ],
 )

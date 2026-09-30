@@ -1,0 +1,30 @@
+# Routes the Dragonfly Manager gRPC SNI through the shared Gateway without terminating the manager's component-owned mTLS certificate.
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: dragonfly-manager
+  namespace: dragonfly-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: manager
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: dragonfly
+    app.kubernetes.io/part-of: dragonfly
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: private-access
+      namespace: envoy-gateway-system
+      sectionName: dragonfly-manager-tls
+  hostnames:
+    - dragonfly-manager.invalid
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: dragonfly-manager
+          port: 65003
+          weight: 1

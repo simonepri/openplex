@@ -1,0 +1,25 @@
+# Assembles the Dragonfly manager control-plane resources.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - database.yaml
+  - external-secrets.yaml
+  - manager-door.yaml
+  - manager-security-policy.yaml
+  - namespace.yaml
+  - route.yaml
+  - scheduler-clusters.job.yaml
+  - sso.yaml
+  - tls-route.yaml
+  - trust-bundle.yaml
+  - valkey.yaml
+  # keep-sorted end
+configMapGenerator:
+  - name: dragonfly-scheduler-clusters-program
+    namespace: dragonfly-system
+    files:
+      - scheduler-clusters.sql
+generatorOptions:
+  disableNameSuffixHash: true
