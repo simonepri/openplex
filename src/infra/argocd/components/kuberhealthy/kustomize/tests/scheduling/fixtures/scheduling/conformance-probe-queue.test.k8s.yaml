@@ -1,0 +1,36 @@
+# Declares a dedicated Kueue queue fixture for admitting and executing conformance probe workloads.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: conformance-workloads
+  labels:
+    cost-center: shared-infrastructure
+    environment: production
+    kueue.x-k8s.io/managed: "true"
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: conformance-probe-queue
+spec:
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: conformance-workloads
+  resourceGroups:
+    - coveredResources: [cpu, memory]
+      flavors:
+        - name: on-demand
+          resources:
+            - name: cpu
+              nominalQuota: 100m
+            - name: memory
+              nominalQuota: 128Mi
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: probe
+  namespace: conformance-workloads
+spec:
+  clusterQueue: conformance-probe-queue

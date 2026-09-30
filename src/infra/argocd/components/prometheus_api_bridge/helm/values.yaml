@@ -1,0 +1,243 @@
+# Configures base Helm values for the Prometheus API bridge, the only Prometheus- compatible query surface; its OpenTelemetry collector publishes Kubernetes and exporter metrics into SigNoz without installing a.
+
+fullnameOverride: prometheus-api-bridge
+clusterName: ""
+backend:
+  type: signoz
+  signoz:
+    url: http://signoz.signoz.svc.cluster.local:8080
+    apiKeySecret:
+      name: prometheus-api-bridge-signoz-runtime
+      key: api-key
+server:
+  # A full-day OpenCost pod-label query currently returns over 5k series.
+  maxSeries: 6000
+  maxSamples: 500000
+  maxBackendResponseBytes: 16777216
+  podAnnotations:
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Prometheus API bridge requires SigNoz API key via environment variable.
+  image:
+    repository: ghcr.io/simonepri/prometheus-api-bridge
+    tag: 0.3.0@sha256:b34c8f218cea585b4c32e224fa5b2d61904446840f62d42b0bc94e18b93db1b0
+  auth:
+    # In-cluster consumers cannot all attach a shared bearer token. Access is
+    # therefore constrained by the NetworkPolicy below.
+    allowUnauthenticated: true
+    bearerTokenSecret: {name: "", key: token}
+  resources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: prometheus-api-bridge
+                app.kubernetes.io/name: prometheus-api-bridge
+            topologyKey: kubernetes.io/hostname
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  topologySpread: {enabled: false}
+service:
+  labels: {headlamp-prometheus: "true"}
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: opencost}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: opencost}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: headlamp}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: headlamp}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: keda-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: keda-operator}
+      ports: [{protocol: TCP, port: 9090}]
+collection:
+  mode: standalone
+  image:
+    repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
+    tag: 0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+  otlp:
+    endpoint: http://otel-collector.otel-system.svc.cluster.local:4318
+    insecure: true
+  interval: 60s
+  extraScrapeConfigs:
+    - job_name: trivy-operator
+      scrape_interval: 60s
+      metrics_path: /metrics
+      static_configs:
+        - targets: ['trivy-operator.trivy-system.svc:8080']
+      metric_relabel_configs:
+        - source_labels: [__name__]
+          regex: trivy_cluster_compliance|trivy_image_exposedsecrets|trivy_image_vulnerabilities
+          action: keep
+    - job_name: kubescape-operator
+      scrape_interval: 60s
+      metrics_path: /metrics
+      static_configs:
+        - targets: ['prometheus-exporter.kubescape-system.svc:8080']
+      metric_relabel_configs:
+        - source_labels: [__name__]
+          regex: kubescape_controls_total_cluster_critical|kubescape_controls_total_cluster_high|kubescape_controls_total_cluster_low|kubescape_controls_total_cluster_medium|kubescape_controls_total_namespace_critical|kubescape_controls_total_namespace_high|kubescape_controls_total_namespace_low|kubescape_controls_total_namespace_medium
+          action: keep
+  sources:
+    cadvisor:
+      enabled: true
+      metrics:
+        # keep-sorted start
+        - container_cpu_cfs_periods_total
+        - container_cpu_cfs_throttled_periods_total
+        - container_cpu_cfs_throttled_seconds_total
+        - container_cpu_usage_seconds_total
+        - container_fs_inodes_free
+        - container_fs_inodes_total
+        - container_fs_limit_bytes
+        - container_fs_reads_bytes_total
+        - container_fs_reads_total
+        - container_fs_usage_bytes
+        - container_fs_writes_bytes_total
+        - container_fs_writes_total
+        - container_memory_cache
+        - container_memory_max_usage_bytes
+        - container_memory_rss
+        - container_memory_swap
+        - container_memory_working_set_bytes
+        - container_network_receive_bytes_total
+        - container_network_receive_errors_total
+        - container_network_receive_packets_dropped_total
+        - container_network_receive_packets_total
+        - container_network_transmit_bytes_total
+        - container_network_transmit_errors_total
+        - container_network_transmit_packets_dropped_total
+        - container_network_transmit_packets_total
+        - container_spec_cpu_period
+        - container_spec_cpu_quota
+        - container_spec_cpu_shares
+        - container_spec_memory_limit_bytes
+        - container_spec_memory_reservation_limit_bytes
+        - container_spec_memory_swap_limit_bytes
+        - container_start_time_seconds
+        # keep-sorted end
+    kubelet:
+      enabled: true
+      metrics:
+        # keep-sorted start
+        - kubelet_volume_stats_available_bytes
+        - kubelet_volume_stats_capacity_bytes
+        - kubelet_volume_stats_inodes
+        - kubelet_volume_stats_inodes_free
+        - kubelet_volume_stats_used_bytes
+        # keep-sorted end
+    kubeStateMetrics:
+      enabled: true
+      target: prometheus-api-bridge-kube-state-metrics.signoz.svc:8080
+      metrics:
+        - kube_cronjob_info
+        - kube_cronjob_status_last_successful_time
+        - kube_job_status_active
+        - kube_job_status_start_time
+        - kube_namespace_labels
+        - kube_node_labels
+        - kube_node_status_allocatable
+        - kube_node_status_capacity
+        - kube_persistentvolume_capacity_bytes
+        - kube_persistentvolume_info
+        - kube_persistentvolume_status_phase
+        - kube_persistentvolumeclaim_info
+        - kube_persistentvolumeclaim_resource_requests_storage_bytes
+        - kube_persistentvolumeclaim_status_condition
+        - kube_persistentvolumeclaim_status_phase
+        - kube_pod_container_resource_limits
+        - kube_pod_container_resource_requests
+        - kube_pod_container_status_last_terminated_reason
+        - kube_pod_container_status_restarts_total
+        - kube_pod_container_status_running
+        - kube_pod_labels
+        - kube_pod_owner
+        - kube_storageclass_info
+        - kube_velero_backup_completion_timestamp
+        - kube_velero_schedule_created
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "2", memory: 1Gi}
+kube-state-metrics:
+  enabled: true
+  fullnameOverride: prometheus-api-bridge-kube-state-metrics
+  image:
+    sha: sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1
+  collectors: [cronjobs, jobs, namespaces, nodes, persistentvolumeclaims, persistentvolumes, pods, storageclasses]
+  metricLabelsAllowlist: ["pods=[*]"]
+  rbac:
+    extraRules:
+      - apiGroups: [velero.io]
+        resources: [backups, schedules]
+        verbs: [list, watch]
+  customResourceState:
+    enabled: true
+    config:
+      kind: CustomResourceStateMetrics
+      spec:
+        resources:
+          - groupVersionKind: {group: velero.io, version: v1, kind: Backup}
+            metricNamePrefix: kube_velero
+            labelsFromPath:
+              backup: [metadata, name]
+              namespace: [metadata, namespace]
+              phase: [status, phase]
+              schedule: [metadata, labels, velero.io/schedule-name]
+            metrics:
+              - name: backup_completion_timestamp
+                help: Unix timestamp of a Velero Backup completion.
+                # Failed and in-flight Backups intentionally omit this field.
+                errorLogV: 10
+                each:
+                  type: Gauge
+                  gauge: {path: [status, completionTimestamp]}
+          - groupVersionKind: {group: velero.io, version: v1, kind: Schedule}
+            metricNamePrefix: kube_velero
+            labelsFromPath:
+              namespace: [metadata, namespace]
+              schedule: [metadata, name]
+            metrics:
+              - name: schedule_created
+                help: Unix creation timestamp of a configured Velero Schedule.
+                each:
+                  type: Gauge
+                  gauge: {path: [metadata, creationTimestamp]}
+  automountServiceAccountToken: true
+  securityContext:
+    enabled: true
+    runAsGroup: 65534
+    runAsUser: 65534
+    fsGroup: 65534
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  containerSecurityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+  # Informer caches can take longer than the default liveness window to rebuild
+  # after an API-server restart. Gate liveness on a bounded cold-start probe.
+  startupProbe:
+    enabled: true
+    failureThreshold: 30
+    periodSeconds: 10
+  livenessProbe:
+    failureThreshold: 12
+    periodSeconds: 30
+    timeoutSeconds: 10
+  readinessProbe:
+    failureThreshold: 6
+    periodSeconds: 10
+    timeoutSeconds: 5
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}

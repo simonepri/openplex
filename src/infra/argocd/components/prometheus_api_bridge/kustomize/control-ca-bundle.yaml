@@ -1,0 +1,22 @@
+# Projects scoped trust bundle for the control cluster's authenticated observability query door.
+
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: prometheus-api-bridge-control-ca
+  labels:
+    app.kubernetes.io/component: query-bridge
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  sources:
+    - secret: {name: cluster-local-ca, key: ca.crt}
+  target:
+    configMap:
+      key: ca.crt
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: trust-manager
+          app.kubernetes.io/name: prometheus-api-bridge-control-ca
+    namespaceSelector:
+      matchLabels: {kubernetes.io/metadata.name: signoz}
