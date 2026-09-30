@@ -1,0 +1,53 @@
+# Defines the Falco runtime threat alert reconciled into SigNoz. Alerts when Falco detects a critical or error-level runtime anomaly on any cluster node.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: falco-runtime-threat
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Falco runtime security threat detected
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: critical}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "k8s_container_name = 'falco' AND priority IN ('Critical', 'Emergency', 'Alert', 'Error')"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: at_least_once
+              op: above
+              target: 0
+      description: Falco detected a critical kernel runtime security anomaly on a cluster node; inspect the pod and container immediately.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 1h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

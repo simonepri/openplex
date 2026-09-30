@@ -1,0 +1,860 @@
+# Defines the fleet-security dashboard displaying vulnerability scans and runtime policy violations.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Dashboard
+metadata:
+  name: fleet-security
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    jsonSpec: |-
+      {
+        "schemaVersion": "v6",
+        "image": "",
+        "name": "fleet-security",
+        "tags": [
+          {
+            "key": "category",
+            "value": "security"
+          }
+        ],
+        "spec": {
+          "display": {
+            "name": "Security",
+            "description": "Unified fleet security telemetry: runtime threats from Falco eBPF, ingress security denials, admission policy blocks, CSPM posture findings, container image vulnerabilities, and CIS configuration compliance."
+          },
+          "variables": [
+            {
+              "kind": "ListVariable",
+              "spec": {
+                "name": "priority",
+                "display": {
+                  "name": "Falco priority",
+                  "description": "Filter by Falco event priority level"
+                },
+                "allowAllValue": true,
+                "allowMultiple": true,
+                "sort": "none",
+                "plugin": {
+                  "kind": "signoz/CustomVariable",
+                  "spec": {
+                    "customValue": "Emergency,Alert,Critical,Error,Warning,Notice,Informational,Debug"
+                  }
+                }
+              }
+            }
+          ],
+          "panels": {
+            "threats-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Runtime security events over time",
+                  "description": "Falco events grouped by rule priority"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": null
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfMinute(toDateTime(timestamp / 1000000000)) AS ts, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'falco' AND attributes_string['priority'] IN $priority GROUP BY ts ORDER BY ts"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "ingress-denials-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Ingress gateway security rejections",
+                  "description": "Envoy Gateway 401, 403, and 429 responses over time"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": null
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfMinute(toDateTime(timestamp / 1000000000)) AS ts, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'envoy' AND (attributes_string['response_code'] IN ('401', '403', '429') OR body LIKE '%\"response_code\":\"401\"%' OR body LIKE '%\"response_code\":\"403\"%' OR body LIKE '%\"response_code\":\"429\"%') GROUP BY ts ORDER BY ts"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "top-threat-rules": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Top security rules triggered",
+                  "description": "Count of runtime security violations by rule name"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {
+                        "event_count": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT attributes_string['rule'] AS rule, attributes_string['priority'] AS priority, count() AS event_count FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'falco' AND attributes_string['priority'] IN $priority GROUP BY rule, priority ORDER BY event_count DESC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "kyverno-admission-denials": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Admission policy blocks",
+                  "description": "Kyverno rejected workload submissions with policy, namespace, resource, and sample reason"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {
+                        "block_count": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT coalesce(nullIf(extract(body, 'policy[\":= ]+([a-zA-Z0-9_-]+)'), ''), nullIf(extract(body, 'clusterpolicy/([a-zA-Z0-9_-]+)'), ''), nullIf(extract(body, 'PolicyViolation[\":= ]+([a-zA-Z0-9_-]+)'), ''), 'Policy Violation') AS policy, coalesce(nullIf(extract(body, 'namespace[\":= ]+([a-zA-Z0-9_-]+)'), ''), nullIf(extract(body, 'resource[\":= ]+([a-zA-Z0-9_-]+)/'), ''), nullIf(resources_string['k8s.namespace.name'], 'kyverno'), 'cluster-scope') AS target_namespace, coalesce(nullIf(extract(body, 'resource[\":= ]+([^\", ]+)'), ''), nullIf(extract(body, '((?:Pod|Deployment|StatefulSet|DaemonSet|Job)/[a-zA-Z0-9_.-]+)'), ''), 'workload') AS resource, count() AS block_count, any(body) AS sample_reason FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND (((resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%fail (blocked)%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%')) OR body LIKE '%Warning PolicyViolation%') GROUP BY policy, target_namespace, resource ORDER BY block_count DESC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "exposed-secrets-detected": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Exposed secrets detected",
+                  "description": "Total container image exposed secrets across the fleet"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum(trivy_image_exposedsecrets) or vector(0)"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "trivy-vulnerabilities-by-severity": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Trivy vulnerabilities by severity",
+                  "description": "Active container image vulnerabilities grouped by severity level"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": null
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum by (severity) (trivy_image_vulnerabilities{severity=~\"Critical|High|Medium\"})",
+                          "legend": "{{severity}}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "prowler-cloud-posture": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Cloud CSPM audit findings",
+                  "description": "Prowler compliance audit status breakdown"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {
+                        "finding_count": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT multiIf(body LIKE '%\"Status\":\"FAIL\"%' OR body LIKE '%\"Status\": \"FAIL\"%', 'FAIL', body LIKE '%\"Status\":\"PASS\"%' OR body LIKE '%\"Status\": \"PASS\"%', 'PASS', 'OTHER') AS status, count() AS finding_count FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'prowler' AND resources_string['k8s.namespace.name'] = 'prowler' AND resources_string['k8s.pod.name'] LIKE 'prowler-%' GROUP BY status ORDER BY finding_count DESC"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "top-vulnerable-workloads": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Top vulnerable images & workloads",
+                  "description": "Active container image vulnerabilities by workload and image repository"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {
+                        "vulnerability_count": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT JSONExtractString(ts.labels, 'namespace') AS namespace, JSONExtractString(ts.labels, 'resource_name') AS resource_name, JSONExtractString(ts.labels, 'image_repository') AS image_repository, JSONExtractString(ts.labels, 'severity') AS severity, toUInt64(argMax(s.value, s.unix_milli)) AS vulnerability_count FROM signoz_metrics.distributed_samples_v4 s JOIN signoz_metrics.distributed_time_series_v4 ts ON s.fingerprint = ts.fingerprint WHERE s.metric_name = 'trivy_image_vulnerabilities' AND s.unix_milli >= toUnixTimestamp64Milli(now64() - INTERVAL 1 HOUR) GROUP BY namespace, resource_name, image_repository, severity ORDER BY vulnerability_count DESC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "kubescape-cis-benchmark-posture": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Kubescape CIS benchmark posture",
+                  "description": "Failed cluster compliance controls by severity"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": null
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/PromQLQuery",
+                        "spec": {
+                          "name": "A",
+                          "query": "sum by (__name__) ({__name__=~\"kubescape_controls_total_cluster_critical|kubescape_controls_total_cluster_high|kubescape_controls_total_cluster_medium\"})",
+                          "legend": "{{__name__}}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "kubescape-failed-controls-by-namespace": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Kubescape failed controls by namespace",
+                  "description": "Failed compliance controls per namespace"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {
+                        "high_controls": "none",
+                        "medium_controls": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT JSONExtractString(ts.labels, 'namespace') AS namespace, toUInt64(maxIf(s.value, s.metric_name = 'kubescape_controls_total_namespace_high')) AS high_controls, toUInt64(maxIf(s.value, s.metric_name = 'kubescape_controls_total_namespace_medium')) AS medium_controls FROM signoz_metrics.distributed_samples_v4 s JOIN signoz_metrics.distributed_time_series_v4 ts ON s.fingerprint = ts.fingerprint WHERE s.metric_name IN ('kubescape_controls_total_namespace_high', 'kubescape_controls_total_namespace_medium') AND s.unix_milli >= toUnixTimestamp64Milli(now64() - INTERVAL 1 HOUR) GROUP BY namespace ORDER BY high_controls DESC, medium_controls DESC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "recent-security-events": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Recent security incident logs",
+                  "description": "Filtered high-signal security events across runtime, admission, ingress, CSPM, and vulnerabilities"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {},
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toDateTime(timestamp / 1000000000) AS event_time, multiIf(resources_string['k8s.container.name'] = 'falco', 'Falco Runtime', resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno', 'Kyverno Admission', resources_string['k8s.container.name'] = 'prowler' OR resources_string['k8s.namespace.name'] = 'prowler', 'Prowler CSPM', resources_string['k8s.container.name'] = 'envoy', 'Envoy Gateway', resources_string['k8s.namespace.name'] = 'trivy-system' OR resources_string['k8s.container.name'] LIKE 'trivy%', 'Trivy Vulnerability', resources_string['k8s.namespace.name'] = 'kubescape-operator' OR resources_string['k8s.container.name'] LIKE 'kubescape%', 'Kubescape Posture', 'Other Security') AS source, coalesce(attributes_string['priority'], 'Alert') AS priority, resources_string['k8s.pod.name'] AS pod, body AS message FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND ((resources_string['k8s.container.name'] = 'falco' AND attributes_string['priority'] IN $priority) OR (((resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%fail (blocked)%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%')) OR body LIKE '%Warning PolicyViolation%') OR (resources_string['k8s.container.name'] = 'prowler' AND resources_string['k8s.namespace.name'] = 'prowler' AND resources_string['k8s.pod.name'] LIKE 'prowler-%' AND (body LIKE '%\"Status\":\"FAIL\"%' OR body LIKE '%\"Status\": \"FAIL\"%')) OR (resources_string['k8s.container.name'] = 'envoy' AND (attributes_string['response_code'] IN ('401', '403', '429') OR body LIKE '%\"response_code\":\"401\"%' OR body LIKE '%\"response_code\":\"403\"%' OR body LIKE '%\"response_code\":\"429\"%')) OR (resources_string['k8s.namespace.name'] = 'trivy-system' AND NOT (body LIKE '%Detecting vulnerabilities%' OR body LIKE '%Scanning%' OR body LIKE '%Number of language-specific files%') AND (body LIKE '%CRITICAL%' OR body LIKE '%HIGH%' OR body LIKE '%Secret detected%' OR severity_text IN ('WARN', 'ERROR', 'FATAL'))) OR (resources_string['k8s.namespace.name'] = 'kubescape-operator' AND NOT (body LIKE '%probe failed%' OR body LIKE '%context deadline exceeded%') AND (body LIKE '%Actionable%' OR body LIKE '%Compliance failed%' OR body LIKE '%Control failed%' OR severity_text IN ('WARN', 'ERROR', 'FATAL')))) ORDER BY event_time DESC LIMIT 100"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "runtime-threats-count": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Active runtime threats (24h)",
+                  "description": "Total Falco runtime security events detected in the last 24 hours"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'falco' AND attributes_string['priority'] IN $priority"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "admission-blocks-count": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Admission policy blocks (24h)",
+                  "description": "Total Kyverno admission policy violations blocked in the last 24 hours"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND (((resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%fail (blocked)%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%')) OR body LIKE '%Warning PolicyViolation%')"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "ingress-denials-count": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Ingress security denials (24h)",
+                  "description": "Total Envoy Gateway 401, 403, and 429 rejections in the last 24 hours"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'envoy' AND (attributes_string['response_code'] IN ('401', '403', '429') OR body LIKE '%\"response_code\":\"401\"%' OR body LIKE '%\"response_code\":\"403\"%' OR body LIKE '%\"response_code\":\"429\"%')"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "kyverno-rejections-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Admission rejections over time",
+                  "description": "Kyverno rejected workload submissions over time"
+                },
+                "plugin": {
+                  "kind": "signoz/TimeSeriesPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "none",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": null
+                    },
+                    "thresholds": null
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfMinute(toDateTime(timestamp / 1000000000)) AS ts, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND (((resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%fail (blocked)%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%')) OR body LIKE '%Warning PolicyViolation%') GROUP BY ts ORDER BY ts"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "layouts": [
+            {
+              "kind": "Grid",
+              "spec": {
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 3,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/runtime-threats-count"
+                    }
+                  },
+                  {
+                    "x": 3,
+                    "y": 0,
+                    "width": 3,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/admission-blocks-count"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 0,
+                    "width": 3,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/ingress-denials-count"
+                    }
+                  },
+                  {
+                    "x": 9,
+                    "y": 0,
+                    "width": 3,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/exposed-secrets-detected"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 3,
+                    "width": 4,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/threats-over-time"
+                    }
+                  },
+                  {
+                    "x": 4,
+                    "y": 3,
+                    "width": 4,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/kyverno-rejections-over-time"
+                    }
+                  },
+                  {
+                    "x": 8,
+                    "y": 3,
+                    "width": 4,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/ingress-denials-over-time"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 9,
+                    "width": 6,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/top-threat-rules"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 9,
+                    "width": 6,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/kyverno-admission-denials"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 15,
+                    "width": 6,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/trivy-vulnerabilities-by-severity"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 15,
+                    "width": 6,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/kubescape-cis-benchmark-posture"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 21,
+                    "width": 6,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/top-vulnerable-workloads"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 21,
+                    "width": 6,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/kubescape-failed-controls-by-namespace"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 27,
+                    "width": 12,
+                    "height": 5,
+                    "content": {
+                      "$ref": "#/spec/panels/prowler-cloud-posture"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 32,
+                    "width": 12,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/recent-security-events"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "duration": "7d",
+          "refreshInterval": "1m"
+        }
+      }
