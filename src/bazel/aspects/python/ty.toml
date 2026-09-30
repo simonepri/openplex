@@ -1,0 +1,23 @@
+# Configure ty type-checking environment, Python language version, and directory exclusions.
+
+[environment]
+# LINT.IfChange(python-version)
+python-version = "3.13"
+# LINT.ThenChange(//pyproject.toml:requires-python)
+
+[src]
+exclude = [".tmp"]
+
+[rules]
+# keep-sorted start
+missing-type-argument = "error"
+redundant-condition-strict = "error"
+unresolved-global = "error"
+unsound-assignment = "error"
+unsound-return-statement = "error"
+unsound-yield = "error"
+unsupported-dynamic-base = "error"
+unused-awaitable = "error"
+unused-ignore-comment = "error"
+unused-type-ignore-comment = "error"
+# keep-sorted end
