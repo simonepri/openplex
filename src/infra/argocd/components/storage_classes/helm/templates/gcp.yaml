@@ -1,0 +1,42 @@
+{{- /* Binds portable storage classes to GCP GCE-PD CSI driver for expandable and ephemeral volumes. */ -}}
+
+{{- if eq .Values.provider "gcp" }}
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: general-expandable
+  annotations:
+    resize.topolvm.io/enabled: "true"
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: pd.csi.storage.gke.io
+parameters:
+  csi.storage.k8s.io/fstype: ext4
+  labels: environment=production,cost-center=shared-infrastructure,component=kubernetes-storage
+  type: pd-balanced
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: general-ephemeral
+provisioner: pd.csi.storage.gke.io
+parameters:
+  csi.storage.k8s.io/fstype: ext4
+  labels: environment=production,cost-center=shared-infrastructure,component=kubernetes-storage
+  type: pd-balanced
+allowVolumeExpansion: false
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: gce-pd-balanced-retain
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+driver: pd.csi.storage.gke.io
+deletionPolicy: Retain
+{{- end }}

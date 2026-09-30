@@ -1,0 +1,3 @@
+# Configures provider-specific storage classes to render.
+
+provider: local

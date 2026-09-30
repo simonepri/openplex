@@ -1,0 +1,7 @@
+# Defines storage classes and snapshot classes chart for Kubernetes clusters.
+
+apiVersion: v2
+name: storage-classes
+version: 0.1.0
+description: Storage classes and snapshot classes for Kubernetes clusters
+type: application
