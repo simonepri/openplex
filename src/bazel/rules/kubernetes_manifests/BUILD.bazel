@@ -1,0 +1,29 @@
+"""Export Kubernetes manifest generation, linting rules, and disruption budget validation targets."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# gazelle:resolve py yaml @dev_python_deps//pyyaml
+
+exports_files([
+    "kube-linter.yaml",
+    "kube-linter-vendor.yaml",
+    "helm_chart_files_test.sh",
+])
+
+package_sources()
+
+py_binary(
+    name = "check_pdb_availability",
+    srcs = ["check_pdb_availability.py"],
+    visibility = ["//src:__subpackages__"],
+    deps = ["@dev_python_deps//pyyaml"],
+)
+
+py_library(
+    name = "kubernetes_manifests",
+    srcs = ["check_pdb_availability.py"],
+    imports = ["../../.."],
+    visibility = ["//src:__subpackages__"],
+    deps = ["@dev_python_deps//pyyaml"],
+)

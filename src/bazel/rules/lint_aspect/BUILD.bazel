@@ -1,0 +1,17 @@
+"""Export lint aspect macros, BUILD file docstring fixers, and formatting target generators."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
+
+py_binary(
+    name = "build_headers",
+    srcs = ["build_headers.py"],
+)
+
+py_test(
+    name = "build_headers_test",
+    srcs = ["build_headers_test.py"],
+    deps = [":build_headers"],
+)
