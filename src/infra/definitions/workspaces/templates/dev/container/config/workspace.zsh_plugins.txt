@@ -1,0 +1,7 @@
+# Declares pinned Zsh plugins and prompt themes resolved by Antidote during workspace shell initialization.
+
+# keep-sorted start
+mafredri/zsh-async pin:ee1d11b68c38dec24c22b1c51a45e8a815a79756
+sindresorhus/pure kind:fpath pin:90c6a129b46bde1d656244c68a3ae142b78e0cc3
+zsh-users/zsh-autosuggestions pin:e52ee8ca55bcc56a17c828767a3f98f22a68d4eb
+# keep-sorted end

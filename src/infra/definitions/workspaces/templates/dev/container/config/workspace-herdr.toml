@@ -1,0 +1,12 @@
+# Configures default settings, theme options, and non-interactive onboarding flags for the Herdr terminal assistant.
+
+onboarding = false
+
+[theme]
+name = "dracula"
+
+[theme.custom]
+surface_dim = "#6272a4"
+
+[terminal]
+new_cwd = "follow"

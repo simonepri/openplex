@@ -1,0 +1,33 @@
+// Configures default UI layouts, keybindings, and persistent session options for the Zellij terminal multiplexer.
+
+simplified_ui true
+osc8_hyperlinks true
+
+
+ui {
+    pane_frames {
+        hide_session_name true
+    }
+}
+
+web_client {
+    font "Menlo, Monaco, monospace"
+}
+
+themes {
+    snazzy {
+        fg "#eff0eb"
+        bg "#282a36"
+        black "#282a36"
+        red "#ff5c57"
+        green "#5af78e"
+        yellow "#f3f99d"
+        blue "#57c7ff"
+        magenta "#ff6ac1"
+        cyan "#9aedfe"
+        white "#f1f1f0"
+        orange "#ff9f43"
+    }
+}
+
+theme "snazzy"
