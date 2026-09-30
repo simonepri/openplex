@@ -1,0 +1,89 @@
+# Mutates Kubescape Operator probe timings to add startup tolerance and prevent timeout crash loops under load.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: kubescape-probe-tolerance
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: tolerate-operator-probe-timeouts
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              names: [operator]
+              namespaces: [kubescape-system]
+              operations: [CREATE, UPDATE]
+      mutate:
+        patchStrategicMerge:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: operator
+                    livenessProbe:
+                      failureThreshold: 6
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+                    readinessProbe:
+                      failureThreshold: 3
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+    - name: tolerate-kubescape-probe-timeouts
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              names: [kubescape]
+              namespaces: [kubescape-system]
+              operations: [CREATE, UPDATE]
+      mutate:
+        patchStrategicMerge:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: kubescape
+                    livenessProbe:
+                      failureThreshold: 6
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+                    readinessProbe:
+                      failureThreshold: 3
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+    - name: tolerate-prometheus-exporter-probe-timeouts
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Deployment]
+              names: [prometheus-exporter]
+              namespaces: [kubescape-system]
+              operations: [CREATE, UPDATE]
+      mutate:
+        patchStrategicMerge:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: prometheus-exporter
+                    livenessProbe:
+                      failureThreshold: 6
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+                    readinessProbe:
+                      failureThreshold: 3
+                      periodSeconds: 10
+                      timeoutSeconds: 5
