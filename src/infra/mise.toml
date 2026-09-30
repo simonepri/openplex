@@ -1,0 +1,23 @@
+# Defines infrastructure and cluster lifecycle management tasks for local and cloud fleets.
+
+[tasks.up]
+description = "Bring up cluster infrastructure and verify GitOps bootstrap"
+run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //src/infra/terraform/lifecycle:up -- "$@"'
+
+[tasks.down]
+description = "Stop the local fleet and retain cluster data"
+run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //src/infra/terraform/lifecycle:down -- "$@"'
+
+[tasks.destroy]
+description = "Destroy local infrastructure and its cluster data"
+run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //src/infra/terraform/lifecycle:down -- --destroy "$@"'
+
+[tasks.seed]
+description = "Seed container images into OCI registry"
+# LINT.IfChange(local-origin-registry-publication-root)
+run = 'WORKLOAD_REGISTRY="${WORKLOAD_REGISTRY:-127.0.0.1:15100/000000000000/us-east-1}" WORKLOAD_REGISTRY_INSECURE="${WORKLOAD_REGISTRY_INSECURE:-true}" bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //src/infra/images:seed -- "$@"'
+# LINT.ThenChange(//src/infra/argocd/components/dragonfly_peer/helm/client-image.yaml:local-origin-registry-publication-root,//src/infra/terraform/lifecycle/cluster_up.py:local-origin-registry-publication-root)
+
+[tasks.browser]
+description = "Open Chrome with isolated proxy routed to cluster endpoints"
+run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //src/infra/tools/cloud_emulator/access:browser -- "$@"'

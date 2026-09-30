@@ -1,0 +1,5 @@
+"""Defines package sources and check targets for authored OpenTofu deployments and infrastructure components."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
