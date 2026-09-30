@@ -1,0 +1,5 @@
+"""Claims Bazel architecture documentation source files for the build graph."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()

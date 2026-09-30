@@ -1,0 +1,1252 @@
+# Define static analysis pattern rules for OpenGrep detecting prohibited syntax and insecure practices.
+
+rules:
+  # Snapshot from p/github-actions, version jQTzq34 (2026-08-23).
+  - id: yaml.github-actions.security.allowed-unsecure-commands.allowed-unsecure-commands
+    languages: [yaml]
+    severity: ERROR
+    message: Do not re-enable deprecated GitHub Actions set-env/add-path commands.
+    paths:
+      include: [/.github/workflows/**/*.yml, /.github/workflows/**/*.yaml]
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-inside: "{env: ...}"
+              - pattern: "ACTIONS_ALLOW_UNSECURE_COMMANDS: true"
+          - patterns:
+              - pattern-inside: |
+                  env:
+                    ...
+              - pattern: "ACTIONS_ALLOW_UNSECURE_COMMANDS: true"
+
+  # Snapshot from p/secrets (2026-08-23). These formats are intentionally
+  # specific enough to complement, rather than duplicate, gitleaks.
+  - id: generic.secrets.security.detected-aws-access-key-id
+    languages: [regex]
+    severity: ERROR
+    message: AWS access key ID detected.
+    pattern-regex: "\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b"
+
+  - id: generic.secrets.security.detected-private-key
+    languages: [regex]
+    severity: ERROR
+    message: Private key material must not be committed.
+    pattern-regex: "-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----"
+
+  # Maintained Semgrep Community-rule equivalents, snapshot locally so CI does
+  # not fetch a mutable registry configuration.
+
+  - id: python.lang.security.audit.subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: subprocess with shell=True can execute attacker-controlled input.
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FUNC(..., shell=True, ...)
+          - pattern: $MODULE.$FUNC(..., shell=True, ...)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: "^(call|check_call|check_output|Popen|run)$"
+
+  - id: python.lang.security.audit.exec-used
+    languages: [python]
+    severity: ERROR
+    message: exec() is not permitted in repository tooling.
+    pattern: exec(...)
+
+  - id: bash.lang.security.audit.curl-pipe-shell
+    languages: [bash]
+    severity: ERROR
+    message: Do not pipe network content directly into a shell.
+    patterns:
+      - pattern-either:
+          - pattern: curl ... | sh
+          - pattern: curl ... | bash
+          - pattern: curl ... | sudo bash
+          - pattern: curl ... | /bin/sh
+          - pattern: curl ... | /bin/bash
+          - pattern: curl ... | env bash
+          - pattern: wget ... | sh
+          - pattern: wget ... | bash
+          - pattern: wget ... | sudo bash
+          - pattern: wget ... | /bin/sh
+          - pattern: wget ... | /bin/bash
+          - pattern: wget ... | env bash
+
+  - id: generic.security.audit.curl-pipe-shell
+    languages: [generic]
+    severity: ERROR
+    message: Do not pipe network content directly into a shell in IaC and Kubernetes manifests.
+    paths:
+      include: ["*.yaml", "*.yml", "*.tf"]
+      exclude: ["/src/bazel/checks/opengrep/**"]
+    patterns:
+      - pattern-either:
+          - pattern: curl ... | sh
+          - pattern: curl ... | bash
+          - pattern: curl ... | sudo bash
+          - pattern: curl ... | /bin/sh
+          - pattern: curl ... | /bin/bash
+          - pattern: curl ... | env bash
+          - pattern: wget ... | sh
+          - pattern: wget ... | bash
+          - pattern: wget ... | sudo bash
+          - pattern: wget ... | /bin/sh
+          - pattern: wget ... | /bin/bash
+          - pattern: wget ... | env bash
+
+  # Repository-specific ownership rules cover architecture constraints that
+  # are outside the scope of the generic community packs.
+  - id: repository.architecture.no-crossplane-apis
+    languages: [regex]
+    severity: ERROR
+    message: Crossplane APIs are outside the selected infrastructure ownership model.
+    paths:
+      include: [/src/infra/argocd/components/**/*.yaml, /src/infra/argocd/components/**/*.yml]
+    # yamllint disable-line rule:line-length
+    pattern-regex: "(?m)^(?:apiVersion:\\s*(?:pkg|apiextensions)\\.crossplane\\.io|kind:\\s*(?:Provider|Composition|CompositeResourceDefinition))\\s*$"
+
+  - id: repository.security.cluster-secret-store-requires-exact-namespace-conditions
+    languages: [regex]
+    severity: ERROR
+    message: ClusterSecretStores must positively allow exact system namespaces; an unconditioned store exposes its provider identity cluster-wide.
+    paths:
+      include: [/src/infra/argocd/components/**/*.yaml, /src/infra/argocd/components/**/*.yml]
+    # Match a ClusterSecretStore document unless its conditions contain an
+    # exact namespace-name allow-list before the next YAML document boundary.
+    # yamllint disable-line rule:line-length
+    pattern-regex: '(?ms)(?:^apiVersion:\s*external-secrets\.io/v(?:1|1beta1)\s*$(?:(?!^---\s*$).)*?^kind:\s*ClusterSecretStore\s*$|^kind:\s*ClusterSecretStore\s*$(?:(?!^---\s*$).)*?^apiVersion:\s*external-secrets\.io/v(?:1|1beta1)\s*$)\n(?!(?:(?!^---\s*$).)*?^spec:\s*$\n(?:(?!^---\s*$).)*?^  conditions:\s*$\n(?:(?!^---\s*$).)*?^    - namespaces:\s*$)'
+
+  - id: repository.security.cluster-secret-store-forbids-broad-namespace-conditions
+    languages: [regex]
+    severity: ERROR
+    message: ClusterSecretStores must use exact namespace names, never selectors or regular expressions.
+    paths:
+      include: [/src/infra/argocd/components/**/*.yaml, /src/infra/argocd/components/**/*.yml]
+    # yamllint disable-line rule:line-length
+    pattern-regex: '(?ms)(?:^apiVersion:\s*external-secrets\.io/v(?:1|1beta1)\s*$(?:(?!^---\s*$).)*?^kind:\s*ClusterSecretStore\s*$|^kind:\s*ClusterSecretStore\s*$(?:(?!^---\s*$).)*?^apiVersion:\s*external-secrets\.io/v(?:1|1beta1)\s*$)\n(?:(?!^---\s*$).)*?^\s{4}-\s+(?:namespaceRegexes|namespaceSelector):\s*'
+
+  - id: repository.security.cluster-secret-store-forbids-team-namespaces
+    languages: [regex]
+    severity: ERROR
+    message: Team namespaces must use their namespaced, provider-scoped SecretStore and cannot be allowed on a cluster-scoped ClusterSecretStore.
+    paths:
+      include: [/src/infra/argocd/components/**/*.yaml, /src/infra/argocd/components/**/*.yml]
+    # yamllint disable-line rule:line-length
+    pattern-regex: '(?ms)(?:^apiVersion:\s*external-secrets\.io/v(?:1|1beta1)\s*$(?:(?!^---\s*$).)*?^kind:\s*ClusterSecretStore\s*$|^kind:\s*ClusterSecretStore\s*$(?:(?!^---\s*$).)*?^apiVersion:\s*external-secrets\.io/v(?:1|1beta1)\s*$)\n(?:(?!^---\s*$).)*?^\s{8}-\s+team-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\s*$'
+
+  - id: repository.security.eks-node-role-disallowed-policy
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Arbitrary IAM policies must not be attached to the EKS worker node role; use an EKS Pod Identity association instead. Only core worker node policies (AmazonEKSWorkerNodePolicy, AmazonEKS_CNI_Policy, AmazonEC2ContainerRegistryReadOnly) may be attached to the node role.
+    paths:
+      include:
+        - /src/infra/terraform/**/*.tf
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    # yamllint disable-line rule:line-length
+    pattern-regex: '(?ms)(?:resource\s+"aws_iam_role_policy_attachment"\s+"[^"]+"\s*\{(?=(?:(?!^\}).)*?\brole\s*=\s*aws_iam_role\.nodes)(?!(?:(?!^\}).)*?\bpolicy_arn\s*=\s*"arn:aws:iam::aws:policy/(?:AmazonEKSWorkerNodePolicy|AmazonEKS_CNI_Policy|AmazonEC2ContainerRegistryReadOnly)")(?:(?!^\}).)*?^\}|resource\s+"aws_iam_role_policy"\s+"[^"]+"\s*\{(?=(?:(?!^\}).)*?\brole\s*=\s*aws_iam_role\.nodes)(?:(?!^\}).)*?^\})'
+
+  - id: repository.lint.missing-file-purpose-header
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Authored source files must open with a purpose header within the first 5 lines, followed by one empty line before code or package declarations.
+    paths:
+      include: ["/**"]
+      exclude:
+        # Media & graphics
+        - "**/*.svg"
+        - "**/*.png"
+        - "**/*.gif"
+        - "**/*.ico"
+        - "**/*.jpg"
+        - "**/*.jpeg"
+        - "**/*.webp"
+        - "**/*.avif"
+        - "**/*.mp4"
+        - "**/*.webm"
+        # Comment-incompatible data formats
+        - "**/*.json"
+        - "**/.*.json"
+        - "**/*.ipynb"
+        # Machine-managed lockfiles & patches
+        - "**/*.lock"
+        - "**/*.lock.json"
+        - "**/*.lock.hcl"
+        - "**/*.patch"
+        - "**/MODULE.bazel.lock"
+        - "**/pnpm-lock.yaml"
+        - "**/uv.lock"
+        - "**/requirements*.txt"
+        - "**/go.sum"
+        - "**/.bazelversion"
+        # Documentation
+        - "**/*.md"
+        # Legal and license text
+        - "LICENSE"
+        - "NOTICE"
+        # Build & semgrep fixtures
+        - "/src/bazel/checks/opengrep/**"
+    # yamllint disable-line rule:line-length
+    pattern-regex: '\A(?!(?:#!.*\n)?(?://go:build.*\n\n)?(?:(?:#[^\n]*\n)+|(?://[^\n]*\n)+|(?:--[^\n]*\n)+|"""[\s\S]*?"""\n|/\*[\s\S]*?\*/\n|<!--[\s\S]*?-->\n|\{\{-?\s*/\*[\s\S]*?\*/\s*-?\}\}\n)\n)'
+
+  # An unowned marker is a wish; a named one is a commitment somebody can be
+  # asked about. The single-character classes keep the pattern and this comment
+  # from matching themselves, so the rule needs no path exclusion.
+  - id: repository.lint.untagged-work-marker
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      A work marker (such as TODO(owner):, FIXME(owner):, HACK(owner):, or NOTE(owner):) must name an owner or ticket before its colon.
+    paths:
+      include:
+        # keep-sorted start
+        - /src/**/*.bzl
+        - /src/**/*.go
+        - /src/**/*.hcl
+        - /src/**/*.py
+        - /src/**/*.sh
+        - /src/**/*.tf
+        - /src/**/*.ts
+        - /src/**/*.yaml
+        - /src/**/*.yml
+        # keep-sorted end
+      exclude: ["/src/bazel/checks/opengrep/**", "/src/**/templates/**", "**/.terragrunt-cache/**"]
+    pattern-regex: '\b(?:TOD[O]|FIXM[E]|HAC[K]|NOT[E])\b(?!\([^)]+\):)'
+
+  - id: repository.security.no-gpu-profiling-admin-relaxation
+    languages: [regex]
+    severity: ERROR
+    message: The shared GPU driver must keep profiling restricted to admin users.
+    paths:
+      include: [/src/**]
+      # This file states the pattern it searches for.
+      exclude: ["/src/bazel/checks/opengrep/**"]
+    pattern-regex: "NVreg_RestrictProfilingToAdminUsers=0"
+
+  - id: repository.lint.no-branded-internal-paths
+    languages: [regex]
+    severity: ERROR
+    message: Internal paths must describe the component, not the installation name.
+    paths:
+      include: [/src/**, /.github/**]
+      exclude: ["/src/infra/docs/**", "/src/bazel/checks/opengrep/**"]
+    pattern-regex: '/(?:etc(?:/ssl)?|opt|var/lib)/openplex(?:[-/]|\b)'
+
+  - id: repository.lint.no-branded-terraform-resources
+    languages: [regex]
+    severity: ERROR
+    message: Terraform resource names, bucket names, and installation identifiers must be unbranded and configurable, never containing hardcoded 'openplex'.
+    paths:
+      include:
+        - /src/infra/terraform/**/*.tf
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+    pattern-regex: '(?i)(?:installation_name\s*=\s*"openplex"|bucket\s*=\s*"openplex|dynamodb_table\s*=\s*"openplex|arn:aws:[^"]*openplex)'
+
+  - id: repository.security.strict-launch-template-imds-hop-limit
+    languages: [regex]
+    severity: ERROR
+    message: AWS launch template http_put_response_hop_limit must be strictly set to 2 for EKS Pod Identity / IMDSv2 pod traversal while preventing SSRF token forwarding beyond the pod.
+    paths:
+      include:
+        - /src/infra/terraform/**/*.tf
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+    pattern-regex: 'http_put_response_hop_limit\s*=\s*(?!2\b)[0-9]+'
+
+  - id: repository.lint.forbidden-domain-patterns
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Forbidden domain or invalid intranet email address detected. Legacy domains (example.test, openplex.xyz, openplex.internal) and hardcoded tenant domains are forbidden outside deployments. Intranet hostnames must use 'corp.local.internal' (or '*.corp.local.internal'), never '<subdomain>.local.internal' without the 'corp.' prefix. User identity emails must use the public domain (e.g. '@local.internal'), never '@corp.local.internal'.
+    paths:
+      include: [/src/**, /.github/**]
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+        - "/src/infra/terraform/deployments/**"
+        - "/src/infra/docs/**"
+        - "**/*test*"
+        - "**/*_test.*"
+    pattern-regex: '(?i)\b[a-zA-Z0-9-]+\.(?<!corp\.)local\.internal\b|\b[a-zA-Z0-9._%+-]+@corp\.local\.internal\b|\b[a-zA-Z0-9.-]*\b(?:example\.test|openplex\.(?:xyz|internal))\b'
+
+  - id: repository.architecture.no-hardcoded-route53-nameservers
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded AWS Route 53 nameserver hostnames (e.g. 'ns-*.awsdns-*') detected. DNS delegations and upstream nameservers must be configured at deployment time via deployment inputs, never hardcoded into module variables or reusable definitions.
+    paths:
+      include:
+        - /src/infra/terraform/**/*.tf
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+    pattern-regex: '(?i)\bns-[0-9]+\.awsdns-[0-9]+(?:\.co\.uk|\.com|\.net|\.org)\b'
+
+  - id: repository.architecture.no-tenant-domains-in-components
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded tenant domain (openplex.*) or tenant email detected in reusable components or Terraform modules. Argo CD components and Terraform modules must be cloud-, region-, tenant-, and profile-agnostic and parameterized downstream from deployments. Use 'configured-by-applicationset.invalid' placeholders or variable inputs.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+        - /src/infra/terraform/components/**/*.tf
+        - /src/infra/terraform/topologies/**/*.tf
+        - /src/infra/definitions/**/*.yaml
+        - /src/infra/definitions/**/*.yml
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
+        - "**/*test*"
+        - "**/*_test.*"
+        - /src/infra/argocd/components/homer/**
+    pattern-regex: '(?i)\bopenplex\.(?!git\b)[a-z0-9-]+\b|\b[a-zA-Z0-9._%+-]+@openplex\.[a-z0-9-]+\b'
+
+  - id: repository.architecture.hardcoded-intranet-dns
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded intranet DNS/URL detected ('https://...corp.local.internal' or '*.c.corp.local.internal'). Workloads, tooling, and reusable definitions must consume endpoints dynamically via environment variables, CLI flags, or in-cluster Service DNS. If hardcoding is intentional (e.g., local fallback or test mock), annotate with '# nosemgrep: repository.architecture.hardcoded-intranet-dns'.
+    paths:
+      include:
+        - /src/examples/**
+        - /src/infra/definitions/teams/**
+        - /src/infra/images/**
+        - /src/infra/tools/**
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+        - "/src/infra/tools/cloud_emulator/**"
+    pattern-regex: '(?i)\b(?:https?://)?[a-zA-Z0-9.-]+\.(?:c\.)?corp\.local\.internal\b'
+
+  - id: repository.architecture.no-hardcoded-intranet-domains-in-components
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Literal intranet domains (e.g. 'corp.local.internal' or '*.c.corp.local.internal') must not be hardcoded in production component manifests; parameterize via OpenTofu / ApplicationSets or use 'configured-by-applicationset'.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
+        - "**/*test*"
+        - "**/*_test.*"
+    pattern-regex: '(?i)\b(?:[a-zA-Z0-9.-]+\.)?corp\.local\.internal\b'
+
+  - id: repository.architecture.no-hardcoded-workload-urls
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded HTTP/HTTPS URLs or external DNS endpoints are forbidden in workloads and team manifests. Endpoints must be passed dynamically via environment variables, ConfigMaps, or in-cluster Service DNS (e.g., 'http://<service>.<namespace>.svc.cluster.local:<port>'). If intentional for testing, annotate with '# nosemgrep: repository.architecture.no-hardcoded-workload-urls'.
+    paths:
+      include:
+        - /src/examples/**
+        - /src/infra/definitions/teams/**
+      exclude:
+        - "**/*.schema.json"
+        - "/src/bazel/checks/opengrep/**"
+    pattern-regex: '(?i)\bhttps?://[a-zA-Z0-9.-]+(?::[0-9]+)?(?:/[^\s"''>]*)?'
+
+  - id: repository.architecture.forbid-firstparty-scoped-labels
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      First-party platform labels and annotations must be flat and unprefixed (e.g. 'team', 'environment', 'gpu-class', 'dashboard-url', 'automount-service-account-token'). Inventing custom scoped domain prefixes (such as 'openplex.io/*', 'openplex.dev/*', 'openplex.*/*') is forbidden.
+    paths:
+      include:
+        - /src/**/*.yaml
+        - /src/**/*.yml
+        - /src/**/*.json
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+    pattern-regex: '(?i)["'']?\bopenplex\.(?!invalid/)[a-z0-9.-]+/[a-z0-9_.-]+'
+
+  - id: repository.lint.no-semgrep-gate-bypass
+    languages: [bash]
+    severity: ERROR
+    message: The Semgrep gate must not discard its scan result.
+    paths:
+      include: [/src/bazel/checks/**/*.sh]
+    pattern-either:
+      - pattern: semgrep ... || true
+      - pattern: opengrep ... || true
+      - pattern: '"$opengrep" ... || true'
+      - pattern: semgrep ... || exit 0
+      - pattern: opengrep ... || exit 0
+      - pattern: '"$opengrep" ... || exit 0'
+
+  # A block scalar longer than 15 lines under a program key, or introduced by an
+  # interpreter, is a program. Move it into a file beside its manifest and mount
+  # it, as storage_vault_copier does with copier.py via configMapGenerator. Code
+  # in a block scalar is unreachable by ruff, shellcheck, and the type checkers.
+  - id: repository.lint.embedded-program-bare-block
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Program embedded in a YAML sequence block scalar. Move it into a file beside its manifest and mount it through configMapGenerator.
+    paths:
+      include:
+        # keep-sorted start
+        - /src/infra/argocd/**/*.tftpl
+        - /src/infra/argocd/**/*.tpl
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/infra/terraform/**/*.tftpl
+        - /src/infra/terraform/**/*.tpl
+        - /src/infra/terraform/**/*.yaml
+        - /src/infra/terraform/**/*.yml
+        # keep-sorted end
+      exclude:
+        - /src/infra/argocd/components/homer/**
+    pattern-regex: |-
+      (?mx)
+        ^[ \t]*-?[ \t]*(?:
+            command[ \t]*:[ \t]*\[?[ \t]*["']?(?:/\S*/)?(?:sh|bash|ash|dash|zsh|python3?|clickhouse-local|psql|jq|node|ruby|perl)\b
+          | -[ \t]*["']?(?:/\S*/)?(?:sh|bash|ash|dash|zsh|python3?|clickhouse-local|psql|jq|node|ruby|perl)["']?[ \t]*$
+        ).*\n
+        (?:[^\n]*\n){0,3}?
+        (?P<ind>[ \t]*)-[ \t]*\|[-+]?[ \t]*\n
+        (?:(?P=ind)[ \t]+.*\n){16,}
+
+  - id: repository.lint.embedded-program-keyed-block
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Program embedded in a YAML block scalar under a program key. Move it into a file beside its manifest and mount it through configMapGenerator.
+    paths:
+      include:
+        # keep-sorted start
+        - /src/infra/argocd/**/*.tftpl
+        - /src/infra/argocd/**/*.tpl
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/infra/terraform/**/*.tftpl
+        - /src/infra/terraform/**/*.tpl
+        - /src/infra/terraform/**/*.yaml
+        - /src/infra/terraform/**/*.yml
+        # keep-sorted end
+    pattern-regex: '(?m)^(?P<ind>[ \t]*)-?[ \t]*(?:command|args|script|source|content)[ \t]*:[ \t]*\|[-+]?[ \t]*\n(?:(?P=ind)[ \t]+.*\n){16,}'
+
+  # A key named like a source file declares its own language, so it is a program
+  # whatever its statement density. Scanned repository-wide.
+  - id: repository.lint.embedded-program-source-key
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Source-named key carries an embedded program. Keep the real file beside its manifest and mount it through configMapGenerator.
+    paths:
+      include:
+        # keep-sorted start
+        - /src/**/*.tftpl
+        - /src/**/*.tpl
+        - /src/**/*.yaml
+        - /src/**/*.yml
+        # keep-sorted end
+    pattern-regex: '(?m)^(?P<ind>[ \t]*)-?[ \t]*[\w.-]+\.(?:py|sh|bash|sql|lua|rb|js)[ \t]*:[ \t]*\|[-+]?[ \t]*\n(?:(?P=ind)[ \t]+.*\n){16,}'
+
+  - id: repository.lint.no-multiline-mise-task
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Multiline task code (run = ''' or run = """) in mise.toml is forbidden. Extract scripts into dedicated executable files.
+    paths:
+      include:
+        - "mise.toml"
+        - "**/mise.toml"
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+    pattern-regex: |-
+      (?m)^\s*run\s*=\s*(?:'''|""")
+
+  # Infrastructure tools outside the selected ownership model. Reaching for one
+  # means the Terragrunt/OpenTofu/Argo CD split is being worked around rather than
+  # fixed.
+  - id: repository.architecture.forbidden-infrastructure-tool
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Kapitan, Reclass, Burrito and Jinja2 are outside the selected infrastructure ownership model.
+    paths:
+      include: [/src/examples/**, /src/infra/**]
+      exclude: ["*.md"]
+    pattern-regex: "Kapitan|Reclass|Burrito|Jinja2"
+
+  # A cell must reach ctrl facts through ctrl_handoff. Naming a ctrl provider
+  # dependency directly couples the cell to one ctrl unit's internals.
+  - id: repository.architecture.cell-bypasses-ctrl-handoff
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Cell units must consume ctrl API, identity, network and broker facts through ctrl_handoff.
+    paths:
+      include: [/src/infra/terraform/live/cell_*/**/*.hcl]
+    pattern-regex: 'config_path\s*=\s*"[.][.]/[.][.]/ctrl[-_][^"/]+/(?:eks_cluster|gke_cluster|vpc)"'
+
+  # The AWS registry is a global authority: owning or consuming it per-cluster
+  # produces two registries that disagree about which digest shipped.
+  - id: repository.architecture.cluster-owned-aws-registry
+    languages: [regex]
+    severity: ERROR
+    message: AWS registries must be owned and consumed through global-aws.
+    paths:
+      include: [/src/infra/terraform/live/cell_aws_*/**/*.hcl, /src/infra/terraform/live/ctrl_aws_*/**/*.hcl]
+    pattern-regex: '(?m)(?:components_source\}//container_registry|config_path\s*=\s*"[^"]*ctrl[-_][^"/]*/container_registry")'
+
+  # API and artifact surfaces removed with the custom dataset layer.
+  - id: repository.lint.retired-api-surface
+    languages: [regex]
+    severity: ERROR
+    message: Retired custom API or artifact surfaces remain.
+    paths:
+      exclude: ["mise.toml", "/src/bazel/checks/opengrep/**"]
+    pattern-regex: 'DatasetVersion|DatasetAlias|PROTOBUF_|src/proto\b|materialization[.]json|_artifact[.]json'
+
+  # Argo CD owns rendered manifests. A template delimiter here means something
+  # renders on the way in, which Argo CD cannot reproduce or diff.
+  - id: repository.architecture.unrendered-template-in-manifest
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Templating must never reach Argo CD-owned manifests; the delimiter means the file is rendered before Argo CD sees it.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+        - /src/infra/argocd/components/**/*.j2
+    pattern-regex: '\{[%#]|[%#]\}'
+
+  # A NetworkPolicy written against one CNI's CRD only enforces on that CNI.
+  # networking.k8s.io/v1 is the portable boundary every engine implements, so a
+  # cell can change CNI without silently losing its isolation.
+  - id: repository.architecture.engine-specific-network-policy
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Engine-specific network policy APIs are forbidden; author a networking.k8s.io/v1 NetworkPolicy.
+    paths:
+      include:
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/examples/**/*.yaml
+    pattern-regex: |-
+      (?m)^[ \t]*(apiVersion:[ \t]*(cilium[.]io|projectcalico[.]org|crd[.]antrea[.]io)/|kind:[ \t]*(CiliumNetworkPolicy|CiliumClusterwideNetworkPolicy|GlobalNetworkPolicy|ClusterNetworkPolicy|AntreaNetworkPolicy)[ \t]*$)
+
+  # A NetworkPolicy egress rule that specifies ports without a to: destination
+  # unintentionally permits egress to any destination IP on those ports.
+  - id: repository.security.networkpolicy-egress-missing-to
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      NetworkPolicy egress rules specifying ports must define an explicit destination (to:).
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    # yamllint disable-line rule:line-length
+    pattern-regex: '(?ms)^[ \t]*egress:[ \t]*$(?:(?!^\s{0,2}[^#\s]).)*?^[ \t]+-[ \t]+ports:[ \t]*$(?!(?:(?!(?:^\s{0,4}-|^\s{0,2}[^#\s]|^---)).)*?^[ \t]+to:[ \t]*)'
+
+  # Documentation work markers in comments must name an owner or ticket before their colon.
+  - id: repository.lint.untagged-doc-work-marker
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      A documentation work marker must name an owner or ticket in parentheses before its colon, e.g. <!-- TODO(owner): ... -->.
+    paths:
+      include: [/src/**/*.md]
+    pattern-regex: '<!--\s*(?:TOD[O]|FIXM[E]|HAC[K]|NOT[E])\b(?!\([^)]+\):)'
+
+  # Virtual S3 URIs across workloads, manifests, scripts, and documentation must adhere
+  # to the canonical coordinate format s3://<cell>/<class>/... or s3://global/<class>/...
+  # The sole permitted template variable token is __WORKLOAD_CELL_VIRTUAL__.
+  # Interactions with external physical buckets or doc placeholders require an explicit
+  # inline suppression with justification.
+  - id: repository.storage.canonical-virtual-s3-uri
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Virtual S3 URIs must match the canonical format s3://<cell>/<class>/... or s3://global/<class>/... where <cell> is a concrete cell name (e.g. aws-usw2), global, or the unified token __WORKLOAD_CELL_VIRTUAL__, and <class> is home, scratch, backups, vault, meta, or users (per src/infra/docs/operator.md). External physical buckets or placeholders require an explicit '# nosemgrep: repository.storage.canonical-virtual-s3-uri' with justification.
+    paths:
+      include:
+        - /src/**
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - /src/infra/terraform/**/*.tf
+        - "**/*_test.*"
+        # OpenCost requires raw AWS Athena CUR physical bucket in embedded JSON (where inline comments are invalid)
+        - /src/infra/argocd/components/opencost/kustomize/cloud-integration.secret.yaml
+        # S3 Resolver Go service error message format documentation string
+        - /src/infra/tools/s3_resolver/server/main.go
+    pattern-regex: |-
+      (?<!#)\bs3://(?!(?:global|__WORKLOAD_CELL_VIRTUAL__|[a-z0-9]+(?:-[a-z0-9]+)+|\$\{[a-zA-Z0-9_]+\}|\$[a-zA-Z0-9_]+)/(?:home|scratch|backups|vault|meta|users)\b)[a-zA-Z0-9_<][a-zA-Z0-9_${}<>.-]*
+
+  # Rejects all Kubernetes core/extension APIs removed between v1.16 and v1.32+.
+  # Upstream reference: https://kubernetes.io/docs/reference/using-api/deprecation-guide/
+  - id: repository.kubernetes.deprecated-api-versions
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Removed Kubernetes API version detected. Manifests must use modern GA APIs (batch/v1, policy/v1, networking.k8s.io/v1, apps/v1, rbac.authorization.k8s.io/v1, admissionregistration.k8s.io/v1, apiextensions.k8s.io/v1, autoscaling/v2).
+    paths:
+      include:
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/examples/**/*.yaml
+        - /src/examples/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: >-
+      (?m)^\s*apiVersion:\s*(?:extensions/v1beta1|apps/v1beta[12]|networking\.k8s\.io/v1beta1|batch/v1beta1|policy/v1beta1|rbac\.authorization\.k8s\.io/v1beta[12]|rbac\.authorization\.k8s\.io/v1alpha1|storage\.k8s\.io/v1beta1|admissionregistration\.k8s\.io/v1beta1|apiextensions\.k8s\.io/v1beta1|scheduling\.k8s\.io/v1beta1|certificates\.k8s\.io/v1beta1|coordination\.k8s\.io/v1beta1|discovery\.k8s\.io/v1beta1|autoscaling/v2beta[12]|flowcontrol\.apiserver\.k8s\.io/v1beta[123])\s*$
+
+  # Platform components must not hardcode physical cloud provider regions.
+  # Regions are passed dynamically through cluster annotations or Helm values.
+  - id: repository.architecture.no-hardcoded-cloud-regions
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded cloud region detected in component manifests. Reusable platform components must remain region-agnostic; inject regions dynamically via cluster annotations, Terraform variables, or Helm values.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+        # Centralized cell routing catalog
+        - /src/infra/argocd/components/s3_gateway/kustomize/resolver.yaml
+        - /src/infra/argocd/components/s3_gateway/helm/values.yaml
+        # Cloud billing report ingestion config
+        - /src/infra/argocd/components/opencost/kustomize/cloud-integration.secret.yaml
+        # Karpenter GCP cell-gcp-euw4 node pool and location
+        - /src/infra/argocd/components/karpenter_gcp/**
+        # Karpenter AWS node class placeholder registry
+        - /src/infra/argocd/components/karpenter_aws/**
+        # Kyverno image verification policy references upstream AWS EKS addon registry
+        - /src/infra/argocd/components/kyverno/kustomize/policies.yaml
+        # ClickHouse local S3 backup provider defaults
+        - /src/infra/argocd/components/clickhouse/kustomize/clickhouse-backup-provider.yaml
+        # Team lane local/test registry values
+        - /src/infra/argocd/components/team_lane/helm/values.yaml
+        # Coder template reconciler local dev defaults
+        - /src/infra/argocd/components/coder/kustomize/template-reconciler.cronjob.k8s.yaml
+        - /src/infra/argocd/components/coder/kustomize/template-reconciler.k8s.yaml
+        # Dragonfly peer local client image
+        - /src/infra/argocd/components/dragonfly_peer/helm/client-image.yaml
+        # Local Floci AWS Secrets Manager provider default region
+        - /src/infra/argocd/components/external_secrets/kustomize/cluster-secret-store.yaml
+        - /src/infra/argocd/components/external_secrets/kustomize/secret-records-store.yaml
+    pattern-regex: '\b(?:(?:us|eu|ap|sa|ca|me|af|il)-(?:east|west|central|north|south|northeast|northwest|southeast|southwest)-[1-4]|(?:us|europe|asia|northamerica|southamerica|australia)-(?:east|west|central|north|south)[1-9])\b'
+
+  # Platform components must not hardcode physical cloud provider endpoints.
+  # Storage and service endpoints are passed dynamically through cluster annotations or Terraform variables.
+  - id: repository.architecture.no-hardcoded-cloud-endpoints
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded cloud provider endpoint detected in component manifests. Reusable platform components must remain cloud-agnostic; inject endpoints dynamically via cluster annotations, Terraform variables, or Helm values.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
+        - "**/*test*"
+        - "**/*_test.*"
+        # Local mock runtime TLS certs for Floci localstack emulation
+        - /src/infra/argocd/components/local_runtime_tls/helm/templates/certificates.yaml
+    pattern-regex: '(?i)\b(?:https?://)?(?:[a-zA-Z0-9-]+\.)*(?:s3(?:[-.][a-zA-Z0-9-]+)*\.amazonaws\.com|storage\.googleapis\.com|blob\.core\.windows\.net)\b'
+
+  # Git clone URLs and remote repository endpoints must not be hardcoded in
+  # platform components or workloads. The repository URL is projected dynamically
+  # by Argo CD ApplicationSets from cluster secret annotations.
+  - id: repository.architecture.no-hardcoded-git-urls
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded Git remote URL detected. Platform components and workloads must consume the dynamic repository URL via Argo CD ApplicationSet templating or cluster annotations.
+    paths:
+      include:
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/examples/**/*.yaml
+        - /src/examples/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+    pattern-regex: '(?m)^[ \t]*(?:repoURL|url|repository|source|remote|orgAllowlist):[ \t]*.*?\b(?:git://|https?://github\.com/|git@github\.com:|github\.com/(?!example/|invalid\b|simonepri/))'
+
+  # Gateway IP must be computed dynamically via cidrhost() from the cluster service CIDR.
+  - id: repository.architecture.no-hardcoded-gateway-ipv4
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Literal gateway door IPs (e.g. '172.16.0.11' or '172.31.0.11') must not be hardcoded in OpenTofu deployments; compute dynamically via cidrhost(network.service_cidr, 11).
+    paths:
+      include:
+        - /src/infra/terraform/deployments/**/*.tf
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: '(?m)"control-gateway-ipv4"\s*=\s*"172\.(?:16|31)\.0\.11"'
+
+  # Cloud project ID variables in deployments must not have hardcoded defaults.
+  - id: repository.architecture.no-hardcoded-cloud-project-defaults
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Cloud project variables in OpenTofu deployments must default to null and be supplied explicitly per environment.
+    paths:
+      include:
+        - /src/infra/terraform/deployments/**/variables.tf
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: '(?m)variable\s+"gcp_project"\s*\{[^}]*default\s*=\s*"[a-zA-Z0-9_-]+"'
+
+  # Container image tags must be pinned to immutable releases or digests.
+  - id: repository.security.no-latest-image-tag
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Mutable ':latest' or ':main' container image tag detected. All container images must be pinned to an immutable release tag or sha256 digest.
+    paths:
+      include:
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/examples/**/*.yaml
+        - /src/examples/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+    pattern-regex: '(?m)^\s*image:\s*[''"]?[a-zA-Z0-9_./-]+:(?:latest|main|edge)\b'
+
+  # Workloads and platform capabilities must declare dedicated, isolated namespaces.
+  - id: repository.architecture.no-default-namespace
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Explicit 'namespace: default' detected. All workloads and platform capabilities must declare an isolated, purpose-built namespace.
+    paths:
+      include:
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/examples/**/*.yaml
+        - /src/examples/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/*_test.*"
+    pattern-regex: '(?m)^\s*namespace:\s*[''"]?default[''"]?\s*$'
+
+  # Target cell and control cluster identifiers must not be hardcoded in reusable
+  # component manifests. Cluster identities are injected dynamically by Argo CD.
+  - id: repository.architecture.no-hardcoded-cluster-names
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Target cell or control cluster identifier detected. Cluster identities must not be hardcoded in reusable component manifests and must be injected dynamically via Argo CD ApplicationSet templating or Helm values.
+    paths:
+      include:
+        - /src/infra/argocd/apps/**/*.yaml
+        - /src/infra/argocd/apps/**/*.yml
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+        - "**/values-*.yaml"
+    pattern-regex: '(?m)\b(?:cell|ctrl)-(?:eaws-lh1|aws-[a-z0-9]+|gcp-[a-z0-9]+)\b'
+
+  # Team namespace names (team-*) must not be hardcoded in reusable component namespace selectors.
+  # Reusable components must select team namespaces via standard metadata labels.
+  - id: repository.architecture.no-hardcoded-team-namespaces
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded team namespace name detected in namespace selector. Reusable components must select team namespaces by labels (e.g. matchLabels: app.kubernetes.io/component: storage-projection) rather than static namespace names.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+        - "**/values-*.yaml"
+    pattern-regex: '(?m)^\s*-\s*key:\s*kubernetes\.io/metadata\.name\s*\n\s*operator:\s*In\s*\n\s*values:\s*\[.*team-[a-z0-9]+.*\]'
+
+  # Internal intranet domain names (*.corp.local.internal) must not be hardcoded
+  # in reusable component manifests and route definitions. Ingress routes and
+  # endpoints must be parameterized via Argo CD ApplicationSet domain injection.
+  - id: repository.architecture.no-hardcoded-component-domains
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Internal intranet domain name (*.corp.local.internal) detected. Ingress routes, TLS certificates, and client endpoints must be parameterized via Argo CD ApplicationSet domain injection ($publicDomain, $accessDomain).
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+        - "**/values-*.yaml"
+        - /src/infra/argocd/components/external_secrets/kustomize/secret-records-*.yaml
+        - /src/infra/argocd/components/dex/kustomize/dex-config.secret.yaml
+        - /src/infra/argocd/components/headlamp/kustomize/external-secrets.yaml
+        - /src/infra/argocd/components/coder/helm/values.yaml
+        - /src/infra/argocd/components/coder/kustomize/template-reconciler.cronjob.k8s.yaml
+        - /src/infra/argocd/components/coder/kustomize/template-reconciler.k8s.yaml
+        - /src/infra/argocd/components/s3_gateway/helm/values.yaml
+        - /src/infra/argocd/components/team_lane/helm/values.yaml
+        - /src/infra/argocd/components/clickhouse/kustomize/clickhouse-backup-provider.yaml
+        - /src/infra/argocd/components/routing_registry/helm/routes.yaml
+    pattern-regex: '(?m)\b[a-zA-Z0-9.-]+\.corp\.local\.internal\b'
+
+  # Floci local cluster gateway or Git server IPs (172.19.255.20 or 172.19.255.21)
+  # must not be hardcoded in reusable component manifests.
+  - id: repository.architecture.no-hardcoded-floci-ips
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded Floci local cluster gateway or Git server IP (172.19.255.20 or 172.19.255.21) detected. Endpoints must be resolved via DNS or injected dynamically through Argo CD annotations.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+        - /src/infra/argocd/components/coder/kustomize/template-reconciler.cronjob.k8s.yaml
+        - /src/infra/argocd/components/coder/kustomize/template-reconciler.k8s.yaml
+        - /src/infra/argocd/components/dex/kustomize/dex-config.secret.yaml
+        - /src/infra/argocd/components/external_secrets/kustomize/secret-records-*.yaml
+        - /src/infra/argocd/components/team_lane/helm/values.yaml
+    pattern-regex: '(?m)\b172\.19\.255\.(?:20|21)\b'
+
+  # Hardcoded IP addresses in service URLs and connection endpoints must not be
+  # used in reusable component manifests. Endpoints must be resolved via DNS or
+  # injected dynamically.
+  - id: repository.architecture.no-hardcoded-ip-urls
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded IP address in endpoint URL detected. Reusable component manifests must resolve endpoints via DNS hostnames (e.g. *.svc.cluster.local) or inject them dynamically via Argo CD.
+    paths:
+      include:
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+        - "**/values-*.yaml"
+        - /src/infra/argocd/components/external_secrets/kustomize/secret-records-*.yaml
+        - /src/infra/argocd/components/dex/kustomize/dex-config.secret.yaml
+        - /src/infra/argocd/components/coder/kustomize/template-reconciler.cronjob.k8s.yaml
+        - /src/infra/argocd/components/coder/kustomize/template-reconciler.k8s.yaml
+        - /src/infra/argocd/components/**/database.yaml
+        - /src/infra/argocd/components/clickhouse/kustomize/clickhouse-backup-provider.yaml
+    pattern-regex: '(?m)\b(?:https?|grpcs?|git)://(?!127\.0\.0\.1|192\.0\.2\.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
+
+  # Base component Helm values files must not hardcode private cluster-local domains
+  # (*.corp.local.internal). Domains must be injected dynamically via Argo CD
+  # ApplicationSet templating using $accessDomain or $baseDomain.
+  - id: repository.architecture.no-hardcoded-local-domains-in-base-values
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded '.corp.local.internal' domain detected in base component values. Reusable components must not assume a local internal domain; domains must be injected dynamically via ApplicationSets.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/values.yaml
+        - /src/infra/argocd/components/**/values.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+    pattern-regex: '(?m)\b[a-zA-Z0-9_.-]+\.corp\.local\.internal\b'
+
+  # Database and telemetry backup configurations in base component manifests must not
+  # hardcode local emulator endpoints (such as 172.19.0.2:4566). Cloud deployments require
+  # ambient cloud provider endpoints and native Workload Identity / IRSA.
+  - id: repository.architecture.no-mock-endpoints-in-base-manifests
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded local emulator endpoint (172.19.0.2:4566) detected in base component manifest. Base manifests must omit emulator endpoints to allow native cloud routing or isolate emulator overrides to Floci overlays.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+    pattern-regex: '(?m)\b172\.19\.0\.2:4566\b'
+
+  # Control plane role features (such as Dex OIDC grants and CA bundles) must not be gated
+  # on the infrastructure provider (provider == 'floci'). They must be gated on the cluster role (role == 'ctrl').
+  - id: repository.architecture.no-provider-gated-role-features
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Component feature is gated on provider 'floci' instead of cluster role 'ctrl'. Role-scoped platform features (such as Dex reference grants and CA distribution) run across all control clusters regardless of provider.
+    paths:
+      include:
+        - /src/infra/argocd/components/routing_registry/helm/templates/**/*.yaml
+        - /src/infra/argocd/components/routing_registry/helm/templates/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: '(?m)eq\s+\.Values\.target\.provider\s+"floci"'
+
+  # Helm values files referenced in ApplicationSets must not be dynamically interpolated
+  # with cluster-specific names (e.g., 'values-{{ .nameNormalized }}.yaml'). Reusable
+  # components must use values.yaml, with cluster- and role-specific values supplied
+  # dynamically via ApplicationSet templating.
+  - id: repository.architecture.no-cluster-interpolated-values-files
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Cluster-interpolated values filename detected in ApplicationSet. Reusable components must not couple values files to specific cluster names. Use values.yaml and inject dynamic configuration via valuesObject.
+    paths:
+      include:
+        - /src/infra/argocd/apps/**/*.yaml
+        - /src/infra/argocd/apps/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: '(?m)(?<![a-zA-Z0-9_-])values-[^{}\n]*\{\{[^{}\n]*\}\}[^{}\n]*\.ya?ml'
+
+  # Test and lint values files (such as lint-values.yaml or lint-values-*.yaml)
+  # are strictly offline test fixtures for Bazel helm_lint_test targets.
+  # ApplicationSets must never reference lint values files; use values.yaml
+  # and supply runtime overrides via valuesObject or profiles.yaml.
+  - id: repository.architecture.no-lint-values-in-applicationsets
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Test or lint values file referenced in ApplicationSet. lint-values*.yaml files are strictly offline test fixtures for helm_lint_test targets. ApplicationSets must reference values.yaml and inject runtime configuration via valuesObject or profiles.yaml.
+    paths:
+      include:
+        - /src/infra/argocd/apps/**/*.yaml
+        - /src/infra/argocd/apps/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: '(?i)(?<![a-zA-Z0-9_/-])(?:lint[-_]values|[a-z0-9_/-]*lint[a-z0-9_/-]*values|[a-z0-9_/-]*values[a-z0-9_/-]*lint|[a-z0-9_/-]+-lint|lint-[a-z0-9_/-]+)[^\n''"]*\.ya?ml'
+
+  # Secondary IP range for Kubernetes services in GCP VPC must not be hardcoded.
+  - id: repository.architecture.no-hardcoded-gcp-service-cidr
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded GKE services secondary IP range (10.96.0.0/16) detected in GCP VPC component. Service CIDR must be parameterized via var.service_cidr.
+    paths:
+      include:
+        - /src/infra/terraform/components/vpc/gcp/**/*.tf
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/variables.tf"
+    pattern-regex: '(?m)ip_cidr_range\s*=\s*"10\.96\.0\.0/16"'
+
+  # GKE master private IPv4 CIDR block must not be hardcoded to prevent collisions with other cloud CIDRs.
+  - id: repository.architecture.no-hardcoded-gke-master-cidr
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded GKE master IPv4 CIDR block (172.16.0.0/28) detected. Master CIDR must be parameterized via var.master_ipv4_cidr_block.
+    paths:
+      include:
+        - /src/infra/terraform/components/cluster/gcp/**/*.tf
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/variables.tf"
+    pattern-regex: '(?m)master_ipv4_cidr_block\s*=\s*"172\.16\.0\.0/28"'
+
+  # Values files in reusable components must not be named after roles, clusters,
+  # or providers (e.g., values-cell.yaml, values-cell-eaws-lh1.yaml, values-aws.yaml).
+  # Reusable components must use values.yaml and inject dynamic configuration via
+  # ApplicationSets.
+  - id: repository.architecture.no-cluster-named-values-files
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Role-, cluster-, or variant-named values file detected in component. Values files in atomic components must be role- and cluster-agnostic. Use values.yaml and inject dynamic role and cluster configuration via ApplicationSets.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/values-*.yaml
+        - /src/infra/argocd/components/**/values-*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
+    pattern-regex: '(?s).*'
+
+  # Floci-specific branching or logic is forbidden unless explicitly tagged
+  # and motivated with '# floci-divergence: <documented limitation>'. Local
+  # testing should mirror cloud topologies without special-casing except where
+  # documented Floci limitations require divergence.
+  - id: repository.architecture.no-untagged-floci-divergence
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Floci-specific branching or logic is forbidden in shared infrastructure unless explicitly tagged and motivated with '# floci-divergence: <documented limitation>'. Prefer configuring through cluster annotations or documented platform divergences.
+    paths:
+      include:
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/infra/argocd/**/*.tpl
+        - /src/infra/terraform/components/**/*.tf
+        - /src/infra/terraform/topologies/**/*.tf
+        - /src/infra/definitions/workspaces/templates/**/*.sh
+        - /src/infra/definitions/workspaces/templates/**/*.tf
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
+        - "**/*_test.*"
+        - "**/test_*.py"
+    patterns:
+      - pattern-regex: '(?m)(?:^[^\n]*\n)?^[^\n]*?(?:(?:==|!=|\beq\b|\bne\b)\s*\(?[^\n]*?["\x27]floci["\x27]|["\x27]floci["\x27][^\n]*?(?:==|!=))[^\n]*$'
+      - pattern-not-regex: 'floci-divergence:'
+
+  # Values files in reusable components must not be named after cloud providers
+  # (e.g., values-aws.yaml, values-gcp.yaml). Model variations as distinct, atomic
+  # components (e.g., karpenter_aws vs karpenter_gcp) or inject provider values dynamically.
+  - id: repository.architecture.no-cloud-named-values-files
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Cloud-named values file detected in component. Atomic components must not use cloud-specific values files (e.g. values-aws.yaml, values-gcp.yaml). Model variations as distinct atomic components or inject cloud-specific values dynamically.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/values-aws.yaml
+        - /src/infra/argocd/components/**/values-aws.yml
+        - /src/infra/argocd/components/**/values-gcp.yaml
+        - /src/infra/argocd/components/**/values-gcp.yml
+        - /src/infra/argocd/components/**/values-azure.yaml
+        - /src/infra/argocd/components/**/values-azure.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: '(?s).*'
+
+  # Hardcoded cloud IAM service accounts (such as GCP service accounts ending with
+  # .iam.gserviceaccount.com) must not be hardcoded in reusable component manifests.
+  # Service account bindings must use placeholders (e.g. configured-by-applicationset)
+  # and be injected dynamically by Argo CD ApplicationSet templating.
+  - id: repository.architecture.no-hardcoded-cloud-service-accounts
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded cloud service account email detected. Reusable component manifests must not embed specific cloud project identities. Use configured-by-applicationset or inject dynamically via Argo CD ApplicationSet templating.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+        - /src/infra/argocd/apps/**/*.yaml
+        - /src/infra/argocd/apps/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/*_test.*"
+    pattern-regex: '(?m)\b[a-zA-Z0-9_-]+@(?!configured-by-applicationset\b)[a-zA-Z0-9_-]+\.iam\.gserviceaccount\.com\b'
+
+  # In-cluster AWS workloads must use native EKS Pod Identity (aws_eks_pod_identity_association)
+  # rather than IRSA annotations (eks.amazonaws.com/role-arn). Cross-cloud OIDC federation
+  # (e.g. non-AWS GKE cells pulling images from AWS ECR) is the only valid exception.
+  - id: repository.security.no-irsa-annotations
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      IRSA annotation (eks.amazonaws.com/role-arn) detected. In-cluster AWS workloads must use native EKS Pod Identity associations instead of IRSA annotations.
+    paths:
+      include:
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/examples/**/*.yaml
+        - /src/examples/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - /src/infra/argocd/components/team_namespace/helm/templates/workload-image-pull.yaml
+        - /src/infra/argocd/components/team_namespace/helm/templates/lane.yaml
+        - /src/infra/argocd/components/kyverno/kustomize/ecr-pull-policy.yaml
+    pattern-regex: '(?m)^\s*eks\.amazonaws\.com/role-arn:'
+
+  # Base Barman manifests must rely on ambient S3 endpoints (https://s3.amazonaws.com)
+  # natively across all environments. Reject endpointURL in BarmanObjectStore manifests.
+  - id: repository.architecture.no-barman-endpoint-url
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      endpointURL detected in BarmanObjectStore manifest. Base Barman manifests must rely on ambient S3 endpoints (https://s3.amazonaws.com) natively across all environments.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
+        - "**/*test*"
+        - "**/*_test.*"
+    pattern-regex: '(?m)\bendpointURL\b'
+
+  # Base component manifests must not embed hardcoded AWS account IDs in role ARNs.
+  # Manifests must use placeholders (000000000000 or configured-by-applicationset) or inject dynamically via ApplicationSets.
+  - id: repository.architecture.no-hardcoded-aws-account-ids
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded AWS account ID detected in manifest. AWS IAM role ARNs in manifests must use placeholders (such as 000000000000 or configured-by-applicationset) or be injected dynamically via ApplicationSets.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/values.yaml
+        - /src/infra/argocd/components/**/values.yml
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+        - /src/infra/argocd/apps/**/*.yaml
+        - /src/infra/argocd/apps/**/*.yml
+        - /src/infra/definitions/teams/**/*.yaml
+        - /src/infra/definitions/teams/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
+        - "**/*test*"
+        - "**/*_test.*"
+    pattern-regex: '(?m)\barn:aws:iam::(?!000000000000)\d{12}:role/'
+
+  # AWS ECR container registries must not be hardcoded in manifests or deployment configurations.
+  # Registries must be dynamically propagated from OpenTofu via cluster annotations (ecr-registry)
+  # or use standard test fixtures (000000000000) in lint files.
+  - id: repository.architecture.no-hardcoded-ecr-registries
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded AWS ECR registry hostname detected. ECR registries must be propagated dynamically from OpenTofu via cluster annotations ('ecr-registry') or ApplicationSets.
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+        - /src/infra/argocd/apps/**/*.yaml
+        - /src/infra/argocd/apps/**/*.yml
+        - /src/infra/definitions/teams/**/*.yaml
+        - /src/infra/definitions/teams/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
+        - "**/*test*"
+        - "**/*_test.*"
+        - /src/infra/argocd/components/kyverno/kustomize/policies.yaml
+    pattern-regex: '(?m)\b(?!602401143452|000000000000)\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\b'
+
+  # Workload Identity federation token audiences in base manifests must not embed hardcoded GCP project numbers.
+  # Manifests must use placeholders (000000000000) or be injected dynamically from OpenTofu via cluster annotations.
+  - id: repository.architecture.no-hardcoded-gcp-project-numbers
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Hardcoded GCP project number detected in Workload Identity configuration. GCP project numbers must use placeholder 000000000000 or be injected dynamically from OpenTofu via cluster annotations ('gcp-project-number').
+    paths:
+      include:
+        - /src/infra/argocd/components/**/*.yaml
+        - /src/infra/argocd/components/**/*.yml
+        - /src/infra/argocd/apps/**/*.yaml
+        - /src/infra/argocd/apps/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
+        - "**/*test*"
+        - "**/*_test.*"
+    pattern-regex: '(?m)\bprojects/(?!000000000000)\d{6,14}/locations/'
+
+  # Internal container images must be loaded as local cluster images or pushed to AWS ECR.
+  # Hardcoding unapproved GHCR images or personal repositories is forbidden.
+  - id: repository.architecture.no-unapproved-ghcr-images
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Unapproved GHCR repository detected. Internal container images must use cluster image references or AWS ECR. Personal GHCR repositories are forbidden (except allowlisted upstream bridges like ghcr.io/simonepri/prometheus-api-bridge).
+    paths:
+      include:
+        - /src/**/*.yaml
+        - /src/**/*.yml
+        - /src/**/BUILD.bazel
+        - /.github/**/*.yaml
+        - /.github/**/*.yml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/*test*"
+        - "**/*_test.*"
+        - /src/infra/argocd/components/coder/README.md
+    patterns:
+      - pattern-regex: '(?m)\bghcr\.io/(?:simonepri/(?!prometheus-api-bridge\b|charts\b)[a-zA-Z0-9_.-]+|[a-zA-Z0-9_.-]+/openplex(?:/[a-zA-Z0-9_.-]+)*)\b'
+
+  # OpenCost cloud integration in Argo CD apps must not hardcode static Athena CUR report buckets or databases.
+  - id: repository.architecture.no-hardcoded-opencost-athena
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      OpenCost Athena configuration must not hardcode static openplex-billing-reports bucket or database names. Pass dynamically from cloud_cost.
+    paths:
+      include:
+        - /src/infra/argocd/apps/*.yaml
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - "**/*test*"
+    pattern-regex: '(?i)(?:athenaBucketName.*openplex-billing-reports|athenaDatabase.*openplex_cur)'
+
+  # Third-party packages under src/third_party must only contain declarative BUILD
+  # files, patches, image inventory/metadata, and runtime configuration. Loose first-party
+  # implementation code is forbidden; modifications must be applied via upstream patches.
+  - id: repository.architecture.no-loose-third-party-sources
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Loose first-party implementation source files are forbidden under src/third_party. Third-party packages must only contain BUILD.bazel, *.patch, image.json, and minimal runtime configurations. Custom modifications must be packaged as clean upstream patches.
+    paths:
+      include:
+        - /src/third_party/**
+      exclude:
+        - /src/bazel/checks/opengrep/**
+        - /src/third_party/BUILD.bazel
+        - /src/third_party/**/BUILD.bazel
+        - /src/third_party/**/*.patch
+        - /src/third_party/**/images.toml
+        - /src/third_party/**/hosts.toml
+        - /src/third_party/**/k3s-entrypoint.sh
+        - /src/third_party/**/k3s-entrypoint_test.sh
+    pattern: $X
+
+  # Continuous integration is managed exclusively through BuildBuddy Workflows (buildbuddy.yaml).
+  # GitHub Actions workflows are prohibited to prevent redundant CI runners and split-brain
+  # pipelines, with .github/workflows/publish.yml being the sole justified exception for keyless AWS OIDC image publishing.
+  - id: repository.architecture.no-github-actions-ci
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Continuous integration is executed via BuildBuddy Workflows (buildbuddy.yaml). GitHub Actions workflows are prohibited except for .github/workflows/publish.yml (required for keyless AWS OIDC container image publishing).
+    paths:
+      include:
+        - /.github/workflows/**
+      exclude:
+        - /.github/workflows/publish.yml
+        - /.github/workflows/publish.yaml
+        - /src/bazel/checks/opengrep/**
+    pattern: $X
+

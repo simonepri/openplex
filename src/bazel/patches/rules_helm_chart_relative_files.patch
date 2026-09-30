@@ -1,0 +1,54 @@
+diff --git a/helm/private/package.bzl b/helm/private/package.bzl
+index 884d8cd..2bbcb3c 100644
+--- a/helm/private/package.bzl
++++ b/helm/private/package.bzl
+@@ -11,6 +11,20 @@ def _rlocationpath(file, workspace_name):
+ 
+     return "{}/{}".format(workspace_name, file.short_path)
+ 
++def _chart_relative_file_destination(file, chart, package_path):
++    if chart == None:
++        fail("Helm file assets require a source Chart.yaml")
++
++    chart_root = chart.dirname
++    chart_prefix = chart_root + "/" if chart_root != "." else ""
++    if not file.path.startswith(chart_prefix):
++        fail("Helm file asset {} escapes chart root {}".format(
++            file.path,
++            chart_root,
++        ))
++
++    return package_path + "/" + file.path[len(chart_prefix):]
++
+ def _helm_package_impl(ctx):
+     if (ctx.attr.chart and ctx.attr.chart_json) or (not ctx.attr.chart and not ctx.attr.chart_json):
+         fail("Helm package {} must have either a `chart` or `chart_json` attribute".format(
+@@ -57,10 +71,11 @@ def _helm_package_impl(ctx):
+     if ctx.file.schema:
+         args.add("-schema", ctx.file.schema)
+ 
+-    args.add("-package", "{}/{}".format(
++    package_path = "{}/{}".format(
+         ctx.label.workspace_name if ctx.label.workspace_name else ctx.workspace_name,
+         ctx.label.package,
+-    ))
++    )
++    args.add("-package", package_path)
+ 
+     substitutions_file = ctx.actions.declare_file("{}/substitutions.json".format(ctx.label.name))
+     ctx.actions.write(
+@@ -79,7 +94,13 @@ def _helm_package_impl(ctx):
+     files_manifest = ctx.actions.declare_file("{}/files_manifest.json".format(ctx.label.name))
+     ctx.actions.write(
+         output = files_manifest,
+-        content = json.encode_indent({file.path: _rlocationpath(file, ctx.workspace_name) for file in ctx.files.files}, indent = " " * 4),
++        content = json.encode_indent(
++            {
++                file.path: _chart_relative_file_destination(file, ctx.file.chart, package_path)
++                for file in ctx.files.files
++            },
++            indent = " " * 4,
++        ),
+     )
+     args.add("-files_manifest", files_manifest)
+ 

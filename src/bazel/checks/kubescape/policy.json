@@ -1,0 +1,507 @@
+{
+  "description": "Classifies intentional and reviewed Kubescape findings for repository manifests.",
+  "schemaVersion": 1,
+  "intentionalSecurityNegativeFixtures": [
+    {
+      "path": "src/infra/definitions/conformance/fixtures/security/security-findings-examples.test.k8s.yaml",
+      "reason": "Scanner self-test fixture that deliberately enables host access, privilege escalation, and unsafe capabilities."
+    }
+  ],
+  "ordinaryConformanceFixtureRules": [
+    {
+      "prefix": "src/infra/definitions/conformance/",
+      "suffix": ".test.k8s.yaml",
+      "reason": "Authored conformance input; findings remain scanned and reported but the manifest is not a deployable cluster resource."
+    }
+  ],
+  "reviewedExceptions": [
+    {
+      "controlID": "C-0002",
+      "controlName": "Prevent containers from allowing command execution",
+      "kind": "Group",
+      "namespace": "default",
+      "reason": "Developer and operator groups require pod exec permissions for debugging and workspace interaction in team namespaces.",
+      "name": "cluster:group:team:examples"
+    },
+    {
+      "controlID": "C-0002",
+      "controlName": "Prevent containers from allowing command execution",
+      "kind": "Group",
+      "namespace": "default",
+      "reason": "Developer and operator groups require pod exec permissions for debugging and workspace interaction in team namespaces.",
+      "name": "cluster:group:team:examples:dev"
+    },
+    {
+      "controlID": "C-0002",
+      "controlName": "Prevent containers from allowing command execution",
+      "kind": "Group",
+      "namespace": "default",
+      "reason": "Developer and operator groups require pod exec permissions for debugging and workspace interaction in team namespaces.",
+      "name": "cluster:group:team:fixtureteam"
+    },
+    {
+      "controlID": "C-0002",
+      "controlName": "Prevent containers from allowing command execution",
+      "kind": "Group",
+      "namespace": "default",
+      "reason": "Developer and operator groups require pod exec permissions for debugging and workspace interaction in team namespaces.",
+      "name": "cluster:group:team:fixtureteam:dev"
+    },
+    {
+      "controlID": "C-0002",
+      "controlName": "Prevent containers from allowing command execution",
+      "kind": "ServiceAccount",
+      "namespace": "default",
+      "reason": "Synthetic networking probe requires pod exec capabilities to test ingress, egress, and container communication.",
+      "name": "chainsaw-networking"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "Job",
+      "namespace": "coder",
+      "reason": "Coder template reconciler Job mounts Git authentication tokens via environment path references.",
+      "name": "coder-template-reconciler"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "coder",
+      "reason": "Coder template reconciler config contains starter workspace templates.",
+      "namePrefix": "coder-template-reconciler-"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "coder",
+      "reason": "Workspace healer configuration includes recovery scripts and endpoint credentials.",
+      "namePrefix": "coder-workspace-healer-"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "dex",
+      "reason": "Synthetic identity check contains mock credentials for local login conformance validation.",
+      "name": "dex-local-login-conformance"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "kuberhealthy",
+      "reason": "Chainsaw synthetic checks include mock credentials for identity provider validation.",
+      "name": "chainsaw-identity-tests"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "kuberhealthy",
+      "reason": "Chainsaw synthetic checks configure observability endpoints and probe scripts.",
+      "name": "chainsaw-observability-tests"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "kuberhealthy",
+      "reason": "Chainsaw synthetic checks use embedded test scripts and probe configurations.",
+      "name": "chainsaw-smoke-check-scripts"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "s3-system",
+      "reason": "Rclone sync configuration references storage credentials managed by cell secrets.",
+      "name": "s3-gateway-rclone-config"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "signoz",
+      "reason": "ClickHouse storage stats and schema scripts require database connection strings.",
+      "name": "signoz-clickhouse-storage-stats-common"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "signoz",
+      "reason": "ClickHouse storage stats and schema scripts require database connection strings.",
+      "name": "signoz-clickhouse-storage-stats-provider"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "signoz",
+      "reason": "ClickHouse storage stats and schema scripts require database connection strings.",
+      "name": "signoz-clickhouse-storage-stats-rollup-program"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
+      "namespace": "team-fixtureteam-workspaces",
+      "reason": "Workload origin configuration publishes authorized build and pull endpoints.",
+      "name": "coder-workspace-origin"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "Deployment",
+      "namespace": "s3-system",
+      "reason": "S3 gateway team fixture deployments receive test credentials for multi-region conformance testing.",
+      "name": "s3-gateway-fixture-team-cross-region"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "Deployment",
+      "namespace": "s3-system",
+      "reason": "S3 gateway team fixture deployments receive test credentials for local conformance testing.",
+      "name": "s3-gateway-fixture-team-local"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "Deployment",
+      "namespace": "s3-system",
+      "reason": "S3 gateway replication and stats workers receive storage endpoint parameters.",
+      "name": "s3-gateway-global-replicator-cross-region"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "Deployment",
+      "namespace": "s3-system",
+      "reason": "S3 gateway replication and stats workers receive storage endpoint parameters.",
+      "name": "s3-gateway-org-workspace-backups-local"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "Deployment",
+      "namespace": "s3-system",
+      "reason": "S3 gateway replication and stats workers receive storage endpoint parameters.",
+      "name": "s3-gateway-storage-stats-cross-region"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "Deployment",
+      "namespace": "s3-system",
+      "reason": "S3 resolver deployment receives cluster endpoint and signing configurations.",
+      "name": "s3-resolver"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent runs eBPF profilers requiring host system privileges.",
+      "name": "parca-agent"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent runs eBPF profilers requiring host system privileges.",
+      "name": "parca-agent-gpu"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "DaemonSet",
+      "namespace": "node-problem-detector",
+      "reason": "Node Problem Detector requires root access to read host /dev/kmsg, systemd units, and filesystem mounts.",
+      "name": "node-problem-detector"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "Deployment",
+      "namespace": "atlantis",
+      "reason": "Upstream proxy or catalog image runs as container default user.",
+      "name": "atlantis-auth-proxy"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "Deployment",
+      "namespace": "default",
+      "reason": "Upstream proxy or catalog image runs as container default user.",
+      "name": "test-auth-proxy"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "Deployment",
+      "namespace": "dragonfly-system",
+      "reason": "Upstream proxy or catalog image runs as container default user.",
+      "name": "dragonfly-sso"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "Deployment",
+      "namespace": "kargo",
+      "reason": "Upstream proxy or catalog image runs as container default user.",
+      "name": "origin-registry-tls-proxy"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "Deployment",
+      "namespace": "opencost",
+      "reason": "Upstream proxy or catalog image runs as container default user.",
+      "name": "opencost-auth-proxy"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "Deployment",
+      "namespace": "tailscale-system",
+      "reason": "Tailscale subnet router requires network routing and tun device privileges.",
+      "name": "subnet-router"
+    },
+    {
+      "controlID": "C-0013",
+      "controlName": "Non-root containers",
+      "kind": "Job",
+      "namespace": "gpu-system",
+      "reason": "NFD cleanup job runs as container default user to prune node feature labels before operator namespace deletion.",
+      "name": "gpu-operator-node-feature-discovery-prune"
+    },
+    {
+      "controlID": "C-0016",
+      "controlName": "Allow privilege escalation",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent eBPF profiler requires privilege escalation to inspect system processes.",
+      "name": "parca-agent"
+    },
+    {
+      "controlID": "C-0016",
+      "controlName": "Allow privilege escalation",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent eBPF profiler requires privilege escalation to inspect system processes.",
+      "name": "parca-agent-gpu"
+    },
+    {
+      "controlID": "C-0016",
+      "controlName": "Allow privilege escalation",
+      "kind": "DaemonSet",
+      "namespace": "node-problem-detector",
+      "reason": "Node Problem Detector requires privilege escalation for host kernel and system diagnostics.",
+      "name": "node-problem-detector"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "CronJob",
+      "namespace": "signoz",
+      "reason": "SigNoz database schema apply, rollup, and retention jobs run within the isolated signoz namespace.",
+      "name": "signoz-clickhouse-backup"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "CronJob",
+      "namespace": "signoz",
+      "reason": "SigNoz database schema apply, rollup, and retention jobs run within the isolated signoz namespace.",
+      "name": "signoz-clickhouse-storage-stats-rollup"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "Deployment",
+      "namespace": "coder",
+      "reason": "Workspace healer periodically reconciles workspace states and requires direct cluster communication without strict network isolation.",
+      "name": "coder-workspace-healer"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "Deployment",
+      "namespace": "kargo",
+      "reason": "System infrastructure daemon or proxy with bounded cluster networking.",
+      "name": "origin-registry-tls-proxy"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "Deployment",
+      "namespace": "kube-system",
+      "reason": "System infrastructure daemon or proxy with bounded cluster networking.",
+      "name": "private-host-dns"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "Deployment",
+      "namespace": "signoz",
+      "reason": "SigNoz ClickHouse coordinator runs within the isolated signoz namespace.",
+      "name": "clickhouse-coordinator"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "Job",
+      "namespace": "gpu-system",
+      "reason": "NFD cleanup job runs pre-delete hook in gpu-system namespace before teardown.",
+      "name": "gpu-operator-node-feature-discovery-prune"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "Job",
+      "namespace": "signoz",
+      "reason": "SigNoz database schema apply, rollup, and retention jobs run within the isolated signoz namespace.",
+      "name": "signoz-clickhouse-databases-schema-apply"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "Job",
+      "namespace": "signoz",
+      "reason": "SigNoz database schema apply, rollup, and retention jobs run within the isolated signoz namespace.",
+      "name": "signoz-clickhouse-storage-stats-schema-apply"
+    },
+    {
+      "controlID": "C-0030",
+      "controlName": "Ingress and Egress blocked",
+      "kind": "Job",
+      "namespace": "signoz",
+      "reason": "SigNoz database schema apply, rollup, and retention jobs run within the isolated signoz namespace.",
+      "name": "signoz-log-retention"
+    },
+    {
+      "controlID": "C-0034",
+      "controlName": "Automatic mapping of service account",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent requires API access to resolve pod metadata for profiling targets.",
+      "name": "parca-agent"
+    },
+    {
+      "controlID": "C-0034",
+      "controlName": "Automatic mapping of service account",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent requires API access to resolve pod metadata for profiling targets.",
+      "name": "parca-agent-gpu"
+    },
+    {
+      "controlID": "C-0034",
+      "controlName": "Automatic mapping of service account",
+      "kind": "DaemonSet",
+      "namespace": "node-problem-detector",
+      "reason": "Node Problem Detector requires API access to report node conditions and emit events.",
+      "name": "node-problem-detector"
+    },
+    {
+      "controlID": "C-0034",
+      "controlName": "Automatic mapping of service account",
+      "kind": "Job",
+      "namespace": "gpu-system",
+      "reason": "NFD cleanup job requires API access via mapped service account to prune node labels.",
+      "name": "gpu-operator-node-feature-discovery-prune"
+    },
+    {
+      "controlID": "C-0038",
+      "controlName": "Host PID/IPC privileges",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent requires host PID namespace for whole-system eBPF CPU profiling.",
+      "name": "parca-agent"
+    },
+    {
+      "controlID": "C-0038",
+      "controlName": "Host PID/IPC privileges",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent requires host PID namespace for whole-system eBPF CPU profiling.",
+      "name": "parca-agent-gpu"
+    },
+    {
+      "controlID": "C-0038",
+      "controlName": "Host PID/IPC privileges",
+      "kind": "DaemonSet",
+      "namespace": "node-problem-detector",
+      "reason": "Node Problem Detector requires host PID to monitor systemd service units and process health.",
+      "name": "node-problem-detector"
+    },
+    {
+      "controlID": "C-0046",
+      "controlName": "Insecure capabilities",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent requires SYS_ADMIN and profiling capabilities for eBPF attach.",
+      "name": "parca-agent"
+    },
+    {
+      "controlID": "C-0046",
+      "controlName": "Insecure capabilities",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent requires SYS_ADMIN and profiling capabilities for eBPF attach.",
+      "name": "parca-agent-gpu"
+    },
+    {
+      "controlID": "C-0046",
+      "controlName": "Insecure capabilities",
+      "kind": "Deployment",
+      "namespace": "tailscale-system",
+      "reason": "Tailscale subnet router requires NET_ADMIN capability to configure wireguard interfaces.",
+      "name": "subnet-router"
+    },
+    {
+      "controlID": "C-0055",
+      "controlName": "Linux hardening",
+      "kind": "Deployment",
+      "namespace": "tailscale-system",
+      "reason": "Tailscale subnet router requires Linux network capabilities for packet forwarding.",
+      "name": "subnet-router"
+    },
+    {
+      "controlID": "C-0057",
+      "controlName": "Privileged container",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent requires privileged container mode for whole-node eBPF profiling.",
+      "name": "parca-agent"
+    },
+    {
+      "controlID": "C-0057",
+      "controlName": "Privileged container",
+      "kind": "DaemonSet",
+      "namespace": "parca",
+      "reason": "Parca agent requires privileged container mode for whole-node eBPF profiling.",
+      "name": "parca-agent-gpu"
+    },
+    {
+      "controlID": "C-0057",
+      "controlName": "Privileged container",
+      "kind": "DaemonSet",
+      "namespace": "node-problem-detector",
+      "reason": "Node Problem Detector runs as privileged container to access host kernel logs and storage mounts.",
+      "name": "node-problem-detector"
+    },
+    {
+      "controlID": "C-0057",
+      "controlName": "Privileged container",
+      "kind": "Deployment",
+      "namespace": "tailscale-system",
+      "reason": "Tailscale subnet router runs as privileged container for wireguard network devices.",
+      "name": "subnet-router"
+    }
+  ]
+}

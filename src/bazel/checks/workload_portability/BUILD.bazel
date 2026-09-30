@@ -1,0 +1,45 @@
+"""Define test and check targets enforcing workload portability by disallowing infrastructure-specific placements."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "validators",
+    # keep
+    srcs = ["check_workload_portability.py"],
+    imports = ["."],
+    visibility = ["//src/bazel/checks:__subpackages__"],
+    # keep
+    deps = [
+        "@dev_python_deps//pyyaml",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+py_binary(
+    name = "workload_portability",
+    # keep
+    srcs = ["check_workload_portability.py"],
+    main = "check_workload_portability.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+    # keep
+    deps = [":validators"],
+)
+
+py_test(
+    name = "check_workload_portability_test",
+    size = "small",
+    # keep
+    srcs = ["check_workload_portability_test.py"],
+    imports = ["."],
+    main = "check_workload_portability_test.py",
+    precompile = "disabled",
+    # keep
+    deps = [":validators"],
+)

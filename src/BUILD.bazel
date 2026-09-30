@@ -1,0 +1,33 @@
+"""Declares src as the Python import root for platform modules and workloads."""
+
+# gazelle:python_default_visibility NONE
+# gazelle:python_generation_mode file
+# gazelle:resolve py ray @python_deps//ray
+# gazelle:resolve py opentelemetry @python_deps//opentelemetry_api
+# gazelle:resolve py opentelemetry.trace @python_deps//opentelemetry_api
+# gazelle:resolve py opentelemetry.sdk @python_deps//opentelemetry_sdk
+# gazelle:resolve_regexp py ^opentelemetry\.sdk(\..*)?$ @python_deps//opentelemetry_sdk
+# gazelle:resolve py opentelemetry.exporter @python_deps//opentelemetry_exporter_otlp_proto_http
+# gazelle:resolve_regexp py ^opentelemetry\.exporter(\..*)?$ @python_deps//opentelemetry_exporter_otlp_proto_http
+# gazelle:resolve py pyarrow @python_deps//pyarrow
+# gazelle:resolve_regexp py ^pyarrow(\..*)?$ @python_deps//pyarrow
+# gazelle:resolve py yaml @python_deps//pyyaml
+# gazelle:resolve_regexp py ^yaml(\..*)?$ @python_deps//pyyaml
+# gazelle:resolve py bootstrap_template_publisher //src/infra/argocd/components/coder:python
+# gazelle:resolve_regexp py ^bootstrap_template_publisher(\..*)?$ //src/infra/argocd/components/coder:python
+# gazelle:resolve py infra.tools.otel_tracing //src/infra/tools/otel_tracing/python
+# gazelle:resolve py infra.tools.otel_tracing.python //src/infra/tools/otel_tracing/python
+# gazelle:resolve py infra.tools.otel_tracing.python.tracer //src/infra/tools/otel_tracing/python
+# gazelle:resolve py src.infra.tools.otel_tracing //src/infra/tools/otel_tracing/python
+# gazelle:resolve py src.infra.tools.otel_tracing.python //src/infra/tools/otel_tracing/python
+# gazelle:resolve py src.infra.tools.otel_tracing.python.tracer //src/infra/tools/otel_tracing/python
+# gazelle:resolve py infra.tools.s3_resolver //src/infra/tools/s3_resolver/client/python
+# gazelle:resolve py infra.tools.s3_resolver.client.python //src/infra/tools/s3_resolver/client/python
+# gazelle:resolve py infra.tools.s3_resolver.client.python.client //src/infra/tools/s3_resolver/client/python
+# gazelle:resolve py infra.tools.s3_resolver.python //src/infra/tools/s3_resolver/client/python
+# gazelle:resolve py infra.tools.s3_resolver.python.client //src/infra/tools/s3_resolver/client/python
+# gazelle:resolve py src.infra.tools.s3_resolver //src/infra/tools/s3_resolver/client/python
+# gazelle:resolve py src.infra.tools.s3_resolver.client.python //src/infra/tools/s3_resolver/client/python
+# gazelle:resolve py src.infra.tools.s3_resolver.client.python.client //src/infra/tools/s3_resolver/client/python
+# gazelle:resolve py src.infra.tools.s3_resolver.python //src/infra/tools/s3_resolver/client/python
+# gazelle:resolve py src.infra.tools.s3_resolver.python.client //src/infra/tools/s3_resolver/client/python

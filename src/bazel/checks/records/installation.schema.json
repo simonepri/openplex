@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Installation record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["display_name", "git", "name", "public_domain"],
+  "properties": {
+    "name": { "$ref": "#/$defs/dnsLabel" },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "public_domain": { "$ref": "#/$defs/dnsSubdomain" },
+    "intranet_domain": { "$ref": "#/$defs/dnsSubdomain" },
+    "cluster_domain": { "$ref": "#/$defs/dnsSubdomain" },
+    "hosted_domains": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dnsSubdomain" },
+      "uniqueItems": true
+    },
+    "operator_emails": {
+      "type": "array",
+      "items": { "type": "string", "format": "email" },
+      "uniqueItems": true
+    },
+    "operator_group_email": {
+      "type": "string",
+      "format": "email"
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^(?:(?:https|git|ssh)://[^\\s/?#]+/|git@[^\\s/?#:]+:)(?:[^\\s/?#]+/)*[a-z0-9][a-z0-9._-]*\\.git$"
+        }
+      }
+    },
+    "oci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image_root"],
+      "properties": {
+        "image_root": { "$ref": "#/$defs/ociRoot" }
+      }
+    }
+  },
+  "$defs": {
+    "dnsLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+    },
+    "dnsSubdomain": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)+$"
+    },
+    "ociRoot": {
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[1-9][0-9]{0,4})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$"
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Validates time-bounded license exceptions shipped beside release SBOMs.",
+  "properties": {
+    "exceptions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "added": {
+            "format": "date",
+            "type": "string"
+          },
+          "evidence": {
+            "pattern": "^src/bazel/checks/license_images/[a-z0-9][a-z0-9.-]*\\.json$",
+            "type": "string"
+          },
+          "evidence_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "license": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "format": "email",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "review_by": {
+            "format": "date",
+            "type": "string"
+          },
+          "scope": {
+            "enum": ["base-image", "dev-tool", "linked", "shipped-service"]
+          }
+        },
+        "required": ["added", "id", "license", "owner", "reason", "review_by", "scope"],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "license": {
+                  "const": "MULTIPLE"
+                }
+              }
+            },
+            "then": {
+              "required": ["evidence", "evidence_sha256"]
+            }
+          },
+          {
+            "if": {
+              "required": ["evidence"]
+            },
+            "then": {
+              "required": ["evidence_sha256"]
+            }
+          }
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": ["exceptions"],
+  "type": "object"
+}

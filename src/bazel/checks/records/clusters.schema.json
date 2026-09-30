@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local cluster selection record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["local"],
+  "properties": {
+    "clusters": {
+      "type": "object"
+    },
+    "local": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acme_dns01", "availability", "cells", "control", "network"],
+      "properties": {
+        "acme_dns01": { "enum": ["cloudflare", "disabled"] },
+        "availability": { "enum": ["replicated", "resilient", "standalone"] },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dynamic_range", "services", "subnet"],
+          "properties": {
+            "subnet": { "$ref": "#/$defs/ipv4CIDR" },
+            "dynamic_range": { "$ref": "#/$defs/ipv4CIDR" },
+            "services": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["floci", "gateway", "git", "origin_registry"],
+              "properties": {
+                "floci": { "$ref": "#/$defs/ipv4" },
+                "gateway": { "$ref": "#/$defs/ipv4" },
+                "git": { "$ref": "#/$defs/ipv4" },
+                "git_watcher": { "$ref": "#/$defs/ipv4" },
+                "origin_registry": { "$ref": "#/$defs/ipv4" },
+                "headscale": { "$ref": "#/$defs/ipv4" }
+              }
+            }
+          }
+        },
+        "control": { "$ref": "#/$defs/control" },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/cell" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host_ports", "node_ipv4", "record"],
+      "properties": {
+        "record": { "$ref": "#/$defs/controlRecord" },
+        "node_ipv4": { "$ref": "#/$defs/ipv4" },
+        "host_ports": { "$ref": "#/$defs/hostPorts" }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host_ports", "node_ipv4", "record"],
+      "properties": {
+        "record": { "$ref": "#/$defs/cellRecord" },
+        "node_ipv4": { "$ref": "#/$defs/ipv4" },
+        "host_ports": { "$ref": "#/$defs/hostPorts" }
+      }
+    },
+    "hostPorts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aws_api", "ecr_registry", "eks_api_server"],
+      "properties": {
+        "aws_api": { "$ref": "#/$defs/hostPort" },
+        "ecr_registry": { "$ref": "#/$defs/hostPort" },
+        "eks_api_server": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base", "max"],
+          "properties": {
+            "base": { "$ref": "#/$defs/hostPort" },
+            "max": { "$ref": "#/$defs/hostPort" }
+          }
+        }
+      }
+    },
+    "hostPort": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535
+    },
+    "controlRecord": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^ctrl-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+    },
+    "cellRecord": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^cell-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+    },
+    "ipv4": {
+      "type": "string",
+      "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$"
+    },
+    "ipv4CIDR": {
+      "type": "string",
+      "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/(?:[0-9]|[12][0-9]|3[0-2])$"
+    }
+  }
+}

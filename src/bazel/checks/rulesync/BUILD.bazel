@@ -1,0 +1,21 @@
+"""Define execution targets for distributed RuleSync agent guidance discovery and synchronization."""
+
+load("@rules_python//python:defs.bzl", "py_binary")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# gazelle:exclude .
+
+package_sources()
+
+py_binary(
+    name = "rulesync",
+    srcs = ["rulesync_scan.py"],
+    data = [
+        "rulesync.jsonc",
+        "//src/bazel/tools:rulesync",
+    ],
+    main = "rulesync_scan.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+    deps = ["@rules_python//python/runfiles"],
+)

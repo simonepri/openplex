@@ -1,0 +1,1887 @@
+{
+  "description": "Exact reviewed Ubuntu license findings for the pinned official Coder minimal workspace base images.",
+  "version": 1,
+  "exceptionId": "coder-minimal-workspace-base-licenses",
+  "artifactRepository": "index.docker.io/codercom/example-minimal",
+  "artifacts": [
+    "index.docker.io/codercom/example-minimal@sha256:00c4753ef9c993214d8f22550566db54126c2f37d982191b72fae6508bce3f80",
+    "index.docker.io/codercom/example-minimal@sha256:c7b1dc99298e9fb34145f65f5365220b696b28c12d3858a54e0232b3a71a44c2"
+  ],
+  "findingCount": 464,
+  "findings": [
+    {
+      "package": "sensible-utils",
+      "license": "All-permissive"
+    },
+    {
+      "package": "git",
+      "license": "Artistic-1"
+    },
+    {
+      "package": "git-man",
+      "license": "Artistic-1"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "Artistic-2"
+    },
+    {
+      "package": "perl",
+      "license": "Artistic-2"
+    },
+    {
+      "package": "perl-base",
+      "license": "Artistic-2"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "Artistic-2"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "Artistic-dist"
+    },
+    {
+      "package": "perl",
+      "license": "Artistic-dist"
+    },
+    {
+      "package": "perl-base",
+      "license": "Artistic-dist"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "Artistic-dist"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-2-Clause-NetBSD"
+    },
+    {
+      "package": "libmd0",
+      "license": "BSD-2-Clause-NetBSD"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-2-clause-author"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-2-clause-verbatim"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-2.2-clause"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-2.2-clause"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-3-Clause-Attribution"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-3-Clause-Attribution"
+    },
+    {
+      "package": "e2fsprogs",
+      "license": "BSD-3-Clause-Variant"
+    },
+    {
+      "package": "libcom-err2",
+      "license": "BSD-3-Clause-Variant"
+    },
+    {
+      "package": "libext2fs2t64",
+      "license": "BSD-3-Clause-Variant"
+    },
+    {
+      "package": "libss2",
+      "license": "BSD-3-Clause-Variant"
+    },
+    {
+      "package": "logsave",
+      "license": "BSD-3-Clause-Variant"
+    },
+    {
+      "package": "libmd0",
+      "license": "BSD-3-clause-Aaron-D-Gifford"
+    },
+    {
+      "package": "libc-bin",
+      "license": "BSD-3-clause-Berkeley"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "BSD-3-clause-Berkeley"
+    },
+    {
+      "package": "libc6",
+      "license": "BSD-3-clause-Berkeley"
+    },
+    {
+      "package": "locales",
+      "license": "BSD-3-clause-Berkeley"
+    },
+    {
+      "package": "libldap-common",
+      "license": "BSD-3-clause-California"
+    },
+    {
+      "package": "libldap2",
+      "license": "BSD-3-clause-California"
+    },
+    {
+      "package": "libpcre2-8-0",
+      "license": "BSD-3-clause-Cambridge with BINARY LIBRARY-LIKE PACKAGES exception"
+    },
+    {
+      "package": "libc-bin",
+      "license": "BSD-3-clause-Carnegie"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "BSD-3-clause-Carnegie"
+    },
+    {
+      "package": "libc6",
+      "license": "BSD-3-clause-Carnegie"
+    },
+    {
+      "package": "locales",
+      "license": "BSD-3-clause-Carnegie"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "BSD-3-clause-GENERIC"
+    },
+    {
+      "package": "perl",
+      "license": "BSD-3-clause-GENERIC"
+    },
+    {
+      "package": "perl-base",
+      "license": "BSD-3-clause-GENERIC"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "BSD-3-clause-GENERIC"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-3-clause-JANET"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-3-clause-JANET"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-3-clause-John-Birrell"
+    },
+    {
+      "package": "libc-bin",
+      "license": "BSD-3-clause-Oracle"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "BSD-3-clause-Oracle"
+    },
+    {
+      "package": "libc6",
+      "license": "BSD-3-clause-Oracle"
+    },
+    {
+      "package": "locales",
+      "license": "BSD-3-clause-Oracle"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-3-clause-PADL"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-3-clause-PADL"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-3-clause-Regents"
+    },
+    {
+      "package": "libc-bin",
+      "license": "BSD-3-clause-WIDE"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "BSD-3-clause-WIDE"
+    },
+    {
+      "package": "libc6",
+      "license": "BSD-3-clause-WIDE"
+    },
+    {
+      "package": "locales",
+      "license": "BSD-3-clause-WIDE"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-3-clause-author"
+    },
+    {
+      "package": "libdb5.3t64",
+      "license": "BSD-3-clause-fjord"
+    },
+    {
+      "package": "libldap-common",
+      "license": "BSD-3-clause-variant"
+    },
+    {
+      "package": "libldap2",
+      "license": "BSD-3-clause-variant"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "BSD-3-clause-with-weird-numbering"
+    },
+    {
+      "package": "perl",
+      "license": "BSD-3-clause-with-weird-numbering"
+    },
+    {
+      "package": "perl-base",
+      "license": "BSD-3-clause-with-weird-numbering"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "BSD-3-clause-with-weird-numbering"
+    },
+    {
+      "package": "bsdutils",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libblkid1",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libmount1",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libsmartcols1",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libtirpc-common",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libtirpc3t64",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "libuuid1",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "login",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "mount",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "util-linux",
+      "license": "BSD-4-Clause"
+    },
+    {
+      "package": "e2fsprogs",
+      "license": "BSD-4-Clause-CMU"
+    },
+    {
+      "package": "libcom-err2",
+      "license": "BSD-4-Clause-CMU"
+    },
+    {
+      "package": "libext2fs2t64",
+      "license": "BSD-4-Clause-CMU"
+    },
+    {
+      "package": "libss2",
+      "license": "BSD-4-Clause-CMU"
+    },
+    {
+      "package": "logsave",
+      "license": "BSD-4-Clause-CMU"
+    },
+    {
+      "package": "bash",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "curl",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "gnu-coreutils",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "libcurl3t64-gnutls",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "libcurl4t64",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "sed",
+      "license": "BSD-4-Clause-UC"
+    },
+    {
+      "package": "libldap-common",
+      "license": "BSD-4-clause-California"
+    },
+    {
+      "package": "libldap2",
+      "license": "BSD-4-clause-California"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "BSD-4-clause-POWERDOG"
+    },
+    {
+      "package": "perl",
+      "license": "BSD-4-clause-POWERDOG"
+    },
+    {
+      "package": "perl-base",
+      "license": "BSD-4-clause-POWERDOG"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "BSD-4-clause-POWERDOG"
+    },
+    {
+      "package": "libbsd0",
+      "license": "BSD-5-clause-Peter-Wemm"
+    },
+    {
+      "package": "libc-bin",
+      "license": "BSD-like-Spencer"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "BSD-like-Spencer"
+    },
+    {
+      "package": "libc6",
+      "license": "BSD-like-Spencer"
+    },
+    {
+      "package": "locales",
+      "license": "BSD-like-Spencer"
+    },
+    {
+      "package": "libpam-modules",
+      "license": "BSD-tcp_wrappers"
+    },
+    {
+      "package": "libpam-modules-bin",
+      "license": "BSD-tcp_wrappers"
+    },
+    {
+      "package": "libpam-runtime",
+      "license": "BSD-tcp_wrappers"
+    },
+    {
+      "package": "libpam0g",
+      "license": "BSD-tcp_wrappers"
+    },
+    {
+      "package": "sed",
+      "license": "BSL-1"
+    },
+    {
+      "package": "bsdutils",
+      "license": "BSLA"
+    },
+    {
+      "package": "libblkid1",
+      "license": "BSLA"
+    },
+    {
+      "package": "libmount1",
+      "license": "BSLA"
+    },
+    {
+      "package": "libsmartcols1",
+      "license": "BSLA"
+    },
+    {
+      "package": "libuuid1",
+      "license": "BSLA"
+    },
+    {
+      "package": "login",
+      "license": "BSLA"
+    },
+    {
+      "package": "mount",
+      "license": "BSLA"
+    },
+    {
+      "package": "util-linux",
+      "license": "BSLA"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "BZIP"
+    },
+    {
+      "package": "perl",
+      "license": "BZIP"
+    },
+    {
+      "package": "perl-base",
+      "license": "BZIP"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "BZIP"
+    },
+    {
+      "package": "libbsd0",
+      "license": "Beerware"
+    },
+    {
+      "package": "libldap-common",
+      "license": "Beerware"
+    },
+    {
+      "package": "libldap2",
+      "license": "Beerware"
+    },
+    {
+      "package": "libmd0",
+      "license": "Beerware"
+    },
+    {
+      "package": "libpam-modules",
+      "license": "Beerware"
+    },
+    {
+      "package": "libpam-modules-bin",
+      "license": "Beerware"
+    },
+    {
+      "package": "libpam-runtime",
+      "license": "Beerware"
+    },
+    {
+      "package": "libpam0g",
+      "license": "Beerware"
+    },
+    {
+      "package": "jq",
+      "license": "CC-BY-3.0"
+    },
+    {
+      "package": "libjq1",
+      "license": "CC-BY-3.0"
+    },
+    {
+      "package": "mawk",
+      "license": "CC-BY-3.0"
+    },
+    {
+      "package": "libc-bin",
+      "license": "CORE-MATH"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "CORE-MATH"
+    },
+    {
+      "package": "libc6",
+      "license": "CORE-MATH"
+    },
+    {
+      "package": "locales",
+      "license": "CORE-MATH"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "CUSTOM License: BSD-3-Clause-Attribution and IBM-as-is..."
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "CUSTOM License: BSD-3-Clause-Attribution and IBM-as-is..."
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "CUSTOM License: IBM-as-is..."
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "CUSTOM License: IBM-as-is..."
+    },
+    {
+      "package": "libc-bin",
+      "license": "Carnegie"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "Carnegie"
+    },
+    {
+      "package": "libc6",
+      "license": "Carnegie"
+    },
+    {
+      "package": "locales",
+      "license": "Carnegie"
+    },
+    {
+      "package": "libpsl5t64",
+      "license": "Chromium"
+    },
+    {
+      "package": "libc-bin",
+      "license": "DEC"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "DEC"
+    },
+    {
+      "package": "libc6",
+      "license": "DEC"
+    },
+    {
+      "package": "locales",
+      "license": "DEC"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "DONT-CHANGE-THE-GPL"
+    },
+    {
+      "package": "perl",
+      "license": "DONT-CHANGE-THE-GPL"
+    },
+    {
+      "package": "perl-base",
+      "license": "DONT-CHANGE-THE-GPL"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "DONT-CHANGE-THE-GPL"
+    },
+    {
+      "package": "libldap-common",
+      "license": "Expat-ISC"
+    },
+    {
+      "package": "libldap2",
+      "license": "Expat-ISC"
+    },
+    {
+      "package": "libldap-common",
+      "license": "Expat-UNM"
+    },
+    {
+      "package": "libldap2",
+      "license": "Expat-UNM"
+    },
+    {
+      "package": "libldap-common",
+      "license": "F5"
+    },
+    {
+      "package": "libldap2",
+      "license": "F5"
+    },
+    {
+      "package": "gzip",
+      "license": "FSF-manpages"
+    },
+    {
+      "package": "libldap-common",
+      "license": "FSF-unlimited"
+    },
+    {
+      "package": "libldap2",
+      "license": "FSF-unlimited"
+    },
+    {
+      "package": "diffutils",
+      "license": "FSFAP"
+    },
+    {
+      "package": "findutils",
+      "license": "FSFAP"
+    },
+    {
+      "package": "grep",
+      "license": "FSFAP"
+    },
+    {
+      "package": "libc-bin",
+      "license": "FSFAP"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "FSFAP"
+    },
+    {
+      "package": "libc6",
+      "license": "FSFAP"
+    },
+    {
+      "package": "libgnutls30t64",
+      "license": "FSFAP"
+    },
+    {
+      "package": "libidn2-0",
+      "license": "FSFAP"
+    },
+    {
+      "package": "libonig5",
+      "license": "FSFAP"
+    },
+    {
+      "package": "libp11-kit0",
+      "license": "FSFAP"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "FSFAP"
+    },
+    {
+      "package": "locales",
+      "license": "FSFAP"
+    },
+    {
+      "package": "perl",
+      "license": "FSFAP"
+    },
+    {
+      "package": "perl-base",
+      "license": "FSFAP"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "FSFAP"
+    },
+    {
+      "package": "curl",
+      "license": "FSFUL"
+    },
+    {
+      "package": "grep",
+      "license": "FSFUL"
+    },
+    {
+      "package": "libcurl3t64-gnutls",
+      "license": "FSFUL"
+    },
+    {
+      "package": "libcurl4t64",
+      "license": "FSFUL"
+    },
+    {
+      "package": "liblzma5",
+      "license": "FSFUL"
+    },
+    {
+      "package": "curl",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "diffutils",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "findutils",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "gnu-coreutils",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "grep",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "libcurl3t64-gnutls",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "libcurl4t64",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "liblzma5",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "libp11-kit0",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "FSFULLR"
+    },
+    {
+      "package": "grep",
+      "license": "FSFULLR and/or GPL and/or LGPL"
+    },
+    {
+      "package": "libunistring5",
+      "license": "FreeSoftware"
+    },
+    {
+      "package": "libhogweed6t64",
+      "license": "GAP"
+    },
+    {
+      "package": "libnettle8t64",
+      "license": "GAP"
+    },
+    {
+      "package": "gzip",
+      "license": "GFDL-1.3+-no-invariant"
+    },
+    {
+      "package": "bash",
+      "license": "GFDL-1.3-no-invariants-only"
+    },
+    {
+      "package": "diffutils",
+      "license": "GFDL-1.3-no-invariants-only"
+    },
+    {
+      "package": "gnu-coreutils",
+      "license": "GFDL-1.3-no-invariants-only"
+    },
+    {
+      "package": "libelf1t64",
+      "license": "GFDL-1.3-no-invariants-only"
+    },
+    {
+      "package": "findutils",
+      "license": "GFDL-1.3-no-invariants-or-later"
+    },
+    {
+      "package": "libgdbm-compat4t64",
+      "license": "GFDL-1.3-no-invariants-or-later"
+    },
+    {
+      "package": "libgdbm6t64",
+      "license": "GFDL-1.3-no-invariants-or-later"
+    },
+    {
+      "package": "sed",
+      "license": "GFDL-1.3-no-invariants-or-later"
+    },
+    {
+      "package": "findutils",
+      "license": "GPL with automake exception"
+    },
+    {
+      "package": "libbpf1",
+      "license": "GPL-2 with Linux-syscall-note exception"
+    },
+    {
+      "package": "libsystemd0",
+      "license": "GPL-2 with Linux-syscall-note exception"
+    },
+    {
+      "package": "libudev1",
+      "license": "GPL-2 with Linux-syscall-note exception"
+    },
+    {
+      "package": "libbpf1",
+      "license": "GPL-2 with Linux-syscall-note exception OR BSD-3-Clause"
+    },
+    {
+      "package": "curl",
+      "license": "GPL-2+ with Autoconf-data exception"
+    },
+    {
+      "package": "findutils",
+      "license": "GPL-2+ with Autoconf-data exception"
+    },
+    {
+      "package": "libcurl3t64-gnutls",
+      "license": "GPL-2+ with Autoconf-data exception"
+    },
+    {
+      "package": "libcurl4t64",
+      "license": "GPL-2+ with Autoconf-data exception"
+    },
+    {
+      "package": "libp11-kit0",
+      "license": "GPL-2+ with Autoconf-data exception"
+    },
+    {
+      "package": "curl",
+      "license": "GPL-2+ with Libtool exception"
+    },
+    {
+      "package": "libcurl3t64-gnutls",
+      "license": "GPL-2+ with Libtool exception"
+    },
+    {
+      "package": "libcurl4t64",
+      "license": "GPL-2+ with Libtool exception"
+    },
+    {
+      "package": "libldap-common",
+      "license": "GPL-2+ with Libtool exception"
+    },
+    {
+      "package": "libldap2",
+      "license": "GPL-2+ with Libtool exception"
+    },
+    {
+      "package": "e2fsprogs",
+      "license": "GPL-2+ with Texinfo exception"
+    },
+    {
+      "package": "libcom-err2",
+      "license": "GPL-2+ with Texinfo exception"
+    },
+    {
+      "package": "libext2fs2t64",
+      "license": "GPL-2+ with Texinfo exception"
+    },
+    {
+      "package": "libss2",
+      "license": "GPL-2+ with Texinfo exception"
+    },
+    {
+      "package": "logsave",
+      "license": "GPL-2+ with Texinfo exception"
+    },
+    {
+      "package": "libunistring5",
+      "license": "GPL-2+ with distribution exception"
+    },
+    {
+      "package": "libc-bin",
+      "license": "GPL-2+-with-link-exception"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "GPL-2+-with-link-exception"
+    },
+    {
+      "package": "libc6",
+      "license": "GPL-2+-with-link-exception"
+    },
+    {
+      "package": "locales",
+      "license": "GPL-2+-with-link-exception"
+    },
+    {
+      "package": "libldap-common",
+      "license": "GPL-2.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libldap2",
+      "license": "GPL-2.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "GPL-2.0-with-bison-exception+"
+    },
+    {
+      "package": "perl",
+      "license": "GPL-2.0-with-bison-exception+"
+    },
+    {
+      "package": "perl-base",
+      "license": "GPL-2.0-with-bison-exception+"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "GPL-2.0-with-bison-exception+"
+    },
+    {
+      "package": "curl",
+      "license": "GPL-3+ with Autoconf-data exception"
+    },
+    {
+      "package": "findutils",
+      "license": "GPL-3+ with Autoconf-data exception"
+    },
+    {
+      "package": "libcurl3t64-gnutls",
+      "license": "GPL-3+ with Autoconf-data exception"
+    },
+    {
+      "package": "libcurl4t64",
+      "license": "GPL-3+ with Autoconf-data exception"
+    },
+    {
+      "package": "libp11-kit0",
+      "license": "GPL-3+ with Autoconf-data exception"
+    },
+    {
+      "package": "bash",
+      "license": "GPL-3+ with Bison exception"
+    },
+    {
+      "package": "libelf1t64",
+      "license": "GPL-3+ with Bison exception"
+    },
+    {
+      "package": "libgmp10",
+      "license": "GPL-3+ with Bison exception"
+    },
+    {
+      "package": "libpam-modules",
+      "license": "GPL-3+ with Bison exception"
+    },
+    {
+      "package": "libpam-modules-bin",
+      "license": "GPL-3+ with Bison exception"
+    },
+    {
+      "package": "libpam-runtime",
+      "license": "GPL-3+ with Bison exception"
+    },
+    {
+      "package": "libpam0g",
+      "license": "GPL-3+ with Bison exception"
+    },
+    {
+      "package": "tar",
+      "license": "GPL-3+ with Bison exception"
+    },
+    {
+      "package": "findutils",
+      "license": "GPL-3+ with Bison-2.2 exception"
+    },
+    {
+      "package": "libldap-common",
+      "license": "GPL-3+ with Libtool exception"
+    },
+    {
+      "package": "libldap2",
+      "license": "GPL-3+ with Libtool exception"
+    },
+    {
+      "package": "diffutils",
+      "license": "GPL-3+ with texinfo exception"
+    },
+    {
+      "package": "liblzma5",
+      "license": "GPL-3.0-or-later-WITH-Autoconf-exception-macro"
+    },
+    {
+      "package": "diffutils",
+      "license": "GPL-3.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libhogweed6t64",
+      "license": "GPL-3.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libldap-common",
+      "license": "GPL-3.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libldap2",
+      "license": "GPL-3.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libnettle8t64",
+      "license": "GPL-3.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libnghttp2-14",
+      "license": "GPL-3.0-with-autoconf-exception+"
+    },
+    {
+      "package": "libc-bin",
+      "license": "IBM"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "IBM"
+    },
+    {
+      "package": "libc6",
+      "license": "IBM"
+    },
+    {
+      "package": "locales",
+      "license": "IBM"
+    },
+    {
+      "package": "jq",
+      "license": "ICU-1.8.1+"
+    },
+    {
+      "package": "libjq1",
+      "license": "ICU-1.8.1+"
+    },
+    {
+      "package": "libbsd0",
+      "license": "ISC-Original"
+    },
+    {
+      "package": "libc-bin",
+      "license": "Inner-Net"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "Inner-Net"
+    },
+    {
+      "package": "libc6",
+      "license": "Inner-Net"
+    },
+    {
+      "package": "locales",
+      "license": "Inner-Net"
+    },
+    {
+      "package": "libldap-common",
+      "license": "JCG"
+    },
+    {
+      "package": "libldap2",
+      "license": "JCG"
+    },
+    {
+      "package": "e2fsprogs",
+      "license": "Kazlib"
+    },
+    {
+      "package": "libcom-err2",
+      "license": "Kazlib"
+    },
+    {
+      "package": "libext2fs2t64",
+      "license": "Kazlib"
+    },
+    {
+      "package": "libss2",
+      "license": "Kazlib"
+    },
+    {
+      "package": "logsave",
+      "license": "Kazlib"
+    },
+    {
+      "package": "libc-bin",
+      "license": "LGPL-2.1+-with-link-exception"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "LGPL-2.1+-with-link-exception"
+    },
+    {
+      "package": "libc6",
+      "license": "LGPL-2.1+-with-link-exception"
+    },
+    {
+      "package": "locales",
+      "license": "LGPL-2.1+-with-link-exception"
+    },
+    {
+      "package": "bash",
+      "license": "Latex2e"
+    },
+    {
+      "package": "e2fsprogs",
+      "license": "Latex2e"
+    },
+    {
+      "package": "libcom-err2",
+      "license": "Latex2e"
+    },
+    {
+      "package": "libext2fs2t64",
+      "license": "Latex2e"
+    },
+    {
+      "package": "libss2",
+      "license": "Latex2e"
+    },
+    {
+      "package": "logsave",
+      "license": "Latex2e"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "MIT-CMU"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "MIT-CMU"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "MIT-Export"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "MIT-Export"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "MIT-OpenVision"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "MIT-OpenVision"
+    },
+    {
+      "package": "e2fsprogs",
+      "license": "MIT-US-export"
+    },
+    {
+      "package": "libcom-err2",
+      "license": "MIT-US-export"
+    },
+    {
+      "package": "libext2fs2t64",
+      "license": "MIT-US-export"
+    },
+    {
+      "package": "libss2",
+      "license": "MIT-US-export"
+    },
+    {
+      "package": "logsave",
+      "license": "MIT-US-export"
+    },
+    {
+      "package": "libldap-common",
+      "license": "MIT-XC"
+    },
+    {
+      "package": "libldap2",
+      "license": "MIT-XC"
+    },
+    {
+      "package": "libc-bin",
+      "license": "MIT-like-Lord"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "MIT-like-Lord"
+    },
+    {
+      "package": "libc6",
+      "license": "MIT-like-Lord"
+    },
+    {
+      "package": "locales",
+      "license": "MIT-like-Lord"
+    },
+    {
+      "package": "libdb5.3t64",
+      "license": "MIT-old"
+    },
+    {
+      "package": "liberror-perl",
+      "license": "MIT/X11"
+    },
+    {
+      "package": "libtinfo6",
+      "license": "MIT/X11"
+    },
+    {
+      "package": "ncurses-base",
+      "license": "MIT/X11"
+    },
+    {
+      "package": "ncurses-bin",
+      "license": "MIT/X11"
+    },
+    {
+      "package": "libffi8",
+      "license": "MPL-1.1"
+    },
+    {
+      "package": "libdb5.3t64",
+      "license": "MS-PL"
+    },
+    {
+      "package": "libldap-common",
+      "license": "NeoSoft-permissive"
+    },
+    {
+      "package": "libldap2",
+      "license": "NeoSoft-permissive"
+    },
+    {
+      "package": "curl",
+      "license": "OLDAP-2.8"
+    },
+    {
+      "package": "libcurl3t64-gnutls",
+      "license": "OLDAP-2.8"
+    },
+    {
+      "package": "libcurl4t64",
+      "license": "OLDAP-2.8"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "OpenLDAP"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "OpenLDAP"
+    },
+    {
+      "package": "libldap-common",
+      "license": "OpenLDAP-2.8"
+    },
+    {
+      "package": "libldap2",
+      "license": "OpenLDAP-2.8"
+    },
+    {
+      "package": "libc-bin",
+      "license": "PCRE"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "PCRE"
+    },
+    {
+      "package": "libc6",
+      "license": "PCRE"
+    },
+    {
+      "package": "locales",
+      "license": "PCRE"
+    },
+    {
+      "package": "liblzma5",
+      "license": "PD"
+    },
+    {
+      "package": "liblzma5",
+      "license": "PD-debian"
+    },
+    {
+      "package": "libtirpc-common",
+      "license": "PERMISSIVE"
+    },
+    {
+      "package": "libtirpc3t64",
+      "license": "PERMISSIVE"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "REGCOMP"
+    },
+    {
+      "package": "perl",
+      "license": "REGCOMP"
+    },
+    {
+      "package": "perl-base",
+      "license": "REGCOMP"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "REGCOMP"
+    },
+    {
+      "package": "gpgv",
+      "license": "RFC-Reference"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "RSA-MD"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "RSA-MD"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "SDBM-PUBLIC-DOMAIN"
+    },
+    {
+      "package": "perl",
+      "license": "SDBM-PUBLIC-DOMAIN"
+    },
+    {
+      "package": "perl-base",
+      "license": "SDBM-PUBLIC-DOMAIN"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "SDBM-PUBLIC-DOMAIN"
+    },
+    {
+      "package": "debianutils",
+      "license": "SMAIL-GPL"
+    },
+    {
+      "package": "libdb5.3t64",
+      "license": "Sleepycat"
+    },
+    {
+      "package": "libc-bin",
+      "license": "SunPro"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "SunPro"
+    },
+    {
+      "package": "libc6",
+      "license": "SunPro"
+    },
+    {
+      "package": "locales",
+      "license": "SunPro"
+    },
+    {
+      "package": "libdb5.3t64",
+      "license": "TCL-like"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "TEXT-TABS"
+    },
+    {
+      "package": "perl",
+      "license": "TEXT-TABS"
+    },
+    {
+      "package": "perl-base",
+      "license": "TEXT-TABS"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "TEXT-TABS"
+    },
+    {
+      "package": "gpgv",
+      "license": "TinySCHEME"
+    },
+    {
+      "package": "libldap-common",
+      "license": "UMich"
+    },
+    {
+      "package": "libldap2",
+      "license": "UMich"
+    },
+    {
+      "package": "github.com/GehirnInc/crypt",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/canonical/go-flags",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/canonical/pebble",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/canonical/x-go",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/gorilla/mux",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/gorilla/websocket",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/pkg/term",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/sys",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "golang.org/x/term",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gopkg.in/tomb.v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gopkg.in/yaml.v2",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "gopkg.in/yaml.v3",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libcrypt1",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libgcc-s1",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libncursesw6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libstdc++6",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "openssl",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "stdlib",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "libidn2-0",
+      "license": "Unicode"
+    },
+    {
+      "package": "libperl5.40",
+      "license": "Unicode"
+    },
+    {
+      "package": "perl",
+      "license": "Unicode"
+    },
+    {
+      "package": "perl-base",
+      "license": "Unicode"
+    },
+    {
+      "package": "perl-modules-5.40",
+      "license": "Unicode"
+    },
+    {
+      "package": "libc-bin",
+      "license": "Unicode-DFS-2016"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "Unicode-DFS-2016"
+    },
+    {
+      "package": "libc6",
+      "license": "Unicode-DFS-2016"
+    },
+    {
+      "package": "libunistring5",
+      "license": "Unicode-DFS-2016"
+    },
+    {
+      "package": "locales",
+      "license": "Unicode-DFS-2016"
+    },
+    {
+      "package": "libc-bin",
+      "license": "Univ-Coimbra"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "Univ-Coimbra"
+    },
+    {
+      "package": "libc6",
+      "license": "Univ-Coimbra"
+    },
+    {
+      "package": "locales",
+      "license": "Univ-Coimbra"
+    },
+    {
+      "package": "curl",
+      "license": "X11"
+    },
+    {
+      "package": "diffutils",
+      "license": "X11"
+    },
+    {
+      "package": "findutils",
+      "license": "X11"
+    },
+    {
+      "package": "grep",
+      "license": "X11"
+    },
+    {
+      "package": "libcurl3t64-gnutls",
+      "license": "X11"
+    },
+    {
+      "package": "libcurl4t64",
+      "license": "X11"
+    },
+    {
+      "package": "libdb5.3t64",
+      "license": "X11"
+    },
+    {
+      "package": "libffi8",
+      "license": "X11"
+    },
+    {
+      "package": "libonig5",
+      "license": "X11"
+    },
+    {
+      "package": "libp11-kit0",
+      "license": "X11"
+    },
+    {
+      "package": "libpcre2-8-0",
+      "license": "X11"
+    },
+    {
+      "package": "libtinfo6",
+      "license": "X11"
+    },
+    {
+      "package": "libunistring5",
+      "license": "X11"
+    },
+    {
+      "package": "mawk",
+      "license": "X11"
+    },
+    {
+      "package": "ncurses-base",
+      "license": "X11"
+    },
+    {
+      "package": "ncurses-bin",
+      "license": "X11"
+    },
+    {
+      "package": "sed",
+      "license": "X11"
+    },
+    {
+      "package": "libtirpc-common",
+      "license": "__AUTO_PERMISSIVE__"
+    },
+    {
+      "package": "libtirpc3t64",
+      "license": "__AUTO_PERMISSIVE__"
+    },
+    {
+      "package": "libnghttp2-14",
+      "license": "all-permissive"
+    },
+    {
+      "package": "sensible-utils",
+      "license": "configure"
+    },
+    {
+      "package": "apt",
+      "license": "curl"
+    },
+    {
+      "package": "curl",
+      "license": "curl"
+    },
+    {
+      "package": "libapt-pkg7.0",
+      "license": "curl"
+    },
+    {
+      "package": "libcurl3t64-gnutls",
+      "license": "curl"
+    },
+    {
+      "package": "libcurl4t64",
+      "license": "curl"
+    },
+    {
+      "package": "libxtables12",
+      "license": "custom"
+    },
+    {
+      "package": "libp11-kit0",
+      "license": "customFSFULLRWD"
+    },
+    {
+      "package": "git",
+      "license": "dlmalloc"
+    },
+    {
+      "package": "git-man",
+      "license": "dlmalloc"
+    },
+    {
+      "package": "libgpg-error0",
+      "license": "g10-permissive"
+    },
+    {
+      "package": "libpsl5t64",
+      "license": "gnulib"
+    },
+    {
+      "package": "sensible-utils",
+      "license": "installsh"
+    },
+    {
+      "package": "git",
+      "license": "mingw-runtime"
+    },
+    {
+      "package": "git-man",
+      "license": "mingw-runtime"
+    },
+    {
+      "package": "liblzma5",
+      "license": "none"
+    },
+    {
+      "package": "sudo",
+      "license": "other"
+    },
+    {
+      "package": "sed",
+      "license": "pcre"
+    },
+    {
+      "package": "bash",
+      "license": "permissive"
+    },
+    {
+      "package": "gpgv",
+      "license": "permissive"
+    },
+    {
+      "package": "rust-coreutils",
+      "license": "permissive"
+    },
+    {
+      "package": "liblzma5",
+      "license": "permissive-nowarranty"
+    },
+    {
+      "package": "base-passwd",
+      "license": "public-domain"
+    },
+    {
+      "package": "bsdutils",
+      "license": "public-domain"
+    },
+    {
+      "package": "dash",
+      "license": "public-domain"
+    },
+    {
+      "package": "debianutils",
+      "license": "public-domain"
+    },
+    {
+      "package": "diffutils",
+      "license": "public-domain"
+    },
+    {
+      "package": "findutils",
+      "license": "public-domain"
+    },
+    {
+      "package": "grep",
+      "license": "public-domain"
+    },
+    {
+      "package": "libblkid1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libbsd0",
+      "license": "public-domain"
+    },
+    {
+      "package": "libc-bin",
+      "license": "public-domain"
+    },
+    {
+      "package": "libc-gconv-modules-extra",
+      "license": "public-domain"
+    },
+    {
+      "package": "libc6",
+      "license": "public-domain"
+    },
+    {
+      "package": "libffi8",
+      "license": "public-domain"
+    },
+    {
+      "package": "libhogweed6t64",
+      "license": "public-domain"
+    },
+    {
+      "package": "libldap-common",
+      "license": "public-domain"
+    },
+    {
+      "package": "libldap2",
+      "license": "public-domain"
+    },
+    {
+      "package": "libmount1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libnettle8t64",
+      "license": "public-domain"
+    },
+    {
+      "package": "libpam-modules",
+      "license": "public-domain"
+    },
+    {
+      "package": "libpam-modules-bin",
+      "license": "public-domain"
+    },
+    {
+      "package": "libpam-runtime",
+      "license": "public-domain"
+    },
+    {
+      "package": "libpam0g",
+      "license": "public-domain"
+    },
+    {
+      "package": "libpcre2-8-0",
+      "license": "public-domain"
+    },
+    {
+      "package": "libselinux1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libsmartcols1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libsystemd0",
+      "license": "public-domain"
+    },
+    {
+      "package": "libudev1",
+      "license": "public-domain"
+    },
+    {
+      "package": "libunistring5",
+      "license": "public-domain"
+    },
+    {
+      "package": "libuuid1",
+      "license": "public-domain"
+    },
+    {
+      "package": "locales",
+      "license": "public-domain"
+    },
+    {
+      "package": "login",
+      "license": "public-domain"
+    },
+    {
+      "package": "mount",
+      "license": "public-domain"
+    },
+    {
+      "package": "sudo",
+      "license": "public-domain"
+    },
+    {
+      "package": "util-linux",
+      "license": "public-domain"
+    },
+    {
+      "package": "libmd0",
+      "license": "public-domain-md4"
+    },
+    {
+      "package": "libmd0",
+      "license": "public-domain-md5"
+    },
+    {
+      "package": "dpkg",
+      "license": "public-domain-s-s-d"
+    },
+    {
+      "package": "libmd0",
+      "license": "public-domain-sha1"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "text://BSD-3-Clause-Attribution and IBM-as-is"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "text://BSD-3-Clause-Attribution and IBM-as-is"
+    },
+    {
+      "package": "libsasl2-2",
+      "license": "text://IBM-as-is"
+    },
+    {
+      "package": "libsasl2-modules-db",
+      "license": "text://IBM-as-is"
+    },
+    {
+      "package": "base-files",
+      "license": "verbatim"
+    }
+  ],
+  "generatedFrom": {
+    "scanner": "Trivy 0.74.0",
+    "reports": [
+      {
+        "artifact": "index.docker.io/codercom/example-minimal@sha256:00c4753ef9c993214d8f22550566db54126c2f37d982191b72fae6508bce3f80",
+        "reportId": "01a0bd7d-6cfd-7f36-a1df-407f7107d9bc"
+      },
+      {
+        "artifact": "index.docker.io/codercom/example-minimal@sha256:c7b1dc99298e9fb34145f65f5365220b696b28c12d3858a54e0232b3a71a44c2",
+        "reportId": "01a0bd7d-8ccc-7ead-847c-8d2f15773ac0"
+      }
+    ]
+  },
+  "exitCondition": {
+    "owner": "simone.primarosa@gmail.com",
+    "replacement": "Official Coder minimal workspace bases publish SPDX-normalized Ubuntu license metadata.",
+    "reviewBy": "2027-03-02"
+  }
+}

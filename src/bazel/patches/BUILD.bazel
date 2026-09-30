@@ -1,0 +1,7 @@
+"""Export patch files applied to external Bazel ruleset dependencies during module resolution."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+exports_files(glob(["*.patch"]))
+
+package_sources()

@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LicensePolicy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "description",
+    "schemaVersion",
+    "allowEverywhere",
+    "allowOsPackages",
+    "allowDevTools",
+    "reviewedPackageLicenses",
+    "reviewedDependencies",
+    "reviewBasis",
+    "sourceScan",
+    "unsupportedDependencyClasses"
+  ],
+  "properties": {
+    "description": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "allowEverywhere": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "allowOsPackages": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "allowDevTools": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "reviewedPackageLicenses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ecosystem",
+          "exception",
+          "license",
+          "package",
+          "scanner",
+          "sourceRegex",
+          "version"
+        ],
+        "properties": {
+          "ecosystem": { "type": "string" },
+          "exception": { "type": "string" },
+          "license": { "type": "string" },
+          "package": { "type": "string" },
+          "scanner": { "type": "string" },
+          "sourceRegex": { "type": "string" },
+          "version": { "type": "string" }
+        }
+      }
+    },
+    "reviewedDependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bazelModules", "terraformProviders", "vendorHelmCharts"],
+      "properties": {
+        "bazelModules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["license", "name", "version"],
+            "properties": {
+              "license": { "type": "string" },
+              "name": { "type": "string" },
+              "version": { "type": "string" }
+            }
+          }
+        },
+        "terraformProviders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["license", "source", "version"],
+            "properties": {
+              "license": { "type": "string" },
+              "source": { "type": "string" },
+              "version": { "type": "string" }
+            }
+          }
+        },
+        "vendorHelmCharts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["chart", "component", "license", "repository", "version"],
+            "properties": {
+              "chart": { "type": "string" },
+              "component": { "type": "string" },
+              "exception": { "type": "string" },
+              "license": { "type": "string" },
+              "repository": { "type": "string" },
+              "version": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "reviewBasis": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "sourceScan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targets"],
+      "properties": {
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["context", "path"],
+            "properties": {
+              "context": { "type": "string" },
+              "entrypoint": { "type": "string" },
+              "path": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "unsupportedDependencyClasses": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

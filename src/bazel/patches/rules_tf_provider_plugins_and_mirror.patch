@@ -1,0 +1,376 @@
+diff --git a/tf/def.bzl b/tf/def.bzl
+--- a/tf/def.bzl
++++ b/tf/def.bzl
+@@ -3,8 +3,7 @@ load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+ load("@rules_tf//tf/rules:tf-gen-doc.bzl", _tf_gen_doc = "tf_gen_doc" )
+ load("@rules_tf//tf/rules:tf-gen-versions.bzl", "tf_gen_versions")
+ load("@rules_tf//tf/rules:tf-providers-versions.bzl", _tf_providers_versions = "tf_providers_versions")
+-load("@rules_tf//tf/rules:tf-lint.bzl", "tf_lint_test")
+-load("@rules_tf//tf/rules:tf-module.bzl", _tf_module = "tf_module", "tf_module_deps", "tf_artifact", "tf_validate_test", _tf_format = "tf_format", "tf_format_test")
++load("@rules_tf//tf/rules:tf-module.bzl", _tf_module = "tf_module", "tf_module_deps", "tf_artifact", "tf_validate_test", _tf_format = "tf_format")
+ 
+ bzl_files = [
+     "**/*.bzl",
+@@ -13,13 +12,19 @@ bzl_files = [
+     "**/BUILD",
+ ]
+ 
++terraform_working_files = [
++    ".terraform/**",
++    "**/.terraform.tfstate.lock.info",
++    "**/*.tfstate",
++    "**/*.tfstate.*",
++]
++
+ def tf_module(name,
+               providers_versions = None,
++              provider_plugins = {},
+               data = [],
+               size="small",
+               providers = [],
+-              tflint_config = None,
+-              tflint_extra_args = [],
+               deps = [],
+               experiments = [],
+               visibility= ["//visibility:public"],
+@@ -51,7 +56,7 @@ def tf_module(name,
+ 
+     pkg_files(
+         name = "srcs",
+-        srcs = native.glob(["**/*"], exclude=bzl_files) + data,
++        srcs = native.glob(["**/*"], exclude=bzl_files + terraform_working_files) + data,
+         strip_prefix = "", # this is important to preserve directory structure
+         prefix = native.package_name(),
+         tags = tags,
+@@ -71,26 +76,11 @@ def tf_module(name,
+         tags = tags,
+     )
+ 
+-    tf_format_test(
+-        name = "format",
+-        size = size,
+-        module = ":module",
+-        tags = tags,
+-    )
+-
+-    tf_lint_test(
+-        name = "lint",
+-        module = ":module",
+-        config = tflint_config,
+-        extra_args = tflint_extra_args,
+-        size = size,
+-        tags = tags,
+-    )
+-
+     if not skip_validation:
+         tf_validate_test(
+             name = "validate",
+             module = ":module",
++            provider_plugins = provider_plugins,
+             size = size,
+             tags = tags,
+         )
+diff --git a/tf/extensions.bzl b/tf/extensions.bzl
+--- a/tf/extensions.bzl
++++ b/tf/extensions.bzl
+@@ -1,7 +1,7 @@
+ load("@rules_tf//tf/toolchains/terraform:toolchain.bzl", "terraform_download")
+ load("@rules_tf//tf/toolchains/tflint:toolchain.bzl", "tflint_download")
+ load("@rules_tf//tf/toolchains/tfdoc:toolchain.bzl", "tfdoc_download")
+-load("@rules_tf//tf/toolchains/tofu:toolchain.bzl", "tofu_download")
++load("@rules_tf//tf/toolchains/tofu:toolchain.bzl", "resolve_provider_archives", "tofu_download")
+ load("@rules_tf//tf:toolchains.bzl", "tf_toolchains")
+ load("@rules_tf//tf:versions.bzl", "TFDOC_VERSION")
+ load("@rules_tf//tf:versions.bzl", "TFLINT_VERSION")
+@@ -86,6 +86,13 @@ def _tf_repositories(ctx):
+                     os = host_detected_os,
+                     arch = host_detected_arch,
+                     mirror = version_tag.mirror,
++                    provider_archives = resolve_provider_archives(
++                        ctx,
++                        version_tag.mirror,
++                        host_detected_os,
++                        host_detected_arch,
++                        version_tag.provider_lock,
++                    ),
+                 )
+                 tofu_toolchains += [tf_repo_name]
+             else:
+@@ -115,6 +122,7 @@ _version_tag = tag_class(
+         "tflint_version": attr.string(default = TFLINT_VERSION),
+         "tfdoc_version": attr.string(default = TFDOC_VERSION),
+         "mirror": attr.string_dict(mandatory = True),
++        "provider_lock": attr.label(),
+     },
+ )
+ 
+diff --git a/tf/rules/provider-plugins.bzl b/tf/rules/provider-plugins.bzl
+new file mode 100644
+--- /dev/null
++++ b/tf/rules/provider-plugins.bzl
+@@ -0,0 +1,51 @@
++"""Builds a writable provider mirror containing first-party plugins."""
++
++def provider_plugin_setup(ctx, mirror):
++    if not ctx.attr.provider_plugins:
++        return struct(
++            command = "",
++            deps = [],
++            directory = "$PWD/{}".format(mirror),
++        )
++
++    commands = [
++        "set -e",
++        'provider_plugin_dir="${TEST_TMPDIR}/provider-plugins"',
++        'provider_mirror="$PWD/{}"'.format(mirror),
++        'mkdir -p "${provider_plugin_dir}"',
++        '(cd "${provider_mirror}" && find . -type d -print) | while IFS= read -r provider_directory; do mkdir -p "${provider_plugin_dir}/${provider_directory}"; done',
++        '(cd "${provider_mirror}" && find . -type f -print) | while IFS= read -r provider_file; do ln -s "${provider_mirror}/${provider_file}" "${provider_plugin_dir}/${provider_file}"; done',
++        'case "$(uname -s):$(uname -m)" in',
++        '  Darwin:arm64) provider_platform="darwin_arm64" ;;',
++        '  Linux:x86_64) provider_platform="linux_amd64" ;;',
++        '  Linux:aarch64|Linux:arm64) provider_platform="linux_arm64" ;;',
++        '  *) echo "unsupported provider platform: $(uname -s):$(uname -m)" >&2; exit 1 ;;',
++        "esac",
++    ]
++    deps = []
++    for target, address in ctx.attr.provider_plugins.items():
++        address_parts = address.split("/")
++        if len(address_parts) != 4:
++            fail("provider plugin address must be host/namespace/name/version, was: {}".format(address))
++        provider_files = target[DefaultInfo].files.to_list()
++        if len(provider_files) != 1:
++            fail("provider plugin target must produce one file, was: {}".format(target.label))
++        provider_file = provider_files[0]
++        provider_name = address_parts[2]
++        provider_version = address_parts[3]
++        commands.extend([
++            'provider_install_dir="${{provider_plugin_dir}}/{}/$provider_platform"'.format(address),
++            'mkdir -p "${provider_install_dir}"',
++            'install -m 0755 "$PWD/{}" "${{provider_install_dir}}/terraform-provider-{}_v{}"'.format(
++                provider_file.short_path,
++                provider_name,
++                provider_version,
++            ),
++        ])
++        deps.append(provider_file)
++
++    return struct(
++        command = "\n".join(commands) + "\n",
++        deps = deps,
++        directory = "${provider_plugin_dir}",
++    )
+diff --git a/tf/rules/tf-module.bzl b/tf/rules/tf-module.bzl
+--- a/tf/rules/tf-module.bzl
++++ b/tf/rules/tf-module.bzl
+@@ -4,6 +4,7 @@ load("@rules_pkg//pkg:providers.bzl", "PackageArtifactInfo")
+ load("@rules_pkg//pkg:providers.bzl", "PackageFilesInfo")
+ load("@rules_pkg//pkg:providers.bzl", "PackageFilegroupInfo")
+ load("@bazel_skylib//lib:paths.bzl", "paths")
++load("@rules_tf//tf/rules:provider-plugins.bzl", "provider_plugin_setup")
+ 
+ def _artifact_impl(ctx):
+     return [
+@@ -143,10 +144,12 @@ tf_module_deps = rule(
+ def _tf_validate_impl(ctx):
+     tf_runtime = ctx.toolchains["@rules_tf//:tf_toolchain_type"].runtime
+ 
+-    cmd = "{tf} -chdir={dir} init -backend=false -input=false -plugin-dir=$PWD/{plugins_mirror} > /dev/null; {tf} -chdir={dir} validate".format(
++    plugins = provider_plugin_setup(ctx, tf_runtime.mirror.short_path)
++    cmd = "{plugin_setup}{tf} -chdir={dir} init -backend=false -input=false -plugin-dir=\"{plugins_mirror}\" > /dev/null; {tf} -chdir={dir} validate".format(
++        plugin_setup = plugins.command,
+         dir = ctx.attr.module.label.package,
+         tf = tf_runtime.tf.short_path,
+-        plugins_mirror = tf_runtime.mirror.short_path,
++        plugins_mirror = plugins.directory,
+     )
+ 
+     ctx.actions.write(
+@@ -154,7 +157,7 @@ def _tf_validate_impl(ctx):
+         content = cmd,
+     )
+ 
+-    deps = ctx.attr.module[TfModuleInfo].transitive_srcs.to_list() + tf_runtime.deps
++    deps = ctx.attr.module[TfModuleInfo].transitive_srcs.to_list() + tf_runtime.deps + plugins.deps
+ 
+     return [DefaultInfo(
+         runfiles = ctx.runfiles(files = deps),
+@@ -164,6 +167,7 @@ tf_validate_test = rule(
+     implementation = _tf_validate_impl,
+     attrs = {
+         "module": attr.label(providers = [TfModuleInfo], allow_files = True),
++        "provider_plugins": attr.label_keyed_string_dict(allow_files = True),
+     },
+     test = True,
+     toolchains = [
+diff --git a/tf/toolchains/tofu/toolchain.bzl b/tf/toolchains/tofu/toolchain.bzl
+--- a/tf/toolchains/tofu/toolchain.bzl
++++ b/tf/toolchains/tofu/toolchain.bzl
+@@ -42,43 +42,134 @@ def _download_impl(ctx):
+     if not res.success:
+         fail("!failed to dl: ", url)
+ 
++    # Download every archive before extracting any of them so the network
++    # transfers overlap. The pinned sha256 lets the repository cache and a
++    # remote downloader serve each archive without contacting its origin.
++    providers = parse_mirror(ctx.attr.mirror)
++    pending = []
++    for key, provider in providers.items():
++        if key not in ctx.attr.provider_archives:
++            fail("no archive resolved for provider {}".format(key))
++        archive_url, archive_sha256 = ctx.attr.provider_archives[key]
++        archive = "provider-archives/{}.zip".format(key)
++        pending.append(struct(
++            archive = archive,
++            download = ctx.download(
++                url = archive_url,
++                sha256 = archive_sha256,
++                output = archive,
++                block = False,
++            ),
++            provider = provider,
++        ))
++
++    # Store providers in the unpacked plugin layout so `tofu init
++    # -plugin-dir` links each one into .terraform instead of extracting
++    # its archive, which for AWS is about 800 MB per module. Multiple exact
++    # versions of one provider source coexist in their version directories.
++    ctx.execute(["mkdir", "-p", "mirror"])
++    for item in pending:
++        item.download.wait()
++        ctx.extract(
++            item.archive,
++            output = "mirror/registry.opentofu.org/{}/{}/{}_{}".format(
++                item.provider["source"],
++                item.provider["version"],
++                ctx.attr.os,
++                ctx.attr.arch,
++            ),
++        )
++        ctx.delete(item.archive)
++
++    return
++
++def parse_mirror(mirror):
++    """Parses `org/provider:x.y.z` mirror coordinates keyed by alias."""
+     providers = {}
+-    for k in ctx.attr.mirror:
+-        v = ctx.attr.mirror[k]
++    for k, v in mirror.items():
+         elems = v.split(":")
+         if len(elems) != 2:
+-            fail("provider version format must be org/provider:x.y.x, was: %s".format(v))
++            fail("provider version format must be org/provider:x.y.z, was: {}".format(v))
+ 
+         provider_elems = elems[0].split("/")
+         if len(provider_elems) != 2:
+-            fail("provider version format must be org/provider:x.y.z, was: %s".format(v))
++            fail("provider version format must be org/provider:x.y.z, was: {}".format(v))
+ 
+-        version = elems[1]
+-        version_elems = version.split(".")
++        version_elems = elems[1].split(".")
+         if len(version_elems) != 3:
+-            fail("provider version format must be org/provider:x.y.z, was: %s".format(v))
++            fail("provider version format must be org/provider:x.y.z, was: {}".format(v))
+ 
+         providers[k] = {
+             "source": elems[0], "version": elems[1],
+         }
+-
+-    versions_tf = {
+-        "terraform": [
+-            {
+-                "required_providers": [dict([(p, providers[p]) for p in providers ])],
+-            }
+-        ]
+-    }
+-
+-    ctx.file("versions.tf.json", content = json.encode(versions_tf))
+-
+-    ctx.execute([
+-        "bash",
+-        "-c",
+-        "mkdir -p mirror; tofu/tofu providers mirror ./mirror > /dev/null",
+-        ])
+-
+-    return
++    return providers
++
++def parse_provider_lock(content):
++    """Collects the `zh:` hashes of each provider block in a lock file.
++
++    The file concatenates `tofu providers lock` output, one block per
++    coordinate, so blocks are keyed by `source:version` rather than source.
++    """
++    hashes = {}
++    current = None
++    source = None
++    for line in content.splitlines():
++        line = line.strip()
++        if line.startswith("provider \"registry.opentofu.org/"):
++            source = line.split("\"")[1].removeprefix("registry.opentofu.org/")
++        elif source != None and line.startswith("version ") and current == None:
++            current = "{}:{}".format(source, line.split("\"")[1])
++            hashes[current] = []
++        elif current != None and line.startswith("\"zh:"):
++            hashes[current].append(line.split("\"")[1].removeprefix("zh:"))
++        elif line == "}":
++            current = None
++            source = None
++    return hashes
++
++def resolve_provider_archives(module_ctx, mirror, os, arch, provider_lock):
++    """Resolves each mirror coordinate to its registry archive URL and sha256.
++
++    Module extensions call this so the lockfile records the resolved
++    archives and repository fetches download them by checksum. Each sha256
++    must appear among the coordinate's `zh:` hashes in `provider_lock`,
++    which `tofu providers lock` takes from the GPG-verified SHA256SUMS of
++    the provider release, so the registry response alone is never trusted.
++    """
++    if provider_lock == None:
++        fail("tf.download(use_tofu = True) requires provider_lock, a file of `tofu providers lock` output covering every mirror coordinate")
++    locked = parse_provider_lock(module_ctx.read(provider_lock))
++    archives = {}
++    for key, provider in parse_mirror(mirror).items():
++        coordinate = "{}:{}".format(provider["source"], provider["version"])
++        if coordinate not in locked:
++            fail("provider {} ({}) has no block in {}; regenerate it as its header describes".format(
++                key,
++                coordinate,
++                provider_lock,
++            ))
++        package = "provider-packages/{}.json".format(key)
++        module_ctx.download(
++            url = "https://registry.opentofu.org/v1/providers/{}/{}/download/{}/{}".format(
++                provider["source"],
++                provider["version"],
++                os,
++                arch,
++            ),
++            output = package,
++        )
++        metadata = json.decode(module_ctx.read(package))
++        if metadata["shasum"] not in locked[coordinate]:
++            fail("registry sha256 {} for provider {} ({}) on {}_{} is not among its zh: hashes in {}; refusing an archive that does not match the GPG-verified lock".format(
++                metadata["shasum"],
++                key,
++                coordinate,
++                os,
++                arch,
++                provider_lock,
++            ))
++        archives[key] = [metadata["download_url"], metadata["shasum"]]
++    return archives
+ 
+ tofu_download = repository_rule(
+     implementation = _download_impl,
+@@ -87,6 +178,7 @@ tofu_download = repository_rule(
+         "os": attr.string(mandatory = True),
+         "arch": attr.string(mandatory = True),
+         "mirror": attr.string_dict(mandatory = True),
++        "provider_archives": attr.string_list_dict(mandatory = True),
+     },
+ )
+ 

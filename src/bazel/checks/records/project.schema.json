@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Workload project record",
+  "type": "object",
+  "properties": {
+    "delivery": { "enum": ["promoted", "submitted"] },
+    "stages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/stage" },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "required": ["delivery"],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "delivery": { "const": "promoted" } },
+        "required": ["delivery"]
+      },
+      "then": { "required": ["stages"] }
+    },
+    {
+      "if": {
+        "properties": { "delivery": { "const": "submitted" } },
+        "required": ["delivery"]
+      },
+      "then": { "not": { "required": ["stages"] } }
+    }
+  ],
+  "$defs": {
+    "sourceName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$"
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "promotion", "source"],
+      "properties": {
+        "name": { "$ref": "#/$defs/sourceName" },
+        "promotion": { "enum": ["automatic", "manual"] },
+        "source": { "$ref": "#/$defs/stageSource" }
+      }
+    },
+    "stageSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["stage", "warehouse"] },
+        "name": { "$ref": "#/$defs/sourceName" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "stage" } }, "required": ["kind"] },
+          "then": { "required": ["name"] },
+          "else": { "not": { "required": ["name"] } }
+        }
+      ]
+    }
+  }
+}

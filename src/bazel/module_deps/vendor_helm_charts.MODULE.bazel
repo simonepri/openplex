@@ -1,0 +1,316 @@
+"""Declare vendor Helm repository rules and immutable version pins consumed by MODULE.bazel."""
+
+vendor_helm_chart = use_repo_rule("@rules_helm//helm:helm_import.bzl", "helm_import_repository")
+
+vendor_helm_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+vendor_helm_chart(
+    name = "vendor_helm_atlantis",
+    chart_name = "atlantis",
+    repository = "https://runatlantis.github.io/helm-charts",
+    sha256 = "d42dbaf36ab890655456cefd68b545090767206da3c6bf00bf76be424f385d24",
+    version = "6.16.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_aws_load_balancer_controller",
+    chart_name = "aws-load-balancer-controller",
+    repository = "https://aws.github.io/eks-charts",
+    sha256 = "45051f634b33e10baccb3354d0681b7de787c60445e599fa276e0c9aedd4ccd5",
+    version = "3.5.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_barman_cloud",
+    chart_name = "plugin-barman-cloud",
+    repository = "https://cloudnative-pg.github.io/charts",
+    sha256 = "9ad0b9e56da2777a1a0269feaf7215e18297e9c8b5730e04acb27b5d462e9456",
+    version = "0.8.1",
+)
+
+vendor_helm_file(
+    name = "vendor_helm_cert_manager",
+    downloaded_file_path = "cert-manager-v1.21.1.tgz",
+    sha256 = "c27101f3f3e2349fb4a9e704316105bf7b52ad73b8c8257d3498ef7f2f6a4adc",
+    urls = ["https://charts.jetstack.io/charts/cert-manager-v1.21.1.tgz"],
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_clickhouse_operator",
+    chart_name = "altinity-clickhouse-operator",
+    repository = "https://helm.altinity.com",
+    sha256 = "b06241f34f07ebc611090edc4be036a4d4d1c680f82f4df1c5496cc808cb7a13",
+    version = "0.27.4",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_cloudnative_pg",
+    chart_name = "cloudnative-pg",
+    repository = "https://cloudnative-pg.github.io/charts",
+    sha256 = "b53d3991fe84bcf38767e7702cae78666265427a127a26fff168ab4207d2b1df",
+    version = "0.29.1",
+)
+
+vendor_helm_file(
+    name = "vendor_helm_coder",
+    downloaded_file_path = "coder-2.36.5.tgz",
+    sha256 = "6e18e35f5987c0c193468f7fed621b81c5c1733a72a02bcc9659f1cc67620a22",
+    urls = ["https://helm.coder.com/v2/coder_helm_2.36.5.tgz"],
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_csi_rclone",
+    sha256 = "7f13aba9a7d38041fbb1e1e32de2d7d8b258a37b52f3cb155b2159dd50eaad4e",
+    url = "oci://ghcr.io/veloxpack/charts/csi-driver-rclone:0.5.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_dex",
+    chart_name = "dex",
+    repository = "https://charts.dexidp.io",
+    sha256 = "8092493d4fa87096d9ca6062f9b3ae351c728d8366088ec259eb1fba03f61426",
+    version = "0.25.2",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_dragonfly_manager",
+    chart_name = "dragonfly",
+    repository = "https://dragonflyoss.github.io/helm-charts",
+    sha256 = "8567532e15c8c934f0a8a7c901263a53e0f3949f0f352b04ab31b06971594953",
+    version = "1.8.5",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_dragonfly_peer",
+    chart_name = "dragonfly",
+    repository = "https://dragonflyoss.github.io/helm-charts",
+    sha256 = "8567532e15c8c934f0a8a7c901263a53e0f3949f0f352b04ab31b06971594953",
+    version = "1.8.5",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_envoy_gateway",
+    sha256 = "f94c5e5a91ece94d1e35d958f92ae7550a1f6bceb5e68cef42f2f5bc256a3977",
+    url = "oci://registry-1.docker.io/envoyproxy/gateway-helm:1.9.2",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_external_dns",
+    chart_name = "external-dns",
+    repository = "https://kubernetes-sigs.github.io/external-dns",
+    sha256 = "6d149b9b04db1dc9e46b3693a4eca4ac90d6bba5e3b2a0fdd067ce3f7bfbc31e",
+    version = "1.23.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_external_secrets",
+    chart_name = "external-secrets",
+    repository = "https://charts.external-secrets.io",
+    sha256 = "8199b42fe80b871c6a86233a80bb14f599fd6e1e6462c1216d836577f845e161",
+    version = "2.11.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_falco",
+    chart_name = "falco",
+    repository = "https://falcosecurity.github.io/charts",
+    sha256 = "5e0699e68e5e4abd5eab1d501b3e0300a15888f3a5c2b0977bf3ca3229a8d04a",
+    version = "9.2.0",
+)
+
+vendor_helm_file(
+    name = "vendor_helm_gpu_operator",
+    downloaded_file_path = "gpu-operator-v26.7.1.tgz",
+    sha256 = "fdce4cba07db5ddb6dfd0bdf61276a44c24136f2b193bc6ebc81dd1b0f049777",
+    urls = ["https://helm.ngc.nvidia.com/nvidia/charts/gpu-operator-v26.7.1.tgz"],
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_headlamp",
+    chart_name = "headlamp",
+    repository = "https://kubernetes-sigs.github.io/headlamp",
+    sha256 = "38c619e0ed5db4164b02c353bcbb24e8157c1d98d961b292f99d68cc9316b8eb",
+    version = "0.45.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_k8s_cleaner",
+    sha256 = "662b6cf9229791ebf27e63e9bfeae4afd31223139a0bf505eb6acc03a47782f9",
+    url = "oci://ghcr.io/gianlucam76/charts/k8s-cleaner:0.24.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_kargo",
+    sha256 = "d152209bc01fe7577285ecc1803e4dac4832ec6e7a7724a89351dbf799d43d6a",
+    url = "oci://ghcr.io/akuity/kargo-charts/kargo:1.12.1",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_karpenter_aws",
+    sha256 = "d576f955623fa421933d69ea2badc422b24df318b352747a5cd3d18de710ffe2",
+    url = "oci://public.ecr.aws/karpenter/karpenter:1.14.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_karpenter_gcp",
+    chart_name = "karpenter",
+    repository = "https://cloudpilot-ai.github.io/karpenter-provider-gcp",
+    sha256 = "590ceedd33d16556874ec18f47bede126f87731cbecb6d23b2fb4ee859fd0f25",
+    version = "0.6.1",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_keda",
+    chart_name = "keda",
+    repository = "https://kedacore.github.io/charts",
+    sha256 = "a7da56bf41a33dad9d2fc82a6fdecee552fff947d80bf1e1dbcf4db0f9e26dee",
+    version = "2.21.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_keda_http",
+    chart_name = "keda-add-ons-http",
+    repository = "https://kedacore.github.io/charts",
+    sha256 = "363f7250851f948661f7301c7e3bcb33c2cf19f4e26e2247f71ae61d339abe82",
+    version = "0.16.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_kuberay",
+    chart_name = "kuberay-operator",
+    repository = "https://ray-project.github.io/kuberay-helm",
+    sha256 = "fd057c207a6be038f2fe1475abb87f43a8c091b77f1f563b4e8547a2404b5bc8",
+    version = "1.7.1",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_kuberhealthy",
+    chart_name = "kuberhealthy",
+    repository = "https://kuberhealthy.github.io/kuberhealthy/helm-repos",
+    sha256 = "e3b272151d053066d8452d426f96895afd4516605282cb0208d351a8dcac2078",
+    version = "100",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_kubescape_operator",
+    chart_name = "kubescape-operator",
+    repository = "https://kubescape.github.io/helm-charts",
+    sha256 = "9c9dad697b13d085ed1c6cbb166d9ade239305aa2e8b5999840d455fc91a10ea",
+    version = "1.40.4",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_kueue",
+    sha256 = "41e4bbeb1d9636a4483a835c1a1c4841f26654ad977642e53b38a93fa8a2e2a5",
+    url = "oci://registry.k8s.io/kueue/charts/kueue:0.20.0",
+)
+
+# LINT.IfChange(kyverno-chart-version)
+vendor_helm_chart(
+    name = "vendor_helm_kyverno",
+    chart_name = "kyverno",
+    repository = "https://kyverno.github.io/kyverno",
+    sha256 = "7b7fe51a431b5b133b0ce7eb9dcb222b6a37fb967c163223cf480054ad14d752",
+    version = "3.9.1",
+)
+# LINT.ThenChange(//src/infra/argocd/apps/ctrl.yaml:kyverno-chart-version,//src/infra/argocd/apps/cells.yaml:kyverno-chart-version,//src/infra/argocd/components/kyverno/helm/values.yaml:kyverno-chart-version)
+
+vendor_helm_chart(
+    name = "vendor_helm_opencost",
+    chart_name = "opencost",
+    repository = "https://opencost.github.io/opencost-helm-chart",
+    sha256 = "7703e895529abf0fc582c2897d978099af9b8603bf30932732de5fddbfd4a40e",
+    version = "2.5.32",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_otel_collector",
+    chart_name = "opentelemetry-collector",
+    repository = "https://open-telemetry.github.io/opentelemetry-helm-charts",
+    sha256 = "6b2ecf067ed5c77fb0ae879b6290731f467a0c5bea65aa5616b80c7171ee4836",
+    version = "0.175.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_prometheus_api_bridge",
+    sha256 = "c7c9d1ce7b78be5c28a7a4581b06da8e928f385b1e18ffbf7b9c6bcfbbbaaaa5",
+    url = "oci://ghcr.io/simonepri/charts/prometheus-api-bridge:0.3.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_pvc_autoresizer",
+    chart_name = "pvc-autoresizer",
+    repository = "https://topolvm.github.io/pvc-autoresizer",
+    sha256 = "da41bff26e4a95e5815bba1b58134f02cdfb8a4170f7832b1e5e10c328757cfb",
+    version = "0.20.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_rawfile_localpv",
+    chart_name = "rawfile-localpv",
+    repository = "https://openebs.github.io/rawfile-localpv",
+    sha256 = "57da44022c61e8e6b08650c34308997fb06f48bc66f37afacf0fdcc61ee08bcb",
+    version = "0.15.3",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_signoz",
+    chart_name = "signoz",
+    repository = "https://charts.signoz.io",
+    sha256 = "e3ec7144de45404b10837ef80e86c6cec4960cde41e914f4782d9205c739adad",
+    version = "0.143.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_trivy_operator",
+    chart_name = "trivy-operator",
+    repository = "https://aquasecurity.github.io/helm-charts",
+    sha256 = "bb0c44bc70e3158cc63ea49d7458ede6db5b6c932f6585a2d787eb9712fd4288",
+    version = "0.36.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_trivy_server",
+    chart_name = "trivy",
+    repository = "https://aquasecurity.github.io/helm-charts",
+    sha256 = "6e44f17387f818a20742c89659f8950fc31de01c8e875ebeff7259066bbfe9c1",
+    version = "0.27.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_trust_manager",
+    sha256 = "b271163e34fdf5c0894e56e568f3616c0db3a02d7ea5a8f9bcfd42f9f3e111f0",
+    url = "oci://quay.io/jetstack/charts/trust-manager:v0.25.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_valkey_operator",
+    chart_name = "valkey-operator",
+    repository = "https://valkey.io/valkey-helm",
+    sha256 = "11b04cc314780179b001ec12d84e2bb42220b80800932ab77ad868cac67bf62d",
+    version = "0.7.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_velero",
+    chart_name = "velero",
+    repository = "https://vmware-tanzu.github.io/helm-charts",
+    sha256 = "5e6b516dc6ce83f0b46ef0440c09a5f061e68861c5c8bfdc86484e886a1ba391",
+    version = "12.2.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_velero_ui",
+    chart_name = "velero-ui",
+    repository = "https://helm.otwld.com",
+    sha256 = "be1c5a6b8b474968b782c7c8a8678ba5f9203fbcfd37ae67aef1a3d71732aa06",
+    version = "0.16.0",
+)
+
+vendor_helm_chart(
+    name = "vendor_helm_vpa",
+    chart_name = "vertical-pod-autoscaler",
+    repository = "https://kubernetes.github.io/autoscaler",
+    sha256 = "0b7e22e4170f18bf281d22ba2a0ab8ff31f5af832d687284df097d5bf0538c74",
+    version = "0.13.0",
+)

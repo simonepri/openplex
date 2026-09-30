@@ -1,0 +1,24 @@
+diff --git a/kustomize/private/platforms.bzl b/kustomize/private/platforms.bzl
+--- a/kustomize/private/platforms.bzl
++++ b/kustomize/private/platforms.bzl
+@@ -22,7 +22,7 @@ PLATFORMS = {
+     "linux_arm64": struct(
+         compatible_with = [
+             "@platforms//os:linux",
+-            "@platforms//cpu:x86_64",
++            "@platforms//cpu:arm64",
+         ],
+     ),
+ }
+diff --git a/kubectl/private/platforms.bzl b/kubectl/private/platforms.bzl
+--- a/kubectl/private/platforms.bzl
++++ b/kubectl/private/platforms.bzl
+@@ -22,7 +22,7 @@ PLATFORMS = {
+     "linux_arm64": struct(
+         compatible_with = [
+             "@platforms//os:linux",
+-            "@platforms//cpu:x86_64",
++            "@platforms//cpu:arm64",
+         ],
+     ),
+ }
