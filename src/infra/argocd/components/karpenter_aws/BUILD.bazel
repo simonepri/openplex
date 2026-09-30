@@ -1,0 +1,76 @@
+"""Check targets for the karpenter_aws Argo CD component."""
+
+load("@rules_helm//helm:defs.bzl", "helm_template")
+load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+kustomization(
+    name = "base",
+    srcs = glob(["kustomize/**"]),
+    file = "kustomize/kustomization.yaml",
+)
+
+kustomized_resources(
+    name = "base_render",
+    kustomization = ":base",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "base_manifest",
+    rendered = ":base_render",
+)
+
+sh_test(
+    name = "stargz-bootstrap_test",
+    srcs = ["bootstrap/stargz-bootstrap_test.sh"],
+    args = [
+        "$(location :base_render)",
+        "$(location bootstrap/stargz-bootstrap.sh)",
+        "$(location bootstrap/stargz-config.toml)",
+        "$(location bootstrap/stargz-snapshotter.service)",
+        "$(location bootstrap/containerd-stargz.conf)",
+        "$(location bootstrap/stargz-node-config.yaml)",
+        "$(location //src/bazel/tools:yq)",
+    ],
+    data = [
+        "bootstrap/containerd-stargz.conf",
+        "bootstrap/stargz-bootstrap.sh",
+        "bootstrap/stargz-config.toml",
+        "bootstrap/stargz-node-config.yaml",
+        "bootstrap/stargz-snapshotter.service",
+        ":base_render",
+        "//src/bazel/tools:yq",
+    ],
+)
+
+helm_template(
+    name = "vendor-helm-render",
+    chart = "@vendor_helm_karpenter_aws//:karpenter",
+    opts = [
+        "--include-crds",
+        "--namespace",
+        "manifest-checks",
+    ],
+    values = [
+        "helm/values.yaml",
+    ],
+)
+
+sh_library(
+    name = "shell",
+    srcs = [
+        "bootstrap/stargz-bootstrap.sh",
+    ],
+)
+
+package_sources(exclude = ["**/*.sh"])
+
+manifest_checks(
+    name = "vendor-helm",
+    kube_lint_config = "//src/bazel/rules/kubernetes_manifests:kube-linter-vendor.yaml",
+    rendered = ":vendor-helm-render",
+)

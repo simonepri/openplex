@@ -1,0 +1,319 @@
+# Dynamic NVIDIA GPU capacity for AWS cells, supporting A100-80GB, H100, and L4 on-demand and spot instances with empty-only consolidation.
+
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-a100-80gb-on-demand
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 10
+  template:
+    metadata:
+      labels:
+        gpu-class: a100-80gb
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 30m
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: dynamic-gpu
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [on-demand]
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: [p4de]
+        - key: karpenter.k8s.aws/instance-gpu-manufacturer
+          operator: In
+          values: [nvidia]
+        - key: karpenter.k8s.aws/instance-gpu-name
+          operator: In
+          values: [a100]
+        - key: karpenter.k8s.aws/instance-gpu-memory
+          operator: In
+          values: ["81920"]
+  limits:
+    cpu: "16384"
+    memory: 160Ti
+    nvidia.com/gpu: "512"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-a100-80gb-spot
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 5
+  template:
+    metadata:
+      labels:
+        gpu-class: a100-80gb
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 30m
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: dynamic-gpu
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [spot]
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: [p4de]
+        - key: karpenter.k8s.aws/instance-gpu-manufacturer
+          operator: In
+          values: [nvidia]
+        - key: karpenter.k8s.aws/instance-gpu-name
+          operator: In
+          values: [a100]
+        - key: karpenter.k8s.aws/instance-gpu-memory
+          operator: In
+          values: ["81920"]
+  limits:
+    cpu: "16384"
+    memory: 160Ti
+    nvidia.com/gpu: "512"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-h100-on-demand
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 10
+  template:
+    metadata:
+      labels:
+        gpu-class: h100
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 30m
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: dynamic-gpu
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [on-demand]
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: [p5]
+        - key: karpenter.k8s.aws/instance-gpu-manufacturer
+          operator: In
+          values: [nvidia]
+        - key: karpenter.k8s.aws/instance-gpu-name
+          operator: In
+          values: [h100]
+  limits:
+    cpu: "16384"
+    memory: 160Ti
+    nvidia.com/gpu: "512"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-h100-spot
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 5
+  template:
+    metadata:
+      labels:
+        gpu-class: h100
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 30m
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: dynamic-gpu
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [spot]
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: [p5]
+        - key: karpenter.k8s.aws/instance-gpu-manufacturer
+          operator: In
+          values: [nvidia]
+        - key: karpenter.k8s.aws/instance-gpu-name
+          operator: In
+          values: [h100]
+  limits:
+    cpu: "16384"
+    memory: 160Ti
+    nvidia.com/gpu: "512"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-l4-on-demand
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 10
+  template:
+    metadata:
+      labels:
+        gpu-class: l4
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 30m
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: dynamic-gpu
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [on-demand]
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: [g6]
+        - key: karpenter.k8s.aws/instance-gpu-manufacturer
+          operator: In
+          values: [nvidia]
+        - key: karpenter.k8s.aws/instance-gpu-name
+          operator: In
+          values: [l4]
+  limits:
+    cpu: "16384"
+    memory: 160Ti
+    nvidia.com/gpu: "512"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general-gpu-l4-spot
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  weight: 5
+  template:
+    metadata:
+      labels:
+        gpu-class: l4
+    spec:
+      expireAfter: Never
+      terminationGracePeriod: 30m
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: dynamic-gpu
+      taints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [spot]
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: [g6]
+        - key: karpenter.k8s.aws/instance-gpu-manufacturer
+          operator: In
+          values: [nvidia]
+        - key: karpenter.k8s.aws/instance-gpu-name
+          operator: In
+          values: [l4]
+  limits:
+    cpu: "16384"
+    memory: 160Ti
+    nvidia.com/gpu: "512"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
+    budgets:
+      - nodes: 10%
