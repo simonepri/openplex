@@ -44,3 +44,7 @@ node_modules/
 crash.log
 crash.*.log
 .tool-versions.lock
+
+# Agent guidance documents are auto-generated from *.rulesync.md definitions.
+AGENTS.md
+CLAUDE.md
