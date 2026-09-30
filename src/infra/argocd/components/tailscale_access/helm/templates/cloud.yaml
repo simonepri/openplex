@@ -1,0 +1,340 @@
+{{- /* Defines cloud-only secret projection and operator Connector. */ -}}
+
+{{- include "tailscale-access.validate" . -}}
+{{- if or (eq .Values.mode "cloud-secret") (eq .Values.mode "cloud-connector") }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tailscale-system
+  labels:
+    app.kubernetes.io/part-of: cluster-runtime
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: operator-oauth
+  namespace: tailscale-system
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ .Values.cloud.secretStoreName }}
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Delete
+    name: operator-oauth
+    template:
+      type: Opaque
+  data:
+    - secretKey: client_id
+      remoteRef: {key: {{ .Values.cloud.oauthRemoteKey | quote }}, property: client_id}
+    - secretKey: client_secret
+      remoteRef: {key: {{ .Values.cloud.oauthRemoteKey | quote }}, property: client_secret}
+{{- end }}
+{{- if eq .Values.mode "cloud-connector" }}
+---
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyClass
+metadata:
+  name: services
+spec:
+  metrics: {enable: true}
+  statefulSet:
+    pod:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: {app.kubernetes.io/name: tailscale-subnet-router}
+      labels:
+        app.kubernetes.io/name: tailscale-subnet-router
+      priorityClassName: cluster-operators
+      tailscaleContainer:
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: "1", memory: 512Mi}
+      tailscaleInitContainer:
+        resources:
+          requests: {cpu: 10m, memory: 32Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {app.kubernetes.io/name: tailscale-subnet-router}
+{{- if and .Values.egress.enabled (ne .Values.egress.gatewayIPv4 "") }}
+---
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyClass
+metadata:
+  name: private-egress
+spec:
+  tailscale:
+    acceptRoutes: true
+  metrics: {enable: true}
+  statefulSet:
+    pod:
+      labels:
+        app.kubernetes.io/component: private-egress
+        app.kubernetes.io/name: tailscale-egress-proxy
+      priorityClassName: cluster-operators
+      tailscaleContainer:
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: "1", memory: 512Mi}
+      tailscaleInitContainer:
+        resources:
+          requests: {cpu: 10m, memory: 32Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: private-egress
+              app.kubernetes.io/name: tailscale-egress-proxy
+---
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyGroup
+metadata:
+  name: private-egress
+spec:
+  type: egress
+  hostnamePrefix: {{ printf "%s-egress" .Values.clusterName | trunc 62 | trimSuffix "-" | quote }}
+  proxyClass: private-egress
+  replicas: 2
+  tags: [tag:k8s-egress]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: active-ctrl-private-access
+  namespace: tailscale-system
+  annotations:
+    tailscale.com/proxy-group: private-egress
+    tailscale.com/tailnet-ip: {{ .Values.egress.gatewayIPv4 | quote }}
+  labels:
+    app.kubernetes.io/component: private-egress
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: active-ctrl-private-access
+spec:
+  type: ExternalName
+  externalName: placeholder
+  ports:
+    - {name: https, port: 443, protocol: TCP}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: private-egress
+  namespace: tailscale-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: private-egress
+      app.kubernetes.io/name: tailscale-egress-proxy
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {protocol: UDP}
+    - from:
+        # LINT.IfChange(tailscale-private-egress-clients)
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: envoy-gateway-system}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: gateway-operator
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: otel-system}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: headlamp}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: parca}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: profiler
+              app.kubernetes.io/instance: parca-agent
+              app.kubernetes.io/name: parca-agent
+        - namespaceSelector:
+            matchExpressions:
+              - {key: team, operator: Exists}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: coder-workspace
+              app.kubernetes.io/part-of: coder
+              com.coder.resource: "true"
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: velero-system}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: authentication
+              app.kubernetes.io/part-of: velero-ui
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: coder-workspace-backup-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: workspace-snapshot-catalog}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: dragonfly-system}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: opencost}
+        # LINT.ThenChange(//src/infra/argocd/components/tailscale_access/helm/templates/local-router.yaml:tailscale-private-egress-clients)
+      ports:
+        - {port: 10000, endPort: 10999, protocol: TCP}
+{{- end }}
+{{- if and .Values.egress.enabled (gt (len .Values.egress.kubernetesAPIs) 0) }}
+---
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyClass
+metadata:
+  name: kubernetes-api-egress
+spec:
+  metrics: {enable: true}
+  statefulSet:
+    pod:
+      labels:
+        app.kubernetes.io/component: kubernetes-api-egress
+        app.kubernetes.io/name: tailscale-kubernetes-api-egress
+      priorityClassName: cluster-operators
+      tailscaleContainer:
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: "1", memory: 512Mi}
+      tailscaleInitContainer:
+        resources:
+          requests: {cpu: 10m, memory: 32Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: kubernetes-api-egress
+              app.kubernetes.io/name: tailscale-kubernetes-api-egress
+---
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyGroup
+metadata:
+  name: kubernetes-api-egress
+spec:
+  type: egress
+  hostnamePrefix: {{ printf "%s-kube-api" .Values.clusterName | trunc 62 | trimSuffix "-" | quote }}
+  proxyClass: kubernetes-api-egress
+  replicas: 2
+  tags: [tag:k8s-egress]
+{{- range $clusterName := keys .Values.egress.kubernetesAPIs | sortAlpha }}
+{{- $transport := index $.Values.egress.kubernetesAPIs $clusterName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ trimPrefix "svc:" $transport.serviceName }}
+  namespace: tailscale-system
+  annotations:
+    tailscale.com/proxy-group: kubernetes-api-egress
+    tailscale.com/tailnet-ip: {{ $transport.ipv4 | quote }}
+  labels:
+    app.kubernetes.io/component: kubernetes-api-egress
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: {{ trimPrefix "svc:" $transport.serviceName }}
+spec:
+  type: ExternalName
+  externalName: placeholder
+  ports:
+    - {name: https, port: 443, protocol: TCP}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kubernetes-api-egress
+  namespace: tailscale-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: kubernetes-api-egress
+      app.kubernetes.io/name: tailscale-kubernetes-api-egress
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {protocol: UDP}
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: argocd}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: argocd-application-controller}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: coder}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: coder
+              app.kubernetes.io/name: coder
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: atlantis}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: atlantis}
+      ports:
+        - {port: 10000, endPort: 10999, protocol: TCP}
+{{- end }}
+---
+apiVersion: tailscale.com/v1alpha1
+kind: Connector
+metadata:
+  name: services
+  namespace: tailscale-system
+spec:
+  hostnamePrefix: {{ include "tailscale-access.connectorHostnamePrefix" . | quote }}
+  proxyClass: services
+  replicas: 2
+  subnetRouter:
+    advertiseRoutes:
+      - {{ .Values.serviceCIDR | quote }}
+      {{- range .Values.resolverRoutes }}
+      - {{ . | quote }}
+      {{- end }}
+  tags:
+    - tag:k8s
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tailscale-subnet-router
+  namespace: tailscale-system
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels: {app.kubernetes.io/name: tailscale-subnet-router}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tailnet-to-subnet-router
+  namespace: tailscale-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-subnet-router
+  policyTypes: [Ingress]
+  # Direct WireGuard paths authenticate in Tailscale. Ports are deliberately
+  # not duplicated here because the listener may select any UDP port.
+  ingress:
+    - ports:
+        - {protocol: UDP}
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: signoz}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: collector
+              app.kubernetes.io/instance: prometheus-api-bridge
+              app.kubernetes.io/name: prometheus-api-bridge
+      ports:
+        - {port: 9002, protocol: TCP}
+{{- end }}

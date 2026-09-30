@@ -1,0 +1,5 @@
+"""Check targets for the tailscale_operator Argo CD component."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()

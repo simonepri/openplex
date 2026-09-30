@@ -1,0 +1,25 @@
+# Configures inert defaults where fleet Applications must select exactly one cloud or local rendering mode and provide the canonical cluster Service CIDR.
+
+mode: disabled
+clusterName: ""
+serviceCIDR: ""
+internalDomain: ""
+resolverRoutes: []
+egress:
+  enabled: false
+  gatewayIPv4: ""
+  kubernetesAPIs: {}
+cloud:
+  secretStoreName: runtime-secrets
+  oauthRemoteKey: ""
+local:
+  loginServer: https://headscale.invalid
+  authSecretName: headscale-preauth
+  caConfigMapName: cluster-local-ca
+  recordName: ""
+  runtimeForwardTarget: ""
+  secretStoreName: local-secret-records
+image:
+  repository: ghcr.io/tailscale/tailscale
+  tag: v1.102.5
+  digest: sha256:2667499ed87ae29218f292556ba062918402dd5e92e93637af14867e4df12dd3
