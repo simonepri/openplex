@@ -1,0 +1,69 @@
+# Helm values for Atlantis Terraform automation server, configuring repo policies and runtime.
+
+allowDraftPRs: false
+allowForkPRs: false
+atlantisUrl: https://atlantis.invalid
+defaultTFDistribution: opentofu
+defaultTFVersion: 1.12.6
+disableApplyAll: true
+enableDiffMarkdownFormat: true
+githubApp:
+  id: "123456"
+  slug: cluster-atlantis
+hidePrevPlanComments: true
+image:
+  repository: ghcr.io/runatlantis/atlantis
+  tag: v0.48.0@sha256:8dd77ed01565f797fe62922f4670398b16a094597b36dedd6e806490177fffd9
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+ingress:
+  enabled: false
+loadEnvFromSecrets:
+  - atlantis-runtime-environment
+logLevel: info
+orgAllowlist: github.com/invalid
+vcsSecretName: atlantis-github-app
+environment:
+  ATLANTIS_AUTODISCOVER_MODE: disabled
+  ATLANTIS_DISCARD_APPROVAL_ON_PLAN: "true"
+  ATLANTIS_SILENCE_NO_PROJECTS: "true"
+repoConfig: |
+  repos:
+    - id: /.*/
+      apply_requirements: [approved, mergeable, undiverged]
+      allowed_overrides: [workflow, apply_requirements]
+      repo_config_file: .github/atlantis.yaml
+replicaCount: 1
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  limits: {cpu: "2", memory: 2Gi}
+service:
+  type: ClusterIP
+serviceAccount:
+  create: true
+  mount: true
+  name: atlantis-apply
+statefulSet:
+  annotations:
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Atlantis requires GitHub webhook secret and runtime credentials via environment.
+  priorityClassName: atlantis-control-plane
+  securityContext:
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    runAsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 100
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities: {drop: [ALL]}
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  seccompProfile: {type: RuntimeDefault}
+test:
+  enabled: false
+volumeClaim:
+  enabled: true
+  accessModes: [ReadWriteOnce]
+  dataStorage: 10Gi
+  storageClassName: general-expandable

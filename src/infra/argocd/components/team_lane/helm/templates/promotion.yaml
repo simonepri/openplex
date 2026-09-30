@@ -1,0 +1,144 @@
+{{- /* Defines Kargo Warehouse and Stage resources for progressive workload promotion across cells. */ -}}
+
+{{- include "fleet-team.validate" . -}}
+{{- $project := include "fleet-team.projectName" . -}}
+{{- $cells := include "fleet-team.selectedCells" (dict "root" .) | fromJsonArray -}}
+{{- $warehouses := list -}}
+{{- $flociWorkloadRoot := "" -}}
+{{- $ctrlCluster := "" -}}
+{{- range $cluster := include "fleet-team.registeredClusters" . | fromJsonArray -}}
+{{- if eq $cluster.role "ctrl" -}}
+{{- $ctrlCluster = $cluster.name -}}
+{{- end -}}
+{{- /* floci-divergence: Floci local control planes use local origin registry workload root. */ -}}
+{{- if and (eq $cluster.role "ctrl") (eq $cluster.provider "floci") -}}
+{{- if and $cluster.localRuntime $cluster.localRuntime.originRegistry -}}
+{{- $flociWorkloadRoot = $cluster.localRuntime.originRegistry.workloadRoot -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $teamOriginRepositories := dict -}}
+{{- range $workloadProject := include "fleet-team.projects" . | fromJsonArray -}}
+{{- if eq $workloadProject.delivery "promoted" -}}
+{{- $projectImages := include "fleet-team.projectImages" (dict "path" $workloadProject.path "root" $) | fromJsonArray -}}
+{{- if not $projectImages -}}
+{{- fail (printf "workload project %q requires a delivery image" $workloadProject.name) -}}
+{{- end -}}
+{{- $warehouses = append $warehouses (dict "images" $projectImages "name" ($workloadProject.name | replace "_" "-")) -}}
+{{- range $image := $projectImages -}}
+{{- $originRepo := ternary (printf "%s/%s" $flociWorkloadRoot $image.package) (index $.Values.delivery.originRepositories $image.package) (ne $flociWorkloadRoot "") -}}
+{{- $_ := set $teamOriginRepositories $image.package (required (printf "delivery.originRepositories requires project image package %q" $image.package) $originRepo) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $warehouses }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ printf "kargo-%s-origin" .Values.team.slug }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    # keep-sorted start
+    cluster: {{ $ctrlCluster | quote }}
+    role: ctrl
+    team: {{ .Values.team.slug | quote }}
+    wave: "2"
+    # keep-sorted end
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: cluster-ctrl
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $project }}
+  source:
+    repoURL: {{ .Values.repository.url | quote }}
+    targetRevision: {{ .Values.repository.revision | quote }}
+    path: src/infra/argocd/components/kargo_promotion/helm
+    helm:
+      valuesObject:
+        mode: warehouse
+        promotionMode: automatic
+        teamSlug: {{ .Values.team.slug | quote }}
+        repositoryURL: {{ regexReplaceAll "^git@([^:]+):" .Values.repository.url "https://$1/" | quote }}
+        originRepositories: {{ $teamOriginRepositories | toJson }}
+        images: []
+        warehouses: {{ $warehouses | toJson }}
+        stage: {}
+  syncPolicy:
+{{ include "fleet-team.applicationSyncPolicy" . | nindent 4 }}
+{{ range $deployment := include "fleet-team.deployments" . | fromJsonArray }}
+{{- if eq $deployment.delivery "promoted" -}}
+{{- $applicationSuffix := $deployment.applicationSuffix -}}
+{{- $projectImages := include "fleet-team.projectImages" (dict "path" $deployment.projectPath "root" $) | fromJsonArray -}}
+{{- $promotion := required (printf "promoted deployment %q requires promotion" $applicationSuffix) $deployment.promotion -}}
+{{- $sourceKind := required (printf "promoted deployment %q requires source.kind" $applicationSuffix) $deployment.source.kind -}}
+{{- range $cell := $cells }}
+{{- $projectOriginRepositories := dict -}}
+{{- range $image := $projectImages -}}
+{{- /* floci-divergence: Floci cells pull promoted workload images from local origin repository root. */ -}}
+{{- $originRepo := ternary (printf "%s/%s" $flociWorkloadRoot $image.package) (index $.Values.delivery.originRepositories $image.package) (eq $cell.provider "floci") -}}
+{{- $_ := set $projectOriginRepositories $image.package (required (printf "delivery.originRepositories requires project image package %q" $image.package) $originRepo) -}}
+{{- end -}}
+{{- $allDeploymentRepositories := required (printf "cell %q requires delivery.deploymentRepositories" $cell.name) $cell.delivery.deploymentRepositories -}}
+{{- $deploymentRepositories := dict -}}
+{{- range $image := $projectImages -}}
+{{- if not (hasKey $allDeploymentRepositories $image.package) -}}
+{{- fail (printf "cell %q deployment repositories require project image package %q" $cell.name $image.package) -}}
+{{- end -}}
+{{- $_ := set $deploymentRepositories $image.package (index $allDeploymentRepositories $image.package) -}}
+{{- end }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ printf "kargo-%s-%s-%s" $.Values.team.slug $cell.name $applicationSuffix }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    # keep-sorted start
+    cluster: {{ $ctrlCluster | quote }}
+    role: ctrl
+    team: {{ $.Values.team.slug | quote }}
+    wave: "3"
+    # keep-sorted end
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: cluster-ctrl
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $project }}
+  source:
+    repoURL: {{ $.Values.repository.url | quote }}
+    targetRevision: {{ $.Values.repository.revision | quote }}
+    path: src/infra/argocd/components/kargo_promotion/helm
+    helm:
+      valuesObject:
+        mode: stage
+        promotionMode: automatic
+        teamSlug: {{ $.Values.team.slug | quote }}
+        repositoryURL: {{ regexReplaceAll "^git@([^:]+):" $.Values.repository.url "https://$1/" | quote }}
+        originRepositories: {{ $projectOriginRepositories | toJson }}
+        images: {{ $projectImages | toJson }}
+        warehouses: []
+        stage:
+          applicationName: {{ printf "%s-%s" $cell.name $applicationSuffix | quote }}
+          automatic: {{ eq $promotion "automatic" }}
+          deploymentRepositories: {{ $deploymentRepositories | toJson }}
+          name: {{ printf "%s-%s" $cell.name $applicationSuffix | quote }}
+          source:
+            kind: {{ $sourceKind | quote }}
+{{- if eq $sourceKind "stage" }}
+            name: {{ printf "%s-%s-%s" $cell.name ($deployment.projectName | replace "_" "-") ($deployment.source.name | replace "_" "-") | quote }}
+{{- end }}
+          warehouseName: {{ $deployment.projectName | replace "_" "-" | quote }}
+  syncPolicy:
+{{ include "fleet-team.applicationSyncPolicy" $ | nindent 4 }}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}

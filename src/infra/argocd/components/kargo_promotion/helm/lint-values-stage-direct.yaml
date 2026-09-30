@@ -1,0 +1,23 @@
+# Complete entry-stage promotion contract used to lint automatic direct Freight requests and exact registry-backed Argo CD image updates.
+
+mode: stage
+promotionMode: automatic
+teamSlug: examples
+repositoryURL: git://172.19.0.3:9418/fixture-config.git
+originRepositories:
+  src/examples/svelte_web: 999988887777.dkr.ecr.us-west-2.amazonaws.com/src/examples/svelte_web
+images:
+  - package: src/examples/svelte_web
+    manifestRepository: registry.invalid/workloads/svelte-web
+    repository: src/examples/svelte_web
+    sourceName: svelte-web
+    target: //src/examples/svelte_web:image_push
+warehouses: []
+stage:
+  applicationName: cell-eaws-lh1-svelte-web-test
+  automatic: true
+  deploymentRepositories:
+    src/examples/svelte_web: localhost:15100/000000000000/us-east-1/src/examples/svelte_web
+  name: cell-eaws-lh1-svelte-web-test
+  source: {kind: warehouse}
+  warehouseName: svelte-web

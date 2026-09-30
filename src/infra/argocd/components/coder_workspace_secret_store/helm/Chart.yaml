@@ -1,0 +1,8 @@
+# Helm chart creating per-workspace ClusterSecretStores for External Secrets backup readers.
+
+apiVersion: v2
+name: coder-workspace-secret-store
+description: Exact-namespace organization workspace-backup record projection.
+type: application
+version: 0.1.0
+appVersion: 1.0.0

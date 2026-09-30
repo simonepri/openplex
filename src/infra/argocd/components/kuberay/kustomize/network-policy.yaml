@@ -1,0 +1,51 @@
+# Restricts KubeRay operator egress to cluster DNS, the Kubernetes API, and managed Ray head dashboards.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kuberay-network-isolation
+  namespace: kuberay-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kueue.x-k8s.io/managed: "true"
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/created-by: kuberay-operator
+              ray.io/node-type: head
+      ports:
+        - {protocol: TCP, port: 8000}
+        - {protocol: TCP, port: 8265}
+    # Cluster DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock: {cidr: 169.254.20.10/32}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # Kubernetes API server
+    - to:
+        - ipBlock: {cidr: 0.0.0.0/0}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
+        - {protocol: TCP, port: 8443}

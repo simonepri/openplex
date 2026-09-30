@@ -1,0 +1,32 @@
+/* Homer custom styles */
+
+/* Dark theme section category icons */
+#app.dark #main-section h2 i {
+  color: #eaeaea;
+}
+
+#app.light #main-section h2 i {
+  color: #232323;
+}
+
+/* Dark theme navbar and search bar styling */
+#app.dark #bighead .navbar a:hover,
+#app.dark #bighead .navbar a:focus,
+#app.dark #bighead .navbar a:active {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+#app.dark #bighead .search-bar input {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+#app.dark #bighead .search-bar input:focus {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+#app.dark #bighead .search-bar .search-label::before {
+  color: #a0a0a0;
+}

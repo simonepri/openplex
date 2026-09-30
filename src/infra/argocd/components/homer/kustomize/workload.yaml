@@ -1,0 +1,223 @@
+# Deployment and Service running the Homer static service catalog dashboard.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: homer
+  namespace: homer
+  labels:
+    app.kubernetes.io/instance: homer
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: homer
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: homer
+  namespace: homer
+  labels:
+    app.kubernetes.io/instance: homer
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: homer
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/instance: homer
+    app.kubernetes.io/name: homer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homer
+  namespace: homer
+  labels:
+    app.kubernetes.io/instance: homer
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: homer
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy: {type: RollingUpdate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: homer
+      app.kubernetes.io/name: homer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: homer
+        app.kubernetes.io/managed-by: argocd
+        app.kubernetes.io/name: homer
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: homer
+      priorityClassName: cluster-operators
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: render-config
+          image: docker.io/b4bz/homer:v26.08.3@sha256:febc8967c9f7648ec37633ef3ae1ec90dbe8b7c46fecab80299f08f05be7ecb6
+          imagePullPolicy: IfNotPresent
+          command: [/bin/sh, -c]
+          args:
+            - |
+              [ "$(echo "$CLUSTERS" | wc -w)" -eq 1 ] && export VELERO_URL="https://velero-ui.${CLUSTERS}.${ACCESS_DOMAIN}" || export VELERO_URL=""
+              export QUICK_YAML=$(for c in $CLUSTERS; do printf '\n          - name: "%s"\n            url: "https://velero-ui.%s.%s"\n            target: "_blank"' "$c" "$c" "$ACCESS_DOMAIN"; done)
+              [ -n "$QUICK_YAML" ] && export QUICK_YAML="        quick:${QUICK_YAML}"
+              case "$PROVIDER,$PUBLIC_DOMAIN,$ACCESS_DOMAIN" in
+                floci,*|*.localhost.floci.io,*|*local*|*floci*) export REGISTRY_URL="https://floci.${PUBLIC_DOMAIN}" ;;
+                gcp,*) export REGISTRY_URL="https://console.cloud.google.com/artifacts" ;;
+                *)
+                  if [ -n "$AWS_REGION" ]; then
+                    export REGISTRY_URL="https://${AWS_REGION}.console.aws.amazon.com/ecr/private-registry/repositories?region=${AWS_REGION}"
+                  elif [ "$PROVIDER" = "aws" ]; then
+                    export REGISTRY_URL="https://console.aws.amazon.com/ecr/repositories"
+                  else
+                    export REGISTRY_URL=""
+                  fi
+                  ;;
+              esac
+              sed -e "s|https://coder.invalid|https://coder.${PUBLIC_DOMAIN}|g;s|https://dragonfly.invalid|https://dragonfly.${PUBLIC_DOMAIN}|g;s|https://kargo.invalid|https://kargo.${PUBLIC_DOMAIN}|g;s|https://headlamp.invalid|https://headlamp.${PUBLIC_DOMAIN}|g;s|https://opencost.invalid|https://opencost.${PUBLIC_DOMAIN}|g" \
+                  -e "s|https://argocd.invalid|https://argocd.${PUBLIC_DOMAIN}|g;s|https://atlantis.invalid|https://atlantis.${PUBLIC_DOMAIN}|g;s|https://signoz.invalid|https://signoz.${PUBLIC_DOMAIN}|g;s|https://parca.invalid|https://parca.${PUBLIC_DOMAIN}|g" \
+                  /config-source/config.yml | awk '
+                    BEGIN {
+                      reg_url = ENVIRON["REGISTRY_URL"]
+                      gsub(/&/, "\\\\&", reg_url)
+                    }
+                    /      - name: "Registry"/ {
+                      in_registry = 1
+                      registry_block = $0 "\n"
+                      next
+                    }
+                    in_registry {
+                      registry_block = registry_block $0 "\n"
+                      if ($0 ~ /target: "_blank"/) {
+                        in_registry = 0
+                        if (reg_url != "") {
+                          sub("#REGISTRY_URL#", reg_url, registry_block)
+                          printf "%s", registry_block
+                        }
+                      }
+                      next
+                    }
+                    /#VELERO_URL#/ { sub("#VELERO_URL#", ENVIRON["VELERO_URL"]) }
+                    /#REGISTRY_URL#/ { sub("#REGISTRY_URL#", reg_url) }
+                    /# VELERO_QUICK_LINKS/ { if (ENVIRON["QUICK_YAML"] != "") print ENVIRON["QUICK_YAML"]; next }
+                    { print }
+                  ' > /config-rendered/config.yml
+          env:
+            - name: PUBLIC_DOMAIN
+              value: invalid
+            - name: BASE_DOMAIN
+              value: invalid
+            - name: ACCESS_DOMAIN
+              value: invalid
+            - name: CLUSTERS
+              value: ""
+            - name: AWS_REGION
+              value: ""
+            - name: PROVIDER
+              value: ""
+            - name: AWS_ACCOUNT_ID
+              value: ""
+          resources:
+            requests: {cpu: 5m, memory: 8Mi}
+            limits: {cpu: 50m, memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - name: config
+              mountPath: /config-source
+              readOnly: true
+            - name: rendered-config
+              mountPath: /config-rendered
+      containers:
+        - name: homer
+          image: docker.io/b4bz/homer:v26.08.3@sha256:febc8967c9f7648ec37633ef3ae1ec90dbe8b7c46fecab80299f08f05be7ecb6
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: INIT_ASSETS
+              value: "0"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          startupProbe:
+            tcpSocket: {port: http}
+            failureThreshold: 30
+            periodSeconds: 2
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+          volumeMounts:
+            - name: rendered-config
+              mountPath: /www/assets/config.yml
+              subPath: config.yml
+              readOnly: true
+            - name: config
+              mountPath: /www/assets/custom.css
+              subPath: custom.css
+              readOnly: true
+            - name: tools
+              mountPath: /www/assets/tools
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: lighttpd-run
+              mountPath: /var/run/lighttpd
+            - name: lighttpd-log
+              mountPath: /var/log/lighttpd
+      volumes:
+        - name: config
+          configMap:
+            name: homer-config
+        - name: rendered-config
+          emptyDir: {sizeLimit: 1Mi}
+        - name: tools
+          configMap:
+            name: homer-tools
+        - name: tmp
+          emptyDir: {}
+        - name: lighttpd-run
+          emptyDir: {}
+        - name: lighttpd-log
+          emptyDir: {}

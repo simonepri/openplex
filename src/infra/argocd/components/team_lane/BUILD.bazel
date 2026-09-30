@@ -1,0 +1,75 @@
+"""Defines build and check targets for the team_lane Argo CD component."""
+
+load("@rules_helm//helm:defs.bzl", "helm_chart", "helm_lint_test", "helm_template")
+load("@rules_python//python:defs.bzl", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "HELM_TEMPLATE", "package_sources", "source_set")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+helm_chart(
+    name = "chart",
+    chart = "helm/Chart.yaml",
+    schema = "helm/values.schema.json",
+    templates = glob(
+        ["helm/templates/**"],
+        allow_empty = True,
+    ),
+    values = "helm/values.yaml",
+    visibility = ["//src/bazel/profiles:__pkg__"],
+)
+
+helm_lint_test(
+    name = "helm-lint",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values.yaml"],
+)
+
+helm_template(
+    name = "helm_render",
+    chart = ":chart",
+    values = ["helm/lint-values.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm",
+    rendered = ":helm_render",
+)
+
+source_set(
+    name = "helm_templates",
+    srcs = glob(["helm/templates/**"]),
+    kind = HELM_TEMPLATE,
+)
+
+package_sources(exclude = [
+    "helm/templates/**",
+    "**/*.py",
+])
+
+py_test(
+    name = "registered_clusters_test",
+    srcs = ["registered_clusters_test.py"],
+    args = [
+        "$(locations @rules_helm//helm:current_toolchain)",
+        "$(location helm/Chart.yaml)",
+    ],
+    data = [
+        "helm/Chart.yaml",
+        "helm/lint-values.yaml",
+        "helm/templates/_helpers.tpl",
+        "helm/templates/app_project.yaml",
+        "helm/templates/coder_workspace_backups.yaml",
+        "helm/templates/dev_secrets.yaml",
+        "helm/templates/foundations.yaml",
+        "helm/templates/gateway.yaml",
+        "helm/templates/promotion.yaml",
+        "helm/templates/storage_record_rbac.yaml",
+        "helm/templates/workloads.yaml",
+        "helm/values.schema.json",
+        "helm/values.yaml",
+        "//src/infra/argocd/components/kargo_promotion:chart_files",
+        "@rules_helm//helm:current_toolchain",
+    ],
+    deps = ["@dev_python_deps//pyyaml"],
+)

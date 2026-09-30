@@ -1,0 +1,64 @@
+# Configures base Helm values for kuberay-operator across fleet clusters managing RayCluster lifecycles.
+
+fullnameOverride: kuberay
+leaderElectionEnabled: true
+replicas: 2
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: kuberay
+              app.kubernetes.io/name: kuberay-operator
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+image:
+  repository: quay.io/kuberay/operator
+  # yamllint disable-line rule:line-length
+  tag: v1.7.1@sha256:e69b9cde8f1d55c6111e4ab9005b7a8f9139e3783a38205069a2c4ac94f6745d
+labels: {}
+env:
+  - name: RAYJOB_DEPLOYMENT_STATUS_TRANSITION_GRACE_PERIOD_SECONDS
+    value: "300"
+featureGates:
+  - {enabled: true, name: RayClusterStatusConditions}
+  - {enabled: false, name: RayCronJob}
+  - {enabled: true, name: RayJobDeletionPolicy}
+  - {enabled: true, name: RayMultiHostIndexing}
+  - {enabled: false, name: RayServiceIncrementalUpgrade}
+metrics:
+  enabled: true
+priorityClassName: cluster-operators
+# Chart 1.6.2 does not render timeoutSeconds. A long liveness window prevents
+# transient API stalls from restarting an otherwise healthy controller.
+livenessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 6
+readinessProbe:
+  initialDelaySeconds: 20
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi

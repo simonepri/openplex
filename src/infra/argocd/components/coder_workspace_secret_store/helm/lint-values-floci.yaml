@@ -1,0 +1,9 @@
+# Floci Helm lint fixture validating Kubernetes secret store adapter rendering.
+
+enabled: true
+namespace: team-examples-workspaces
+provider: floci
+authAdapter: kubernetes
+storeName: org-workspace-backups-team-examples-workspaces
+auth:
+  kubernetes: {}

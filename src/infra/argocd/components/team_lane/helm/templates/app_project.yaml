@@ -1,0 +1,40 @@
+{{- /* Defines the team trust boundary. The project permits the derived namespace on cell clusters; the managed team parent is the only Application author and enforces the team's exact cell selector. */ -}}
+
+{{- include "fleet-team.validate" . -}}
+{{- $project := include "fleet-team.projectName" . -}}
+{{- $group := include "fleet-team.group" . -}}
+{{- $resources := include "fleet-team.resources" . | fromJsonArray -}}
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ $project }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  sourceRepos:
+    - {{ .Values.repository.url | quote }}
+  destinations:
+{{- range $suffix := include "fleet-team.namespaceSuffixes" . | fromJsonArray }}
+    - name: cell-*
+      namespace: {{ printf "team-%s-%s" $.Values.team.slug ($suffix | replace "_" "-") }}
+{{- end }}
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+{{- range $resource := $resources }}
+{{- if $resource.project }}
+    - group: {{ $resource.apiGroup | quote }}
+      kind: {{ $resource.kind }}
+{{- end }}
+{{- end }}
+  roles:
+    - name: developer
+      description: Read the managed team Applications.
+      groups: [{{ $group | quote }}, {{ include "fleet-team.groupDev" . | quote }}]
+      policies:
+        - {{ printf "p, proj:%s:developer, applications, get, %s/*, allow" $project $project | quote }}
+    - name: operator
+      description: Manage and synchronize the managed team Applications.
+      groups: [{{ include "fleet-team.groupOps" . | quote }}]
+      policies:
+        - {{ printf "p, proj:%s:operator, applications, *, %s/*, allow" $project $project | quote }}

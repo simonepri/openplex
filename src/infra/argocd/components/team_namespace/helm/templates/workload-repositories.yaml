@@ -1,0 +1,14 @@
+{{- /* Publishes the selected cell's pull repositories for direct workload submitters. */ -}}
+
+{{- if eq .Values.mode "cell" }}
+{{- $namespace := include "team-namespace.namespace" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workload-repositories
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+data:
+  repositories.json: {{ dict "repositories" .Values.workloadRepositories "version" 1 | toJson | quote }}
+{{- end }}

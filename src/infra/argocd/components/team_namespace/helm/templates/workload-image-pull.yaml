@@ -1,0 +1,68 @@
+{{- /* Projects one short-lived ECR pull credential into a non-AWS team lane. */ -}}
+
+{{- if and (eq .Values.mode "cell") .Values.workloadImagePull.enabled }}
+{{- $namespace := include "team-namespace.namespace" . -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ecr-pull-token
+  namespace: {{ $namespace }}
+  annotations:
+    eks.amazonaws.com/audience: sts.amazonaws.com
+    eks.amazonaws.com/role-arn: {{ .Values.workloadImagePull.roleArn | quote }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: ECRAuthorizationToken
+metadata:
+  name: ecr-pull
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  region: {{ .Values.workloadImagePull.region | quote }}
+  auth:
+    jwt:
+      serviceAccountRef:
+        name: ecr-pull-token
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ecr-pull
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  target:
+    name: ecr-pull
+    creationPolicy: Owner
+    deletionPolicy: Delete
+    template:
+      engineVersion: v2
+      type: kubernetes.io/dockerconfigjson
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: external-secrets
+          app.kubernetes.io/name: ecr-pull
+      data:
+        .dockerconfigjson: |-
+          {
+            "auths": {
+              {{`"{{ .proxy_endpoint | replace "https://" "" }}": {`}}
+                {{`"username": "{{ .username }}",`}}
+                {{`"password": "{{ .password }}",`}}
+                {{`"auth": "{{ printf "%s:%s" .username .password | b64enc }}"`}}
+              }
+            }
+          }
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: ECRAuthorizationToken
+          name: ecr-pull
+{{- end }}

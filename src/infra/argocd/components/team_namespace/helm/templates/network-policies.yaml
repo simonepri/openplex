@@ -1,0 +1,497 @@
+{{- /* Stamps NetworkPolicy v1 baseline isolation around team cell namespaces. */ -}}
+
+{{- if eq .Values.mode "cell" }}
+{{- $namespace := include "team-namespace.namespace" . -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cluster-dns
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+{{ include "team-namespace.nonCompileCachePodSelector" . | nindent 2 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+{{ include "team-namespace.nonCompileCachePodSelector" . | nindent 2 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kuberay-dashboard
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/created-by: kuberay-operator
+      ray.io/node-type: head
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kuberay-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kuberay-operator
+      ports:
+        - {port: 8265, protocol: TCP}
+{{- if .Values.rayDashboard.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {port: 8265, protocol: TCP}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ray-head
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/created-by: kuberay-operator
+      ray.io/node-type: head
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              ray.io/node-type: worker
+      ports:
+        - {port: 6379, protocol: TCP}
+        - {port: 8265, protocol: TCP}
+        - {port: 10001, protocol: TCP}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kuberay-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kuberay-operator
+      ports:
+        - {port: 8000, protocol: TCP}
+        - {port: 8265, protocol: TCP}
+{{- if .Values.rayDashboard.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {port: 8265, protocol: TCP}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otel-collector
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+{{ include "team-namespace.nonCompileCachePodSelector" . | nindent 2 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: otel-collector
+              app.kubernetes.io/name: opentelemetry-collector
+              component: agent-collector
+      ports:
+        - {port: 4317, protocol: TCP}
+        - {port: 4318, protocol: TCP}
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {port: 4317, protocol: TCP}
+        - {port: 4318, protocol: TCP}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-s3-gateway
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+{{ include "team-namespace.nonCompileCachePodSelector" . | nindent 2 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {port: 10080, protocol: TCP}
+{{- if .Values.devWorkspaces.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dev-workspace-https
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [coder-workspace]
+  policyTypes: [Egress]
+  egress:
+    - to:
+{{- if .Values.devWorkspaces.origin.publicHttps }}
+        # floci-divergence: Floci clusters allow all egress CIDRs for local loopback / bridge networking.
+{{- if eq .Values.devWorkspaces.origin.authMode "floci" }}
+        - ipBlock: {cidr: 0.0.0.0/0}
+        - ipBlock: {cidr: "::/0"}
+{{- else }}
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+        - ipBlock:
+            cidr: "::/0"
+            except:
+              - "::/128"
+              - "::1/128"
+              - "fc00::/7"
+              - "fe80::/10"
+              - "ff00::/8"
+{{- end }}
+{{- end }}
+{{- range .Values.devWorkspaces.origin.privateHttpsCIDRs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+{{- end }}
+      ports:
+        - {port: 443, protocol: TCP}
+{{- if .Values.devWorkspaces.origin.kubernetesApiCIDRs }}
+    - to:
+{{- range .Values.devWorkspaces.origin.kubernetesApiCIDRs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+{{- end }}
+      ports:
+        - {port: 443, protocol: TCP}
+        - {port: 6443, protocol: TCP}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dev-workspace-private-access
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: coder-workspace
+      app.kubernetes.io/part-of: coder
+      com.coder.resource: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: tailscale-system}
+          podSelector:
+            matchLabels:
+              # floci-divergence: Floci routes egress via local tailscale-subnet-router rather than cloud egress proxy.
+{{- if eq .Values.devWorkspaces.origin.provider "floci" }}
+              app.kubernetes.io/name: tailscale-subnet-router
+{{- else }}
+              app.kubernetes.io/component: private-egress
+              app.kubernetes.io/name: tailscale-egress-proxy
+{{- end }}
+      ports:
+        # floci-divergence: Floci subnet router exposes HTTPS port 8443 vs cloud egress port range.
+{{- if eq .Values.devWorkspaces.origin.provider "floci" }}
+        - {port: 8443, protocol: TCP}
+{{- else }}
+        - {port: 10000, endPort: 10999, protocol: TCP}
+{{- end }}
+{{- if eq .Values.devWorkspaces.origin.authMode "eks-pod-identity" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dev-workspace-eks-pod-identity
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: coder-workspace
+      app.kubernetes.io/part-of: coder
+      com.coder.resource: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 169.254.170.23/32}
+      ports:
+        - {port: 80, protocol: TCP}
+{{- end }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dev-workspace-tailnet
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [coder-workspace]
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - {port: 41641, protocol: UDP}
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+      ports:
+        - {port: 3478, protocol: UDP}
+        - {port: 41641, protocol: UDP}
+{{- if and .Values.devWorkspaces.enabled .Values.devWorkspaces.localGitCIDR }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dev-workspace-local-git
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: coder-workspace
+      app.kubernetes.io/part-of: coder
+      com.coder.resource: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: {{ .Values.devWorkspaces.localGitCIDR | quote }}}
+      ports:
+        - {port: 9418, protocol: TCP}
+{{- end }}
+{{- if and .Values.devWorkspaces.enabled .Values.devWorkspaces.originRegistryCIDR }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dev-workspace-origin-registry
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: coder-workspace
+      app.kubernetes.io/part-of: coder
+      com.coder.resource: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: {{ .Values.devWorkspaces.originRegistryCIDR | quote }}}
+      ports:
+        - {port: 5000, protocol: TCP}
+{{- end }}
+{{- if .Values.devWorkspaces.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dev-workspace-buildbuddy-cache
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: coder-workspace
+      app.kubernetes.io/part-of: coder
+      com.coder.resource: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: buildbuddy
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: buildbuddy-cache
+      ports:
+        - {port: 1985, protocol: TCP}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-tailnet-router
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+{{ include "team-namespace.nonCompileCachePodSelector" . | nindent 2 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tailscale-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tailscale-subnet-router
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cnpg-operator
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: cnpg.io/cluster
+        operator: Exists
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+      ports:
+        - {port: 8000, protocol: TCP}
+        - {port: 5432, protocol: TCP}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {port: 9187, protocol: TCP}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kubernetes-api
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: cnpg.io/cluster
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {port: 443, protocol: TCP}
+        - {port: 6443, protocol: TCP}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ray-autoscaler-api
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: ray-serve-head
+      app.kubernetes.io/name: ray-serve-example
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {port: 443, protocol: TCP}
+        - {port: 6443, protocol: TCP}
+{{- end }}

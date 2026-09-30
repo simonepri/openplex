@@ -1,0 +1,23 @@
+# Complete downstream cell promotion contract used to lint a manual Stage's same-cell upstream and exact registry-backed Argo CD image update.
+
+mode: stage
+promotionMode: automatic
+teamSlug: examples
+repositoryURL: http://172.19.255.21:9419/cgi-bin/git/repo.git
+originRepositories:
+  src/examples/svelte_web: 999988887777.dkr.ecr.us-west-2.amazonaws.com/src/examples/svelte_web
+images:
+  - package: src/examples/svelte_web
+    manifestRepository: registry.invalid/workloads/svelte-web
+    repository: src/examples/svelte_web
+    sourceName: svelte-web
+    target: //src/examples/svelte_web:image_push
+warehouses: []
+stage:
+  applicationName: cell-eaws-lh1-svelte-web-prod
+  automatic: false
+  deploymentRepositories:
+    src/examples/svelte_web: localhost:15100/000000000000/us-east-1/src/examples/svelte_web
+  name: cell-eaws-lh1-svelte-web-prod
+  source: {kind: stage, name: cell-eaws-lh1-svelte-web-test}
+  warehouseName: svelte-web

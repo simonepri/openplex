@@ -1,0 +1,68 @@
+{{- /* Routes snapshot portal traffic through Envoy Gateway to the internal web service. */ -}}
+
+{{- $name := "coder-snapshot-portal" -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $name }}
+  namespace: envoy-gateway-system
+  labels:
+    {{- include "coder-snapshot-portal.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: private-access
+      sectionName: https
+  hostnames:
+    - {{ .Values.access.hostname | quote }}
+    {{- if hasPrefix "coder-snapshots." .Values.access.hostname }}
+    - {{ printf "snapshots.%s" (trimPrefix "coder-snapshots." .Values.access.hostname) | quote }}
+    {{- else if hasPrefix "snapshots." .Values.access.hostname }}
+    - {{ printf "coder-snapshots.%s" (trimPrefix "snapshots." .Values.access.hostname) | quote }}
+    {{- end }}
+  rules:
+    - matches: [{path: {type: PathPrefix, value: /}}]
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $name }}
+          namespace: coder-workspace-backup-system
+          port: 8080
+          weight: 1
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ $name }}
+  namespace: coder-workspace-backup-system
+  labels:
+    {{- include "coder-snapshot-portal.labels" . | nindent 4 }}
+spec:
+  from:
+    - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: envoy-gateway-system}
+  to:
+    - {group: "", kind: Service, name: {{ $name }}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-gateway-egress
+  namespace: envoy-gateway-system
+  labels:
+    {{- include "coder-snapshot-portal.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: proxy
+      app.kubernetes.io/managed-by: envoy-gateway
+      gateway.envoyproxy.io/owning-gateway-name: private-access
+      gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: coder-workspace-backup-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: {{ $name }}}
+      ports: [{protocol: TCP, port: 8080}]

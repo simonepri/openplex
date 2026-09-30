@@ -1,0 +1,72 @@
+# Named runtime-record and portal rollout permissions for the local OAuth bootstrap.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: coder-oauth-bootstrap
+  namespace: coder
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: coder-snapshot-oauth-writer
+  namespace: application-identity
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [coder-snapshot-oauth]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: coder-snapshot-oauth-writer
+  namespace: application-identity
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      Bootstrap can read and patch only the named snapshot OAuth runtime record.
+subjects:
+  - kind: ServiceAccount
+    name: coder-oauth-bootstrap
+    namespace: coder
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: coder-snapshot-oauth-writer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: coder-snapshot-oauth-rollout
+  namespace: coder-workspace-backup-system
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [coder-snapshot-portal-secrets]
+    verbs: [get]
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets]
+    resourceNames: [coder-snapshot-portal-secrets]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [coder-snapshot-portal]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: coder-snapshot-oauth-rollout
+  namespace: coder-workspace-backup-system
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      Bootstrap verifies only the named portal Secret before rolling its Deployment.
+subjects:
+  - kind: ServiceAccount
+    name: coder-oauth-bootstrap
+    namespace: coder
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: coder-snapshot-oauth-rollout

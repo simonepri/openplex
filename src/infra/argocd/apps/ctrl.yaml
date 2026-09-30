@@ -160,7 +160,7 @@ spec:
                   wave: "20"
                   chart: plugin-barman-cloud
                   chartRepo: https://cloudnative-pg.github.io/charts
-                  chartVersion: 0.8.0
+                  chartVersion: 0.8.1
                   vpa:
                     targets:
                       - barman-cloud-plugin-barman-cloud
@@ -457,12 +457,11 @@ spec:
                         type: LoadBalancer
                         loadBalancerClass: service.k8s.aws/nlb
                         annotations:
-                          service.beta.kubernetes.io/aws-load-balancer-ip-address-type: dualstack
                           service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
                           service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
                         externalTrafficPolicy: Local
-                        ipFamilyPolicy: PreferDualStack
-                        ipFamilies: [IPv6, IPv4]
+                        ipFamilyPolicy: SingleStack
+                        ipFamilies: [IPv4]
                         # LINT.IfChange(github-webhook-cidrs)
                         loadBalancerSourceRanges:
                           # keep-sorted start
@@ -470,8 +469,6 @@ spec:
                           - 143.55.64.0/20
                           - 185.199.108.0/22
                           - 192.30.252.0/22
-                          - 2606:50c0::/32
-                          - 2a0a:a440::/29
                           # keep-sorted end
                         # LINT.ThenChange(//src/infra/argocd/components/routing_registry/helm/routes.yaml:github-webhook-cidrs)
                         nodePorts: {http: 0, tls: 0}
@@ -585,7 +582,7 @@ spec:
                   wave: "40"
                   chart: dex
                   chartRepo: https://charts.dexidp.io
-                  chartVersion: 0.24.1
+                  chartVersion: 0.25.2
                 - component: headlamp
                   tier: fleet
                   path: src/infra/argocd/components/headlamp/kustomize
@@ -607,7 +604,7 @@ spec:
                   wave: "40"
                   chart: kargo
                   chartRepo: ghcr.io/akuity/kargo-charts
-                  chartVersion: 1.11.5
+                  chartVersion: 1.12.1
                   vpa:
                     targets:
                       - kargo-api
@@ -691,7 +688,7 @@ spec:
                   wave: "40"
                   chart: opentelemetry-collector
                   chartRepo: https://open-telemetry.github.io/opentelemetry-helm-charts
-                  chartVersion: 0.173.1
+                  chartVersion: 0.175.0
                   injectClusterName: true
                   vpa: custom
                 - component: parca
@@ -967,7 +964,7 @@ spec:
                   wave: "50"
                   chart: trivy
                   chartRepo: https://aquasecurity.github.io/helm-charts
-                  chartVersion: 0.26.0
+                  chartVersion: 0.27.0
                   vpa: custom
     - matrix:
         generators:
@@ -1013,7 +1010,7 @@ spec:
                   wave: "30"
                   chart: external-dns
                   chartRepo: https://kubernetes-sigs.github.io/external-dns
-                  chartVersion: 1.22.0
+                  chartVersion: 1.23.0
                 - component: tailscale-operator
                   tier: fleet
                   path: src/infra/argocd/components/tailscale_operator/helm
@@ -1046,7 +1043,7 @@ spec:
                   wave: "30"
                   chart: external-dns
                   chartRepo: https://kubernetes-sigs.github.io/external-dns
-                  chartVersion: 1.22.0
+                  chartVersion: 1.23.0
                 - component: tailscale-operator
                   tier: fleet
                   path: src/infra/argocd/components/tailscale_operator/helm
@@ -1472,7 +1469,7 @@ spec:
     {{- else if ne $provider "" }}
     {{- $ecrRegistry := coalesce (index $annotations "ecr-registry") (index $annotations "workload-registry") }}
     {{- if not $ecrRegistry }}{{ fail (printf "%s requires ecr-registry or workload-registry annotation on %s" .component $provider) }}{{- end }}
-    {{- $portalImageRef = printf "%s/%s/infrastructure:coder-snapshot-portal@%s" $ecrRegistry .nameNormalized .cloudPortalDigest }}
+    {{- $portalImageRef = printf "%s/src/infra/tools/coder_snapshot_portal@%s" $ecrRegistry .cloudPortalDigest }}
     {{- end }}
     {{- if $portalImageRef }}
     {{- $portalImage := splitList "@" $portalImageRef }}
@@ -1662,7 +1659,9 @@ spec:
     {{- if eq .component "homer" }}
     {{- $allClusters := concat (list .nameNormalized) $registeredCells }}
     {{- $clustersValue := join " " $allClusters }}
-    {{- $homerPatches := list (dict "target" (dict "group" "apps" "version" "v1" "kind" "Deployment" "name" "homer") "patch" (printf "- op: replace\n  path: /spec/template/spec/initContainers/0/env/0/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/1/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/2/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/3/value\n  value: %s" $intranetDomain $baseDomain $accessDomain $clustersValue)) }}
+    {{- $homerRegion := default "" (coalesce (index $annotations "aws-region") (index $annotations "region") (index (default dict .metadata.labels) "region")) }}
+    {{- $homerAccountId := default "" (coalesce (index $annotations "aws-account-id") (index (default dict .metadata.labels) "aws-account-id")) }}
+    {{- $homerPatches := list (dict "target" (dict "group" "apps" "version" "v1" "kind" "Deployment" "name" "homer") "patch" (printf "- op: replace\n  path: /spec/template/spec/initContainers/0/env/0/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/1/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/2/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/3/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/4/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/5/value\n  value: %s\n- op: replace\n  path: /spec/template/spec/initContainers/0/env/6/value\n  value: '%s'" $intranetDomain $baseDomain $accessDomain $clustersValue $homerRegion (default "" $provider) $homerAccountId)) }}
     {{- $patches = concat $patches $homerPatches }}
     {{- end }}
     {{- if eq .component "velero-ui" }}
@@ -1711,9 +1710,9 @@ spec:
     {{- $placementJson := toJson $placements }}
     {{- $virtualNameJson := toJson $virtualNames }}
     {{- $coderInitContainers := list (dict "name" "source" "env" (list (dict "name" "SOURCE_REPOSITORY" "value" $gitTransportURL))) }}
-    # floci-divergence: Floci reconciler uses local origin registry and local host inventories; cloud clusters use ECR and automation token.
+    # floci-divergence: Floci reconciler uses local origin registry and local host inventories; cloud clusters use ECR.
     {{- if eq $provider "floci" }}
-    {{- $coderReconcileEnv = concat $coderReconcileEnv (list (dict "name" "CODER_TEMPLATE_ARCH" "value" $nodeArch) (dict "name" "CODER_TEMPLATE_CELL" "value" $coderTemplateCell) (dict "name" "CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY" "value" $incarnationJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY" "value" $placementJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY" "value" $virtualNameJson)) }}
+    {{- $coderReconcileEnv = concat $coderReconcileEnv (list (dict "name" "CODER_TEMPLATE_ARCH" "value" $nodeArch) (dict "name" "CODER_TEMPLATE_CELL" "value" $coderTemplateCell) (dict "name" "CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY" "value" $incarnationJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY" "value" $placementJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY" "value" $virtualNameJson) (dict "name" "CODER_SESSION_TOKEN_FILE" "value" "/var/run/coder/automation-token/token") (dict "name" "PRESERVE_CODER_SESSION_TOKEN" "value" "true")) }}
     {{- else if ne $provider "" }}
     {{- $ecrRegistry := coalesce (index $annotations "ecr-registry") (index $annotations "workload-registry") }}
     {{- if not $ecrRegistry }}{{ fail (printf "%s requires ecr-registry or workload-registry annotation on %s" .component $provider) }}{{- end }}
@@ -1723,22 +1722,25 @@ spec:
     {{- $coderReconcileEnv = concat $coderReconcileEnv (list (dict "name" "CODER_TEMPLATE_ARCH" "value" $nodeArch) (dict "name" "CODER_TEMPLATE_CELL" "value" $coderTemplateCell) (dict "name" "CODER_TEMPLATE_WORKLOAD_REGISTRY" "value" $ecrRegistry) (dict "name" "CODER_TEMPLATE_WORKLOAD_ORIGIN_AUTH_MODE" "value" $originAuthMode) (dict "name" "CODER_TEMPLATE_WORKLOAD_ORIGIN_PROVIDER" "value" $provider) (dict "name" "CODER_TEMPLATE_WORKLOAD_ORIGIN_REGION" "value" $originRegion) (dict "name" "CODER_TEMPLATE_WORKLOAD_ORIGIN_ROLE_ARN" "value" $originRoleArn) (dict "name" "CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY" "value" $incarnationJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY" "value" $placementJson) (dict "name" "CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY" "value" $virtualNameJson) (dict "name" "CODER_SESSION_TOKEN_FILE" "value" "/var/run/coder/automation-token/token") (dict "name" "PRESERVE_CODER_SESSION_TOKEN" "value" "true")) }}
     {{- $workspaceRepo := printf "%s/src/infra/definitions/workspaces/templates/dev" $ecrRegistry }}
     {{- $ecrLoginCommand := printf "token=$(aws ecr get-login-password --region %s)\nmkdir -p /state/.docker\ncat <<EOF > /state/.docker/config.json\n{\n  \"auths\": {\n    \"%s\": {\n      \"auth\": \"$(printf 'AWS:%%s' \"$token\" | base64 | tr -d '\\n')\"\n    }\n  }\n}\nEOF\ncp /state/.docker/config.json /state/config.json\n" $originRegion $ecrRegistry }}
-    {{- $ecrLoginContainer := dict "name" "ecr-login" "image" "docker.io/amazon/aws-cli:2.37.5@sha256:fb7ccfc7b4e3a05017e6c9ded4ba959b99af622130e211fb976c68c2f4d3f224" "command" (list "/bin/sh" "-ec" $ecrLoginCommand) "env" (list (dict "name" "HOME" "value" "/tmp") (dict "name" "AWS_REGION" "value" $originRegion)) "resources" (dict "requests" (dict "cpu" "10m" "memory" "16Mi") "limits" (dict "cpu" "100m" "memory" "64Mi")) "securityContext" (dict "allowPrivilegeEscalation" false "capabilities" (dict "drop" (list "ALL")) "readOnlyRootFilesystem" true "runAsGroup" 65532 "runAsNonRoot" true "runAsUser" 65532 "seccompProfile" (dict "type" "RuntimeDefault")) "volumeMounts" (list (dict "name" "state" "mountPath" "/state") (dict "name" "tmp" "mountPath" "/tmp")) }}
-    {{- $resolveWorkspaceContainer := dict "name" "resolve-workspace-image" "env" (list (dict "name" "WORKSPACE_IMAGE_SOURCE" "value" (printf "%s:dev-v1" $workspaceRepo)) (dict "name" "WORKSPACE_IMAGE_REPOSITORY" "value" $workspaceRepo) (dict "name" "WORKSPACE_IMAGE_SOURCE_INSECURE" "value" "false") (dict "name" "DOCKER_CONFIG" "value" "/state/.docker")) }}
+    {{- $ecrLoginContainer := dict "name" "ecr-login" "image" "docker.io/amazon/aws-cli:2.37.9@sha256:92de75724b6a746951f0e8b915d86bbccd7cb55aff96cd0cb4f7017272160780" "command" (list "/bin/sh" "-ec" $ecrLoginCommand) "env" (list (dict "name" "HOME" "value" "/tmp") (dict "name" "AWS_REGION" "value" $originRegion)) "resources" (dict "requests" (dict "cpu" "10m" "memory" "16Mi") "limits" (dict "cpu" "100m" "memory" "64Mi")) "securityContext" (dict "allowPrivilegeEscalation" false "capabilities" (dict "drop" (list "ALL")) "readOnlyRootFilesystem" true "runAsGroup" 65532 "runAsNonRoot" true "runAsUser" 65532 "seccompProfile" (dict "type" "RuntimeDefault")) "volumeMounts" (list (dict "name" "state" "mountPath" "/state") (dict "name" "tmp" "mountPath" "/tmp")) }}
+    {{- $workspaceTag := coalesce (index $annotations "workspace-image-tag") (index $annotations "workspace-image-digest") "dev-v1" }}
+    {{- $workspaceSource := ternary (printf "%s@%s" $workspaceRepo $workspaceTag) (printf "%s:%s" $workspaceRepo $workspaceTag) (hasPrefix "sha256:" $workspaceTag) }}
+    {{- $resolveWorkspaceContainer := dict "name" "resolve-workspace-image" "env" (list (dict "name" "WORKSPACE_IMAGE_SOURCE" "value" $workspaceSource) (dict "name" "WORKSPACE_IMAGE_REPOSITORY" "value" $workspaceRepo) (dict "name" "WORKSPACE_IMAGE_SOURCE_INSECURE" "value" "false") (dict "name" "DOCKER_CONFIG" "value" "/state/.docker")) }}
     {{- $coderInitContainers = append $coderInitContainers $ecrLoginContainer }}
     {{- $coderInitContainers = append $coderInitContainers $resolveWorkspaceContainer }}
     {{- end }}
-    {{- $coderJobPodSpec := dict "initContainers" $coderInitContainers "containers" (list (dict "name" "reconcile" "env" $coderReconcileEnv)) }}
-    # floci-divergence: Cloud clusters mount pre-minted automation token into reconciler container.
-    {{- if and (ne $provider "floci") (ne $provider "") }}
-    {{- $coderJobPodSpec = mergeOverwrite $coderJobPodSpec (dict "containers" (list (dict "name" "reconcile" "env" $coderReconcileEnv "volumeMounts" (list (dict "name" "automation-token" "mountPath" "/var/run/coder/automation-token" "readOnly" true)))) "volumes" (list (dict "name" "automation-token" "secret" (dict "secretName" "coder-automation-token")))) }}
-    {{- end }}
+    {{- $coderJobPodSpec := dict "initContainers" $coderInitContainers "containers" (list (dict "name" "reconcile" "env" $coderReconcileEnv "volumeMounts" (list (dict "name" "automation-token" "mountPath" "/var/run/coder/automation-token" "readOnly" true)))) "volumes" (list (dict "name" "automation-token" "secret" (dict "secretName" "coder-automation-token"))) }}
     {{- $coderJobPatch := dict "apiVersion" "batch/v1" "kind" "Job" "metadata" (dict "name" "coder-template-reconciler") "spec" (dict "template" (dict "spec" $coderJobPodSpec)) }}
     {{- $coderPatches := list (dict "target" (dict "group" "batch" "version" "v1" "kind" "Job" "name" "coder-template-reconciler") "patch" (toYaml $coderJobPatch)) }}
     # floci-divergence: Cloud clusters bypass Dex OIDC bootstrap and mount pre-minted coder-automation-token.
     {{- if and (ne $provider "floci") (ne $provider "") }}
     {{- $healerOps := list (dict "op" "replace" "path" "/spec/template/spec/initContainers" "value" list) (dict "op" "replace" "path" "/spec/template/spec/containers/0/args/8" "value" "/var/run/coder/automation-token/token") (dict "op" "add" "path" "/spec/template/spec/containers/0/volumeMounts/-" "value" (dict "name" "automation-token" "mountPath" "/var/run/coder/automation-token" "readOnly" true)) (dict "op" "add" "path" "/spec/template/spec/volumes/-" "value" (dict "name" "automation-token" "secret" (dict "secretName" "coder-automation-token"))) }}
     {{- $coderPatches = append $coderPatches (dict "target" (dict "group" "apps" "version" "v1" "kind" "Deployment" "name" "coder-workspace-healer") "patch" (toYaml $healerOps)) }}
+    {{- end }}
+    {{- if eq $provider "gcp" }}
+    {{- $gcpMetadataEgress := dict "to" (list (dict "ipBlock" (dict "cidr" "169.254.169.254/32"))) "ports" (list (dict "protocol" "TCP" "port" 80)) }}
+    {{- $coderNetworkPatch := dict "target" (dict "group" "networking.k8s.io" "version" "v1" "kind" "NetworkPolicy" "name" "coder-template-reconciler") "patch" (toJson (list (dict "op" "add" "path" "/spec/egress/-" "value" $gcpMetadataEgress))) }}
+    {{- $coderPatches = append $coderPatches $coderNetworkPatch }}
     {{- end }}
     {{- $patches = concat $patches $coderPatches }}
     {{- end }}
@@ -1773,7 +1775,7 @@ spec:
     {{- else if ne $provider "" }}
     {{- $ecrRegistry := coalesce (index $annotations "ecr-registry") (index $annotations "workload-registry") }}
     {{- if not $ecrRegistry }}{{ fail (printf "%s requires ecr-registry or workload-registry annotation on %s" .component $provider) }}{{- end }}
-    {{- $cloudBridgeImage := printf "%s/%s/infrastructure:dragonfly-sso@%s" $ecrRegistry .nameNormalized .cloudBridgeDigest }}
+    {{- $cloudBridgeImage := printf "%s/src/infra/tools/dragonfly_sso@%s" $ecrRegistry .cloudBridgeDigest }}
     {{- $dragonflyBridgeOps = append $dragonflyBridgeOps (dict "op" "replace" "path" "/spec/template/spec/containers/0/image" "value" $cloudBridgeImage) }}
     {{- end }}
     # floci-divergence: Cloud clusters configure domain-qualified operator groups and operator emails in Dragonfly OIDC secret.

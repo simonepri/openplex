@@ -1,0 +1,152 @@
+# Configures default values for a managed team parent. Resource packs feed both AppProject admission and team-lane RBAC.
+
+repository:
+  revision: "0000000000000000000000000000000000000000"
+  url: https://example.invalid/fleet-config.git
+clusterRegistry:
+  version: 1
+  clusters: []
+delivery:
+  originRepositories:
+    src/examples/batch_cron: 000000000000.dkr.ecr.us-west-2.amazonaws.com/src/examples/batch_cron
+    src/examples/ray_data: 000000000000.dkr.ecr.us-west-2.amazonaws.com/src/examples/ray_data
+    src/examples/ray_serve: 000000000000.dkr.ecr.us-west-2.amazonaws.com/src/examples/ray_serve
+    src/examples/ray_train: 000000000000.dkr.ecr.us-west-2.amazonaws.com/src/examples/ray_train
+    src/examples/svelte_web: 000000000000.dkr.ecr.us-west-2.amazonaws.com/src/examples/svelte_web
+  images:
+    - manifestRepository: registry.invalid/workloads/batch-cron
+      package: src/examples/batch_cron
+      repository: src/examples/batch_cron
+      sourceName: batch-cron
+      target: //src/examples/batch_cron:image_push
+    - manifestRepository: registry.invalid/workloads/ray-data
+      package: src/examples/ray_data
+      repository: src/examples/ray_data
+      sourceName: ray-data
+      target: //src/examples/ray_data:image_push
+    - manifestRepository: registry.invalid/workloads/ray-serve
+      package: src/examples/ray_serve
+      repository: src/examples/ray_serve
+      sourceName: ray-serve
+      target: //src/examples/ray_serve:image_push
+    - manifestRepository: registry.invalid/workloads/ray-train
+      package: src/examples/ray_train
+      repository: src/examples/ray_train
+      sourceName: ray-train
+      target: //src/examples/ray_train:image_push
+    - manifestRepository: registry.invalid/workloads/svelte-web
+      package: src/examples/svelte_web
+      repository: src/examples/svelte_web
+      sourceName: svelte-web
+      target: //src/examples/svelte_web:image_push
+projectIndex:
+  version: 3
+  projects:
+    - delivery: promoted
+      deployments:
+        - path: src/examples/batch_cron/deployment
+          promotion: automatic
+          source: {kind: warehouse}
+          stage: prod
+      name: batch_cron
+      path: src/examples/batch_cron
+      team: examples
+    - delivery: submitted
+      deployments:
+        - {path: src/examples/ray_data/deployment}
+      name: ray_data
+      path: src/examples/ray_data
+      team: examples
+    - delivery: promoted
+      deployments:
+        - path: src/examples/ray_serve/deployment
+          promotion: automatic
+          source: {kind: warehouse}
+          stage: prod
+      name: ray_serve
+      path: src/examples/ray_serve
+      team: examples
+    - delivery: submitted
+      deployments:
+        - {path: src/examples/ray_train/deployment}
+      name: ray_train
+      path: src/examples/ray_train
+      team: examples
+    - delivery: promoted
+      deployments:
+        - path: src/examples/svelte_web/deployment
+          promotion: automatic
+          source: {kind: warehouse}
+          stage: prod
+      name: svelte_web
+      path: src/examples/svelte_web
+      team: examples
+team:
+  slug: examples
+  cells:
+    matchLabels:
+      role: cell
+  projects: [batch_cron, ray_data, ray_serve, ray_train, svelte_web]
+  dev_secrets:
+    # keep-sorted start
+    - slack_bot_token
+    - temporal_cloud_api_key
+    # keep-sorted end
+  quota:
+    classes:
+      ha: {cpu: "2", memory: 3Gi}
+      ma: {cpu: "1", memory: 6Gi}
+      wa: {cpu: "0", memory: "0"}
+      be: {cpu: "0", memory: "0"}
+  promotion: automatic
+  workspaces: true
+  archive: true
+enabledPacks:
+  # keep-sorted start
+  - cloudnative-pg
+  - keda
+  - kuberay
+  # keep-sorted end
+resourcePacks:
+  base:
+    # keep-sorted start block=yes
+    - {access: edit, apiGroup: "", kind: Pod, project: false, resource: pods}
+    - {access: edit, apiGroup: batch, kind: Job, project: true, resource: jobs}
+    - {access: edit, apiGroup: kueue.x-k8s.io, kind: Workload, project: true, resource: workloads}
+    - {access: view, apiGroup: "", kind: ConfigMap, project: true, resource: configmaps}
+    - {access: view, apiGroup: "", kind: PersistentVolumeClaim, project: true, resource: persistentvolumeclaims}
+    - {access: view, apiGroup: "", kind: Secret, project: true, resource: secrets}
+    - {access: view, apiGroup: "", kind: Service, project: true, resource: services}
+    - {access: view, apiGroup: "", kind: ServiceAccount, project: true, resource: serviceaccounts}
+    - {access: view, apiGroup: apps, kind: Deployment, project: true, resource: deployments}
+    - {access: view, apiGroup: autoscaling, kind: HorizontalPodAutoscaler, project: true, resource: horizontalpodautoscalers}
+    - {access: view, apiGroup: autoscaling.k8s.io, kind: VerticalPodAutoscaler, project: true, resource: verticalpodautoscalers}
+    - {access: view, apiGroup: batch, kind: CronJob, project: true, resource: cronjobs}
+    - {access: view, apiGroup: external-secrets.io, kind: ExternalSecret, project: true, resource: externalsecrets}
+    - {access: view, apiGroup: external-secrets.io, kind: SecretStore, project: true, resource: secretstores}
+    - {access: view, apiGroup: generators.external-secrets.io, kind: Password, project: true, resource: passwords}
+    - {access: view, apiGroup: kueue.x-k8s.io, kind: LocalQueue, project: false, resource: localqueues}
+    - {access: view, apiGroup: networking.k8s.io, kind: NetworkPolicy, project: true, resource: networkpolicies}
+    - {access: view, apiGroup: policy, kind: PodDisruptionBudget, project: true, resource: poddisruptionbudgets}
+    - {access: view, apiGroup: rbac.authorization.k8s.io, kind: Role, project: true, resource: roles}
+    - {access: view, apiGroup: rbac.authorization.k8s.io, kind: RoleBinding, project: true, resource: rolebindings}
+    - {access: view, apiGroup: valkey.io, kind: ValkeyCluster, project: true, resource: valkeyclusters,}
+    # keep-sorted end
+  cloudnative-pg:
+    # keep-sorted start
+    - {access: view, apiGroup: postgresql.cnpg.io, kind: Cluster, project: true, resource: clusters}
+    - {access: view, apiGroup: postgresql.cnpg.io, kind: Pooler, project: true, resource: poolers}
+    - {access: view, apiGroup: postgresql.cnpg.io, kind: ScheduledBackup, project: true, resource: scheduledbackups,}
+    # keep-sorted end
+  keda:
+    # keep-sorted start
+    - {access: view, apiGroup: http.keda.sh, kind: InterceptorRoute, project: true, resource: interceptorroutes}
+    - {access: view, apiGroup: keda.sh, kind: ScaledObject, project: true, resource: scaledobjects}
+    - {access: view, apiGroup: keda.sh, kind: TriggerAuthentication, project: true, resource: triggerauthentications,}
+    # keep-sorted end
+  kuberay:
+    # keep-sorted start
+    - {access: edit, apiGroup: ray.io, kind: RayCluster, project: true, resource: rayclusters}
+    - {access: edit, apiGroup: ray.io, kind: RayJob, project: true, resource: rayjobs}
+    - {access: view, apiGroup: ray.io, kind: RayService, project: true, resource: rayservices,}
+    # keep-sorted end

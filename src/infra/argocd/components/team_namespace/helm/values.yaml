@@ -1,0 +1,37 @@
+# Configures empty-safe defaults for team-namespace chart where The owning team ApplicationSet supplies a complete, schema-validated team and resource contract.
+
+mode: cell
+team:
+  slug: ""
+  group: ""
+  namespaceSuffix: ""
+  classes: []
+resources: []
+workloadImagePull:
+  enabled: false
+  region: ""
+  roleArn: ""
+workloadRepositories: {}
+devWorkspaces:
+  enabled: false
+  localGitCIDR: ""
+  originRegistryCIDR: ""
+workspaceSubmissions:
+  sourceNamespace: ""
+rayDashboard:
+  enabled: false
+devSecrets:
+  names: []
+runtimeSecrets:
+  adapter: ""
+  auth: {}
+storageProjection:
+  enabled: false
+  rbacNamespaceSuffixes: []
+quota:
+  baseline:
+    limits:
+      ephemeralStorage: 1Ti
+    requests:
+      ephemeralStorage: 500Gi
+      storage: 1Ti

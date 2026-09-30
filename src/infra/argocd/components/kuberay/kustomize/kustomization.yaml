@@ -1,0 +1,10 @@
+# Kustomize base for KubeRay's namespace and Ray dashboard gateway integration. Availability profiles add the operator disruption budget when redundant operation is requested.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  - pdb.yaml
+  # keep-sorted end

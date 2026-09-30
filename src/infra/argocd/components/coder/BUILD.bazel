@@ -1,0 +1,139 @@
+"""Check targets for the coder Argo CD component."""
+
+load("@rules_helm//helm:defs.bzl", "helm_import", "helm_template")
+load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_shell//shell:sh_library.bzl", "sh_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+# gazelle:python_extension disabled
+
+kustomization(
+    name = "base",
+    srcs = glob(["kustomize/**"]),
+    file = "kustomize/kustomization.yaml",
+)
+
+kustomized_resources(
+    name = "base_render",
+    kustomization = ":base",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "base_manifest",
+    rendered = ":base_render",
+)
+
+helm_import(
+    name = "vendor_chart",
+    chart = "@vendor_helm_coder//file",
+    version = "2.36.5",
+)
+
+helm_template(
+    name = "vendor-helm-render",
+    chart = ":vendor_chart",
+    opts = [
+        "--include-crds",
+        "--namespace",
+        "manifest-checks",
+    ],
+    values = [
+        "helm/values.yaml",
+    ],
+)
+
+sh_library(
+    name = "shell",
+    srcs = [
+        "kustomize/scripts/git-askpass.sh",
+        "kustomize/scripts/prepare-template-source.sh",
+        "kustomize/scripts/resolve-template-image.sh",
+        "kustomize/scripts/stage-template-publisher-token.sh",
+        "kustomize/scripts/template-reconciler.sh",
+        "kustomize/scripts/template-watcher.sh",
+    ],
+)
+
+sh_test(
+    name = "git-askpass_test",
+    srcs = ["kustomize/scripts/git-askpass_test.sh"],
+    args = ["$(location kustomize/scripts/git-askpass.sh)"],
+    data = ["kustomize/scripts/git-askpass.sh"],
+)
+
+sh_test(
+    name = "prepare-template-source_test",
+    srcs = ["kustomize/scripts/prepare-template-source_test.sh"],
+    args = ["$(location kustomize/scripts/prepare-template-source.sh)"],
+    data = ["kustomize/scripts/prepare-template-source.sh"],
+)
+
+sh_test(
+    name = "stage-template-publisher-token_test",
+    srcs = ["kustomize/scripts/stage-template-publisher-token_test.sh"],
+    args = ["$(location kustomize/scripts/stage-template-publisher-token.sh)"],
+    data = ["kustomize/scripts/stage-template-publisher-token.sh"],
+)
+
+sh_test(
+    name = "template-reconciler_test",
+    srcs = ["kustomize/scripts/template-reconciler_test.sh"],
+    args = ["$(location kustomize/scripts/template-reconciler.sh)"],
+    data = ["kustomize/scripts/template-reconciler.sh"],
+)
+
+py_library(
+    name = "python",
+    srcs = [
+        "kustomize/scripts/bootstrap_healer_session.py",
+        "kustomize/scripts/bootstrap_template_publisher.py",
+        "kustomize/scripts/coder_api.py",
+        "kustomize/scripts/oidc_entrypoint.py",
+        "kustomize/scripts/reconcile_snapshot_oauth.py",
+        "kustomize/scripts/workspace_healer.py",
+        "kustomize/scripts/workspace_healer_state.py",
+    ],
+    imports = [
+        "kustomize/scripts",
+    ],
+    visibility = ["//src/infra/definitions/conformance:__pkg__"],
+)
+
+py_test(
+    name = "bootstrap_healer_session_test",
+    srcs = ["kustomize/scripts/bootstrap_healer_session_test.py"],
+    deps = [":python"],
+)
+
+package_sources(exclude = [
+    "**/*.sh",
+    "**/*.py",
+])
+
+manifest_checks(
+    name = "vendor-helm",
+    kube_lint_config = "//src/bazel/rules/kubernetes_manifests:kube-linter-vendor.yaml",
+    rendered = ":vendor-helm-render",
+)
+
+py_test(
+    name = "reconcile_snapshot_oauth_test",
+    srcs = ["kustomize/scripts/reconcile_snapshot_oauth_test.py"],
+    deps = [":python"],
+)
+
+py_test(
+    name = "workspace_healer_state_test",
+    srcs = ["kustomize/scripts/workspace_healer_state_test.py"],
+    deps = [":python"],
+)
+
+py_test(
+    name = "workspace_healer_test",
+    srcs = ["kustomize/scripts/workspace_healer_test.py"],
+    deps = [":python"],
+)

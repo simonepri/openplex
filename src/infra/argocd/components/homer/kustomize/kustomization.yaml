@@ -1,0 +1,41 @@
+# Kustomize base for Homer service catalog dashboard.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  - pdb.yaml
+  - workload.yaml
+  # keep-sorted end
+configMapGenerator:
+  - name: homer-config
+    namespace: homer
+    files:
+      # keep-sorted start
+      - config.yml
+      - custom.css
+      # keep-sorted end
+  - name: homer-tools
+    namespace: homer
+    files:
+      # keep-sorted start
+      - tools/argocd.svg
+      - tools/atlantis.svg
+      - tools/coder.svg
+      - tools/dragonfly.svg
+      - tools/headlamp.svg
+      - tools/kargo.svg
+      - tools/opencost.svg
+      - tools/openplex.svg
+      - tools/parca.svg
+      - tools/registry.svg
+      - tools/signoz.svg
+      - tools/velero.svg
+      # keep-sorted end
+generatorOptions:
+  labels:
+    app.kubernetes.io/instance: homer
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: homer

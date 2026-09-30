@@ -1,0 +1,32 @@
+# Ingress NetworkPolicy for Headlamp: allows traffic only from the Envoy Gateway data plane and the local-login-conformance workload in the dex namespace. Rendered by every *-headlamp Application.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: headlamp
+  namespace: headlamp
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: headlamp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: headlamp
+      app.kubernetes.io/name: headlamp
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 4466}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: dex
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: local-login-conformance
+      ports:
+        - {protocol: TCP, port: 4466}

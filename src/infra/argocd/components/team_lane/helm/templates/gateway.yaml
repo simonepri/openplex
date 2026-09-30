@@ -1,0 +1,51 @@
+{{- /* Generates one value-free gateway backend Application per selected cell. */ -}}
+
+{{- include "fleet-team.validate" . -}}
+{{- range $cell := include "fleet-team.selectedCells" (dict "root" .) | fromJsonArray }}
+{{- $handoff := include "fleet-team.storageHandoff" (dict "root" $ "cell" $cell) | fromJson -}}
+{{- $storageAuthAdapter := include "fleet-team.storageAuthAdapter" $handoff -}}
+{{- $topology := required (printf "cell %q requires storage.gateway.config" $cell.name) $cell.storage.gateway.config -}}
+{{- $identity := dict -}}
+{{- /* floci-divergence: Floci cells do not require cloud gateway identities. */ -}}
+{{- if and (ne $storageAuthAdapter "kubernetes") (ne $cell.provider "floci") -}}
+{{- $identities := required (printf "cell %q requires storage.teams.gatewayIdentities" $cell.name) $cell.storage.teams.gatewayIdentities -}}
+{{- if not (hasKey $identities $.Values.team.slug) -}}
+{{- fail (printf "cell %q lacks gateway identity for team %q" $cell.name $.Values.team.slug) -}}
+{{- end -}}
+{{- $identity = index $identities $.Values.team.slug -}}
+{{- end }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ printf "%s-gateway-%s" $cell.name $.Values.team.slug }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    # keep-sorted start
+    cluster: {{ $cell.name | quote }}
+    role: cell
+    team: {{ $.Values.team.slug | quote }}
+    # keep-sorted end
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: cluster-cell
+  destination: {name: {{ $cell.name | quote }}, namespace: s3-system}
+  source:
+    repoURL: {{ $.Values.repository.url | quote }}
+    targetRevision: {{ $.Values.repository.revision | quote }}
+    path: src/infra/argocd/components/s3_gateway_team/helm
+    helm:
+      valuesObject:
+        team: {{ $.Values.team.slug | quote }}
+        provider: {{ required (printf "cell %q requires provider" $cell.name) $cell.provider | quote }}
+        # floci-divergence: Floci cells use kubernetes auth adapter for local team gateway backend.
+        authAdapter: {{ ternary "kubernetes" $storageAuthAdapter (eq $cell.provider "floci") | quote }}
+        targetCell: {{ $cell.name | quote }}
+        topology: {{ $topology | toJson }}
+        identity: {{ $identity | toJson }}
+  syncPolicy:
+{{ include "fleet-team.applicationSyncPolicy" $ | nindent 4 }}
+{{ end }}

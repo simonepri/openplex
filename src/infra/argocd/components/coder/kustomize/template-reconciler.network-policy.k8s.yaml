@@ -1,0 +1,100 @@
+# NetworkPolicy scoping template reconciler egress to Git repos, OCI registries, and Coder API.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coder-template-reconciler
+  namespace: coder
+  labels:
+    app.kubernetes.io/component: template-publication
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: template-publication
+      app.kubernetes.io/part-of: coder
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # AWS Pod Identity agent endpoint
+    - to:
+        - ipBlock: {cidr: 169.254.170.23/32}
+      ports:
+        - {protocol: TCP, port: 80}
+    # GCP Workload Identity metadata server endpoint
+    - to:
+        - ipBlock: {cidr: 169.254.169.254/32}
+      ports:
+        - {protocol: TCP, port: 80}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: coder
+              app.kubernetes.io/name: coder
+      ports:
+        # keep-sorted start
+        - {port: 80, protocol: TCP}
+        - {port: 8080, protocol: TCP,}
+        # keep-sorted end
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/name: envoy
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+        - ipBlock: {cidr: 172.31.0.0/16}
+      ports:
+        # keep-sorted start
+        - {protocol: TCP, port: 10443}
+        - {protocol: TCP, port: 443,}
+        # keep-sorted end
+    - to:
+        # keep-sorted start
+        - ipBlock: {cidr: 172.19.0.0/16}
+        - ipBlock: {cidr: 192.0.2.1/32}
+          # keep-sorted end
+      ports:
+        - {protocol: TCP, port: 9418}
+    - to:
+        - ipBlock: {cidr: 172.19.255.22/32}
+      ports:
+        - {protocol: TCP, port: 5000}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+      ports:
+        # keep-sorted start
+        # Git over SSH (deploy key) for the template source checkout.
+        - {protocol: TCP, port: 22}
+        - {protocol: TCP, port: 443,}
+        # keep-sorted end

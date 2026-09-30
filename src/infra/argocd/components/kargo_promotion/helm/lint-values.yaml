@@ -1,0 +1,26 @@
+# Complete non-production origin contract used to lint project-scoped artifact discovery for the first-party Kargo promotion chart.
+
+mode: warehouse
+promotionMode: automatic
+teamSlug: examples
+repositoryURL: https://example.invalid/fleet-config.git
+originRepositories:
+  src/examples/ray_data: 999988887777.dkr.ecr.us-west-2.amazonaws.com/src/examples/ray_data
+  src/examples/svelte_web: 999988887777.dkr.ecr.us-west-2.amazonaws.com/src/examples/svelte_web
+images: []
+warehouses:
+  - name: ray-data
+    images:
+      - package: src/examples/ray_data
+        manifestRepository: registry.invalid/workloads/ray-data
+        repository: src/examples/ray_data
+        sourceName: ray-data
+        target: //src/examples/ray_data:image_push
+  - name: svelte-web
+    images:
+      - package: src/examples/svelte_web
+        manifestRepository: registry.invalid/workloads/svelte-web
+        repository: src/examples/svelte_web
+        sourceName: svelte-web
+        target: //src/examples/svelte_web:image_push
+stage: {}
