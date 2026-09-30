@@ -1,0 +1,12 @@
+"""Packages Headscale local fleet configuration and ACL policies."""
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "headscale_config",
+    srcs = [
+        "config.yaml",
+        "derp.yaml",
+        "policy.hujson",
+    ],
+)

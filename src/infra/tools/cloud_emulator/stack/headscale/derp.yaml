@@ -1,0 +1,22 @@
+# Configures local DERP relay map and region endpoints for Headscale mesh connectivity.
+
+regions:
+  999:
+    regionid: 999
+    regioncode: eaws-lh1
+    regionname: eAWS lh1 DERP
+    nodes:
+      - name: 999a
+        regionid: 999
+        hostname: headscale.ctrl-eaws-lh1.c.corp.local.internal
+        ipv4: 172.19.255.23
+        ipv6: none
+        stunport: -1
+      - name: 999b
+        regionid: 999
+        hostname: headscale.ctrl-eaws-lh1.c.corp.local.internal
+        derpport: 3340
+        insecurefortests: true
+        ipv4: 127.0.0.1
+        ipv6: none
+        stunport: -1

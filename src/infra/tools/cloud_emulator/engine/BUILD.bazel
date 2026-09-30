@@ -1,0 +1,59 @@
+"""Builds modular cloud emulator runtime engine packages."""
+
+# gazelle:resolve py yaml @dev_python_deps//pyyaml
+# gazelle:resolve py infra.tools.cloud_emulator.engine.compose //src/infra/tools/cloud_emulator/engine:compose
+# gazelle:resolve py infra.tools.cloud_emulator.engine.docker //src/infra/tools/cloud_emulator/engine:docker
+# gazelle:resolve py infra.tools.cloud_emulator.engine.readiness //src/infra/tools/cloud_emulator/engine:readiness
+# gazelle:resolve py infra.tools.cloud_emulator.engine.storage //src/infra/tools/cloud_emulator/engine:storage
+
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "compose",
+    srcs = ["compose.py"],
+    data = ["//src/infra/tools/cloud_emulator/stack:compose.yaml"],
+    imports = [
+        "../../../..",
+        "../../../../..",
+    ],
+    deps = [
+        "@dev_python_deps//pyyaml",
+    ],
+)
+
+py_library(
+    name = "docker",
+    srcs = ["docker.py"],
+    imports = [
+        "../../../..",
+        "../../../../..",
+    ],
+    deps = ["//src/infra/tools/cloud_emulator/engine:compose"],
+)
+
+py_library(
+    name = "storage",
+    srcs = ["storage.py"],
+    imports = [
+        "../../../..",
+        "../../../../..",
+    ],
+    deps = [
+        "//src/infra/tools/cloud_emulator/engine:compose",
+    ],
+)
+
+py_library(
+    name = "readiness",
+    srcs = ["readiness.py"],
+    imports = [
+        "../../../..",
+        "../../../../..",
+    ],
+    deps = [
+        "//src/infra/tools/cloud_emulator/engine:compose",
+        "@dev_python_deps//pyyaml",
+    ],
+)
