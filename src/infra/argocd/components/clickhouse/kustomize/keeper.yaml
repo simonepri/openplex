@@ -1,0 +1,141 @@
+# ClickHouseKeeperInstallation defining the dedicated coordination ensemble for ClickHouse.
+
+apiVersion: clickhouse-keeper.altinity.com/v1
+kind: ClickHouseKeeperInstallation
+metadata:
+  name: signoz-keeper
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/name: clickhouse-keeper
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: keeper
+    app.kubernetes.io/part-of: signoz
+    app.kubernetes.io/managed-by: clickhouse-operator
+spec:
+  defaults:
+    storageManagement:
+      provisioner: Operator
+      reclaimPolicy: Retain
+    templates:
+      dataVolumeClaimTemplate: keeper-data
+      podTemplate: signoz-keeper
+      serviceTemplate: signoz-clickhouse-keeper-service
+  configuration:
+    settings:
+      logger/level: information
+      logger/console: "true"
+      listen_host: "::"
+      keeper_server/four_letter_word_white_list: ruok,conf,stat,mntr
+      keeper_server/coordination_settings/snapshots_to_keep: "3"
+      keeper_server/coordination_settings/reserved_log_items: "50000"
+      keeper_server/coordination_settings/snapshot_distance: "50000"
+      keeper_server/coordination_settings/compress_logs: "true"
+      prometheus/endpoint: /metrics
+      prometheus/port: "7000"
+      prometheus/metrics: "true"
+      prometheus/events: "true"
+      prometheus/asynchronous_metrics: "true"
+    clusters:
+      - name: keeper
+        pdbManaged: "true"
+        pdbMaxUnavailable: 1
+        layout:
+          replicasCount: 3
+  templates:
+    serviceTemplates:
+      - name: signoz-clickhouse-keeper-service
+        generateName: signoz-clickhouse-keeper
+        metadata:
+          labels:
+            app.kubernetes.io/component: keeper
+            app.kubernetes.io/instance: signoz
+            app.kubernetes.io/managed-by: clickhouse-operator
+            app.kubernetes.io/name: clickhouse-keeper
+            app.kubernetes.io/part-of: signoz
+        spec:
+          clusterIP: None
+          ports:
+            - {name: client, port: 2181}
+            - {name: raft, port: 9444}
+          type: ClusterIP
+    podTemplates:
+      - name: signoz-keeper
+        metadata:
+          annotations:
+            signoz.io/path: /metrics
+            signoz.io/port: "7000"
+            signoz.io/scrape: "true"
+          labels:
+            app.kubernetes.io/name: clickhouse-keeper
+            app.kubernetes.io/instance: signoz
+            app.kubernetes.io/component: keeper
+            app.kubernetes.io/part-of: signoz
+            app.kubernetes.io/managed-by: clickhouse-operator
+        spec:
+          automountServiceAccountToken: false
+          priorityClassName: cluster-operators
+          terminationGracePeriodSeconds: 60
+          securityContext:
+            fsGroup: 101
+            fsGroupChangePolicy: OnRootMismatch
+            runAsGroup: 101
+            runAsNonRoot: true
+            runAsUser: 101
+            seccompProfile: {type: RuntimeDefault}
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: clickhouse-keeper
+                  app.kubernetes.io/instance: signoz
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: clickhouse-keeper
+                  app.kubernetes.io/instance: signoz
+          containers:
+            - name: clickhouse-keeper
+              image: docker.io/clickhouse/clickhouse-keeper:26.9.5@sha256:367f3f6a113e14046a547f7ffb962d70a2fc281379d59869aa718ab372c020cf
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests: {cpu: 200m, memory: 512Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                runAsGroup: 101
+                runAsNonRoot: true
+                runAsUser: 101
+                seccompProfile: {type: RuntimeDefault}
+              volumeMounts:
+                - name: keeper-data
+                  mountPath: /var/lib/clickhouse-keeper
+    volumeClaimTemplates:
+      - name: keeper-data
+        provisioner: Operator
+        reclaimPolicy: Retain
+        metadata:
+          annotations:
+            resize.topolvm.io/enabled: "true"
+            resize.topolvm.io/increase: 20%
+            resize.topolvm.io/storage_limit: 100Gi
+            resize.topolvm.io/threshold: 20%
+          labels:
+            app.kubernetes.io/name: clickhouse-keeper
+            app.kubernetes.io/instance: signoz
+            app.kubernetes.io/component: keeper
+            app.kubernetes.io/part-of: signoz
+            velero.io/exclude-from-backup: "true"
+        spec:
+          accessModes: [ReadWriteOnce]
+          storageClassName: general-expandable
+          resources:
+            requests:
+              storage: 20Gi

@@ -1,0 +1,11 @@
+# Kustomize base for ClickHouse operator namespace, network policies, and disruption budget.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  - pdb.yaml
+  # keep-sorted end
+

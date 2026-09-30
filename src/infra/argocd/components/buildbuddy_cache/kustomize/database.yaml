@@ -1,0 +1,133 @@
+# CloudNativePG cluster providing dedicated metadata storage for cell BuildBuddy cache.
+
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: buildbuddy-cache-postgres
+  namespace: buildbuddy
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: cache-metadata
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-cache-postgres
+    app.kubernetes.io/part-of: buildbuddy-cache
+    velero.io/exclude-from-backup: "true"
+spec:
+  instances: 1
+  inheritedMetadata:
+    annotations:
+      signoz.io/path: /metrics
+      signoz.io/port: "9187"
+      signoz.io/scrape: "true"
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-standard-bookworm@sha256:9446e83aa490df3f14ebf5bf2f6002a1347728690ff38f35dd7a85b925a62468
+  imagePullPolicy: IfNotPresent
+  postgresUID: 26
+  postgresGID: 26
+  bootstrap:
+    initdb:
+      database: buildbuddy
+      owner: buildbuddy
+  enablePDB: false
+  enableSuperuserAccess: false
+  primaryUpdateMethod: switchover
+  primaryUpdateStrategy: unsupervised
+  stopDelay: 300
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      enabled: true
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: buildbuddy-cache-postgres-backups
+        serverName: buildbuddy-cache-postgres
+  storage:
+    size: 10Gi
+    storageClass: general-expandable
+  walStorage:
+    size: 2Gi
+    storageClass: general-expandable
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  postgresql:
+    parameters:
+      log_temp_files: "1024"
+      password_encryption: scram-sha-256
+      temp_file_limit: "2GB"
+      work_mem: "16MB"
+  podSecurityContext:
+    fsGroup: 26
+    fsGroupChangePolicy: OnRootMismatch
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: buildbuddy-cache-postgres-daily
+  namespace: buildbuddy
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: cache-metadata
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-cache-postgres-backup
+spec:
+  schedule: "0 15 3 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: buildbuddy-cache-postgres
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: buildbuddy-cache-postgres-backup-s3
+  namespace: buildbuddy
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: cache-metadata
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-cache-postgres-backup
+type: Opaque
+stringData:
+  access-key-id: local-buildbuddy-postgres-backup
+  secret-access-key: local-buildbuddy-postgres-backup-secret
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: buildbuddy-cache-postgres-backups
+  namespace: buildbuddy
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/component: cache-metadata
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-cache-postgres-backups
+spec:
+  retentionPolicy: "30d"
+  configuration:
+    destinationPath: "s3://examples-buildbuddy-postgres-backups" # nosemgrep: repository.storage.canonical-virtual-s3-uri - Barman Cloud physical backup destination path
+    s3Credentials:
+      accessKeyId:
+        name: buildbuddy-cache-postgres-backup-s3
+        key: access-key-id
+      secretAccessKey:
+        name: buildbuddy-cache-postgres-backup-s3
+        key: secret-access-key
+    wal:
+      compression: gzip
+      maxParallel: 4
+    data:
+      compression: gzip
+      jobs: 2

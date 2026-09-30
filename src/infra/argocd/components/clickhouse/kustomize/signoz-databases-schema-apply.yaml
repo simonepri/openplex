@@ -1,0 +1,81 @@
+# Argo CD sync-hook Job initializing SigNoz telemetry databases before app migrations.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: signoz-clickhouse-databases-schema-apply
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "1"
+    ignore-check.kube-linter.io/no-liveness-probe: >-
+      ClickHouse schema apply Job runs to completion and exits.
+    ignore-check.kube-linter.io/no-readiness-probe: >-
+      ClickHouse schema apply Job runs to completion and exits.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Database schema apply Job requires ClickHouse password via environment variable.
+  labels:
+    app.kubernetes.io/name: signoz
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: clickhouse-schema
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: signoz
+        app.kubernetes.io/instance: signoz
+        app.kubernetes.io/component: clickhouse-schema
+        app.kubernetes.io/part-of: signoz
+    spec:
+      priorityClassName: cluster-operators
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsGroup: 101
+        runAsNonRoot: true
+        runAsUser: 101
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: schema-apply
+          # yamllint disable-line rule:line-length
+          image: docker.io/clickhouse/clickhouse-server:26.9.5@sha256:b1081d3f26191692d7717699def7c624763f220f461ad60fccf55bbc186f06a0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: signoz-clickhouse-storage-stats-common
+          env:
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: signoz-clickhouse
+                  key: password
+          command: [/bin/bash, /scripts/signoz-databases-schema-apply.sh]
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 101
+            runAsNonRoot: true
+            runAsUser: 101
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: programs, mountPath: /scripts, readOnly: true}
+            - {name: schema, mountPath: /etc/signoz-databases, readOnly: true}
+            - {name: temporary, mountPath: /tmp}
+      volumes:
+        - name: programs
+          configMap:
+            name: signoz-clickhouse-schema-apply-programs
+            defaultMode: 365
+        - name: schema
+          configMap:
+            name: signoz-clickhouse-databases-schema
+        - {name: temporary, emptyDir: {sizeLimit: 128Mi}}

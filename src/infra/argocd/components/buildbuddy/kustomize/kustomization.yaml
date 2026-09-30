@@ -1,0 +1,15 @@
+# Kustomize base assembling central BuildBuddy UI, BES, database, and storage resources.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+configMapGenerator:
+  - name: buildbuddy-config
+    namespace: buildbuddy
+    files: [config.yaml]
+resources:
+  # keep-sorted start
+  - database.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - workload.yaml
+  # keep-sorted end

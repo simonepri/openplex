@@ -1,0 +1,16 @@
+# PodDisruptionBudget preserving minimum executor replicas during voluntary disruptions.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: buildbuddy-executor
+  namespace: buildbuddy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-executor
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: buildbuddy-executor

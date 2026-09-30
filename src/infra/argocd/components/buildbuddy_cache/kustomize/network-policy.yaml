@@ -1,0 +1,54 @@
+# NetworkPolicy restricting BuildBuddy cache access to workspace clients and internal database.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: buildbuddy-cache
+  namespace: buildbuddy
+  labels:
+    app.kubernetes.io/component: remote-cache
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-cache
+    app.kubernetes.io/part-of: buildbuddy-cache
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: buildbuddy-cache
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: team-lane
+          # LINT.IfChange(coder-workspace-infrastructure-identity)
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: coder-workspace
+              app.kubernetes.io/part-of: coder
+              com.coder.resource: "true"
+              # LINT.ThenChange(//src/infra/definitions/workspaces/templates/dev/locals.tf:coder-workspace-infrastructure-identity)
+      ports:
+        - {port: 1985, protocol: TCP}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {port: 9090, protocol: TCP}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: buildbuddy-cache-postgres
+              role: primary
+      ports:
+        - {port: 5432, protocol: TCP}

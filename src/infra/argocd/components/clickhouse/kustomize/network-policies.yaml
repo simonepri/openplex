@@ -1,0 +1,83 @@
+# NetworkPolicies scoping ClickHouse and Keeper intra-cluster, client, and metrics traffic.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: signoz-clickhouse
+  namespace: signoz
+  labels:
+    app.kubernetes.io/name: signoz-clickhouse
+    app.kubernetes.io/part-of: signoz
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: clickhouse
+      app.kubernetes.io/instance: signoz
+      app.kubernetes.io/component: clickhouse
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 8123}
+        - {protocol: TCP, port: 9000}
+        - {protocol: TCP, port: 9009}
+        - {protocol: TCP, port: 9363}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: clickhouse-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: altinity-clickhouse-operator
+      ports:
+        - {protocol: TCP, port: 8123}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {protocol: TCP, port: 9363}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: signoz-clickhouse-keeper
+  namespace: signoz
+  labels:
+    app.kubernetes.io/name: signoz-clickhouse
+    app.kubernetes.io/part-of: signoz
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: clickhouse-keeper
+      app.kubernetes.io/instance: signoz
+      app.kubernetes.io/component: keeper
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: clickhouse
+              app.kubernetes.io/instance: signoz
+              app.kubernetes.io/component: clickhouse
+      ports:
+        - {protocol: TCP, port: 2181}
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: clickhouse-keeper
+              app.kubernetes.io/instance: signoz
+              app.kubernetes.io/component: keeper
+      ports:
+        - {protocol: TCP, port: 9444}
+    - from:
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 7000}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {protocol: TCP, port: 7000}

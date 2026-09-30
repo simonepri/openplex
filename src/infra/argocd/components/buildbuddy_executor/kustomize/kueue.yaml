@@ -1,0 +1,54 @@
+# Kueue ClusterQueue and LocalQueue defining resource quotas for BuildBuddy execution.
+
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: buildbuddy-executors
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-executor
+spec:
+  cohortName: ma
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: buildbuddy
+      kueue.x-k8s.io/managed: "true"
+  preemption:
+    reclaimWithinCohort: LowerPriority
+    withinClusterQueue: LowerPriority
+  queueingStrategy: StrictFIFO
+  resourceGroups:
+    - coveredResources:
+        # keep-sorted start
+        - cpu
+        - memory
+        - nvidia.com/gpu
+        # keep-sorted end
+      flavors:
+        - name: stable
+          resources:
+            - name: cpu
+              nominalQuota: "32"
+            - name: memory
+              nominalQuota: 128Gi
+            - name: nvidia.com/gpu
+              nominalQuota: "4"
+        - name: elastic
+          resources:
+            - name: cpu
+              nominalQuota: "0"
+            - name: memory
+              nominalQuota: "0"
+            - name: nvidia.com/gpu
+              nominalQuota: "0"
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: ma
+  namespace: buildbuddy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-executor
+spec:
+  clusterQueue: buildbuddy-executors

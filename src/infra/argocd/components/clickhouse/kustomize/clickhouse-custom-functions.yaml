@@ -1,0 +1,35 @@
+# ConfigMap defining the histogramQuantile executable user-defined function for SigNoz.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signoz-clickhouse-custom-functions
+  namespace: signoz
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: clickhouse
+    app.kubernetes.io/part-of: signoz
+data:
+  custom-functions.xml: |
+    <functions>
+        <function>
+            <type>executable</type>
+            <name>histogramQuantile</name>
+            <return_type>Float64</return_type>
+            <argument>
+                <type>Array(Float64)</type>
+                <name>buckets</name>
+            </argument>
+            <argument>
+                <type>Array(Float64)</type>
+                <name>counts</name>
+            </argument>
+            <argument>
+                <type>Float64</type>
+                <name>quantile</name>
+            </argument>
+            <format>CSV</format>
+            <command>./histogramQuantile</command>
+        </function>
+    </functions>

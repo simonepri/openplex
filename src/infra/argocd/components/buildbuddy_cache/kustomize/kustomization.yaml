@@ -1,0 +1,17 @@
+# Kustomize base composing shared cell-wide BuildBuddy remote cache and database resources.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+configMapGenerator:
+  - name: buildbuddy-cache-config
+    namespace: buildbuddy
+    files: [config.yaml]
+resources:
+  # keep-sorted start
+  - database.yaml
+  - gateway-service.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - vpa.yaml
+  - workload.yaml
+  # keep-sorted end

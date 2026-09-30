@@ -1,0 +1,128 @@
+# Deployment and Service running BuildBuddy UI and Build Event Service with PVC storage.
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buildbuddy-data
+  namespace: buildbuddy
+  annotations:
+    resize.topolvm.io/enabled: "true"
+    resize.topolvm.io/increase: "20%"
+    resize.topolvm.io/storage_limit: 50Gi
+    resize.topolvm.io/threshold: "20%"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 2Gi}
+  storageClassName: general-expandable
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildbuddy
+  namespace: buildbuddy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/name: buildbuddy}
+  ports:
+    - {name: http, port: 8080, protocol: TCP, targetPort: http}
+    - {name: bes, appProtocol: kubernetes.io/h2c, port: 1985, protocol: TCP, targetPort: bes}
+    - {name: metrics, port: 9090, protocol: TCP, targetPort: metrics}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildbuddy
+  namespace: buildbuddy
+  annotations:
+    ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+      BuildBuddy mounts a single ReadWriteOnce volume and requires Recreate to safely reattach storage.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      BuildBuddy requires database connection URL via environment variable.
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: buildbuddy}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: buildbuddy
+      annotations:
+        ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+          BuildBuddy mounts a single ReadWriteOnce volume and requires Recreate to safely reattach storage.
+        ignore-check.kube-linter.io/read-secret-from-env-var: >-
+          BuildBuddy requires database connection URL via environment variable.
+        signoz.io/path: /metrics
+        signoz.io/port: "9090"
+        signoz.io/scrape: "true"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: buildbuddy
+          image: gcr.io/flame-public/buildbuddy-app-onprem:v2.310.0@sha256:ddd89c71143de66500c03fd09c48c2978c3325ca43a056294be9cda8708761e7
+          args: [--config_file=/etc/buildbuddy/config.yaml]
+          env:
+            - name: BUILDBUDDY_DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: buildbuddy-postgres-app, key: uri}
+            - {name: BUILDBUDDY_PUBLIC_URL, value: 'https://buildbuddy.invalid'}
+            - {name: TMPDIR, value: /tmp}
+          ports:
+            - {name: http, containerPort: 8080, protocol: TCP}
+            - {name: bes, containerPort: 1985, protocol: TCP}
+            - {name: metrics, containerPort: 9090, protocol: TCP}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+              httpHeaders:
+                - {name: server-type, value: buildbuddy-server}
+            failureThreshold: 6
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              httpHeaders:
+                - {name: server-type, value: buildbuddy-server}
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests: {cpu: 100m, memory: 384Mi}
+            limits: {cpu: 500m, memory: 768Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - {name: config, mountPath: /etc/buildbuddy, readOnly: true}
+            - {name: data, mountPath: /var/lib/buildbuddy}
+            - {name: temporary, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: buildbuddy-config}
+        - name: data
+          persistentVolumeClaim: {claimName: buildbuddy-data}
+        - name: temporary
+          emptyDir: {sizeLimit: 256Mi}
