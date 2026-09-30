@@ -1,0 +1,19 @@
+# Allows the Kubernetes API server to reach the External Secrets admission webhook; every provider overlay renders it before the fleet ingress baseline selects the namespace.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: external-secrets-webhook
+  namespace: external-secrets-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: external-secrets-webhook
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: external-secrets
+      app.kubernetes.io/name: external-secrets-webhook
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {protocol: TCP, port: 10250}

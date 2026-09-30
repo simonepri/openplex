@@ -1,0 +1,18 @@
+# Namespace for cert-manager controllers, webhooks, and cluster issuers.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/part-of: cluster-runtime
+    cost-center: shared-infrastructure
+    environment: production
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest

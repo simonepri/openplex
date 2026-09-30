@@ -1,0 +1,41 @@
+"""Check targets for the local_runtime_tls Argo CD component."""
+
+load("@rules_helm//helm:defs.bzl", "helm_chart", "helm_lint_test", "helm_template")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "HELM_TEMPLATE", "package_sources", "source_set")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+helm_chart(
+    name = "chart",
+    chart = "helm/Chart.yaml",
+    schema = "helm/values.schema.json",
+    templates = glob(
+        ["helm/templates/**"],
+        allow_empty = True,
+    ),
+    values = "helm/values.yaml",
+)
+
+helm_lint_test(
+    name = "helm-lint",
+    chart = ":chart",
+    opts = ["--strict"],
+)
+
+helm_template(
+    name = "helm_render",
+    chart = ":chart",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm",
+    rendered = ":helm_render",
+)
+
+source_set(
+    name = "helm_templates",
+    srcs = glob(["helm/templates/**"]),
+    kind = HELM_TEMPLATE,
+)
+
+package_sources(exclude = ["helm/templates/**"])

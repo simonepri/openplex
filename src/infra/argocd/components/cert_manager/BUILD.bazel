@@ -1,0 +1,50 @@
+"""Check targets for the cert_manager Argo CD component."""
+
+load("@rules_helm//helm:defs.bzl", "helm_import", "helm_template")
+load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+kustomization(
+    name = "base",
+    srcs = glob(["kustomize/**"]),
+    file = "kustomize/kustomization.yaml",
+)
+
+kustomized_resources(
+    name = "base_render",
+    kustomization = ":base",
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "base_manifest",
+    rendered = ":base_render",
+)
+
+helm_import(
+    name = "vendor_chart",
+    chart = "@vendor_helm_cert_manager//file",
+    version = "v1.21.1",
+)
+
+helm_template(
+    name = "vendor-helm-render",
+    chart = ":vendor_chart",
+    opts = [
+        "--include-crds",
+        "--namespace",
+        "manifest-checks",
+    ],
+    values = [
+        "helm/values.yaml",
+    ],
+)
+
+package_sources()
+
+manifest_checks(
+    name = "vendor-helm",
+    kube_lint_config = "//src/bazel/rules/kubernetes_manifests:kube-linter-vendor.yaml",
+    rendered = ":vendor-helm-render",
+)
