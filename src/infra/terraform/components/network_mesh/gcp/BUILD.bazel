@@ -1,0 +1,17 @@
+"""Defines OpenTofu module check targets for GCP Tailscale subnet routers and Compute Engine instances."""
+
+load("@rules_tf//tf:def.bzl", "tf_module")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+tf_module(
+    name = "gcp",
+    providers = [
+        "google",
+    ],
+    skip_validation = True,
+    deps = [
+        "//src/infra/terraform/components/network_mesh/_interface",
+    ],
+)
+
+package_sources()

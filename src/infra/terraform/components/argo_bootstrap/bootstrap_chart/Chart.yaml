@@ -1,0 +1,8 @@
+# Declares chart metadata for applying seed AppProjects and root Applications once Argo CD CRDs are established.
+
+apiVersion: v2
+name: argocd-bootstrap
+description: Applies bootstrap objects after Argo CD CRDs are established.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

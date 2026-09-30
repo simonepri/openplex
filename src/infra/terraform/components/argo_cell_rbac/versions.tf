@@ -1,0 +1,12 @@
+# Configures required OpenTofu providers for Argo CD cell management RBAC resources.
+
+terraform {
+  required_version = ">= 1.8.0"
+
+  required_providers {
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "3.2.1"
+    }
+  }
+}
