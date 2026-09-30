@@ -1,0 +1,8 @@
+# Configures Kustomize resources for continuous reconciliation of the Ray Serve inference service.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - ray-serve.k8s.yaml
+  # keep-sorted end

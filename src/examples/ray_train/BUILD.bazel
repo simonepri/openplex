@@ -1,0 +1,47 @@
+"""Builds the Ray Train distributed PyTorch training job and packages multi-architecture container images."""
+
+load("@rules_python//python:defs.bzl", "py_binary")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "workload_manifests")
+load("//src/bazel/rules/oci:defs.bzl", "oci_multiarch_image", "oci_workload_publish", "oci_workload_run")
+
+py_binary(
+    name = "train",
+    srcs = ["train.py"],
+    deps = [
+        "//src/infra/tools/otel_tracing/python",
+        "//src/infra/tools/s3_resolver/client/python",
+        "@python_deps//ray",
+    ],
+)
+
+oci_multiarch_image(
+    name = "image",
+    base = "ray_torch_base",
+    binary = ":train",
+)
+
+workload_manifests(
+    name = "manifest",
+    srcs = [
+        "deployment/kustomization.yaml",
+        "deployment/project.yaml",
+        "deployment/ray-train.k8s.yaml",
+    ],
+)
+
+oci_workload_publish(
+    name = "publish",
+    image = ":image",
+)
+
+oci_workload_run(
+    name = "run",
+    image = ":image",
+    manifest = ":manifest",
+    namespace = "team-examples-workloads",
+)
+
+alias(
+    name = "submit",
+    actual = ":run",
+)
