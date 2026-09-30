@@ -1,0 +1,89 @@
+# Constrains privileged OpenEBS Rawfile LocalPV node Pod to the reviewed local CSI identity, immutable images, and host paths needed for loopback volume provisioning. Rendered by the local-runtime Kyverno overlay.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: local-rawfile-localpv-security-profile
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Enforce
+  rules:
+    - name: require-reviewed-rawfile-localpv-security-profile
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [openebs]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/instance: rawfile-localpv
+                  app.kubernetes.io/name: rawfile-localpv
+                  component: node
+      validate:
+        allowExistingViolations: true
+        message: Rawfile LocalPV must match its reviewed local CSI runtime profile.
+        deny:
+          conditions:
+            any:
+              - key: '{{ request.object.spec.serviceAccountName }}'
+                operator: NotEquals
+                value: rawfile-localpv-driver
+              - key: '{{ request.object.spec.hostNetwork || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ request.object.spec.hostPID || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ request.object.spec.hostIPC || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ length(request.object.spec.containers) }}'
+                operator: NotEquals
+                value: 3
+              - key: '{{ request.object.spec.containers[0].name }}'
+                operator: NotEquals
+                value: csi-driver
+              - key: "{{ regex_match('^localhost:15100/[0-9]+/[a-z0-9-]+/src/third_party/openebs/rawfile-localpv:[^@]+@sha256:[0-9a-f]{64}$', request.object.spec.containers[0].image) }}"
+                operator: Equals
+                value: false
+              - key: "{{ regex_match('^registry[.]k8s[.]io/sig-storage/csi-node-driver-registrar:[^@]+@sha256:[0-9a-f]{64}$', request.object.spec.containers[1].image) }}"
+                operator: Equals
+                value: false
+              - key: "{{ regex_match('^registry[.]k8s[.]io/sig-storage/csi-provisioner:[^@]+@sha256:[0-9a-f]{64}$', request.object.spec.containers[2].image) }}"
+                operator: Equals
+                value: false
+              - key: '{{ request.object.spec.containers[0].securityContext.privileged }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ length(request.object.spec.containers[?securityContext.privileged == `true`]) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ length(request.object.spec.volumes[?hostPath]) }}'
+                operator: NotEquals
+                value: 6
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/dev') }}
+                operator: Equals
+                value: false
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/var/lib/kubelet/') }}
+                operator: Equals
+                value: false
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/var/lib/kubelet/plugins/rawfile-localpv') }}
+                operator: Equals
+                value: false
+              - key: >-
+                  {{ contains(request.object.spec.volumes[?hostPath].hostPath.path, '/var/lib/kubelet/plugins_registry') }}
+                operator: Equals
+                value: false
+              - key: >-
+                  {{ length(request.object.spec.volumes[?hostPath && starts_with(hostPath.path, '/var/lib/rancher/k3s/openplex/rawfile-localpv/')]) }}
+                operator: NotEquals
+                value: 2

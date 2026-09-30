@@ -1,0 +1,74 @@
+# Configures local-only OpenEBS Rawfile LocalPV driver and host loopback disk storage paths.
+
+fullnameOverride: rawfile-localpv
+
+# LINT.IfChange(rawfile-localpv-provisioner-name)
+provisionerName: rawfile.csi.openebs.io
+# LINT.ThenChange(//src/infra/argocd/components/storage_classes/helm/templates/local.yaml:local-general-expandable-storage-provisioner,//src/infra/argocd/components/storage_classes/helm/templates/local.yaml:local-general-ephemeral-storage-provisioner,//src/infra/argocd/components/storage_classes/helm/templates/local.yaml:local-workspace-storage-provisioner)
+
+analytics:
+  enabled: false
+
+image:
+  registry: docker.io
+  repository: openebs/rawfile-localpv
+  tag: v0.15.3@sha256:96fd7987ea7918e5c9012f0719378c7ab5bb16c76ac10ccb66b99aaa0c39f0be
+csiSideCars:
+  image:
+    registry: registry.k8s.io
+controller:
+  externalResizer:
+    image:
+      repository: sig-storage/csi-resizer
+      tag: v2.2.1@sha256:ea1d25e23479000c7e8eeb92d827df66258df4e482ca054c5e7ce3fc0f5c41a5
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+  podLabels:
+    ignore-check.kube-linter.io/read-secret-from-env-var: "true"
+  resources:
+    requests: {cpu: 25m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+node:
+  defaultPool: default
+  storagePools:
+    default:
+      path: /var/lib/rancher/k3s/openplex/rawfile-localpv/default-pool/
+      # LINT.IfChange(local-workspace-storage-budget)
+      reservedCapacity: 52GiB
+      reservedCapacityMode: plain
+      # LINT.ThenChange(//src/infra/argocd/components/coder/kustomize/template-reconciler.k8s.yaml:local-workspace-storage-budget)
+  metadataDirPath: /var/lib/rancher/k3s/openplex/rawfile-localpv/meta
+  driverRegistrar:
+    image:
+      repository: sig-storage/csi-node-driver-registrar
+      tag: v2.17.0@sha256:f9de845b170155199f2a2a3f9531cf13d78e31235e9db6b6582a8b0db0a50dad
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+  externalProvisioner:
+    image:
+      repository: sig-storage/csi-provisioner
+      tag: v6.3.0@sha256:a4b0b1a37605b7b04a293e136edf7006ec1786a8eb3f4e5a945f81d667dcc371
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+  resources:
+    requests: {cpu: 25m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 512Mi}
+  podAnnotations:
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Rawfile LocalPV node plugin requires internal signature token via environment.
+capabilities:
+  apiServer:
+    enabled: false
+  resize:
+    enabled: true
+  snapshots:
+    enabled: false
+crds:
+  enabled: false
+metrics:
+  enabled: false
+snapshotClasses: []
+storageClasses: []

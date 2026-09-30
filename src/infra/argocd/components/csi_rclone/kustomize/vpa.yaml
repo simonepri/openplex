@@ -1,0 +1,40 @@
+# VerticalPodAutoscaler sizing Rclone CSI node plugin requests at pod startup without evictions.
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: rclone-csi-node
+  namespace: csi-rclone-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  targetRef: {apiVersion: apps/v1, kind: DaemonSet, name: rclone-csi-node}
+  updatePolicy: {updateMode: "Initial"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "*"
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: rclone-csi-controller
+  namespace: csi-rclone-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rclone-csi-controller
+  updatePolicy:
+    updateMode: "InPlace"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "*"
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+        minAllowed:
+          cpu: 10m
+          memory: 32Mi

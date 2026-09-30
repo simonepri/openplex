@@ -1,0 +1,12 @@
+# Kustomize base aggregating Rclone CSI driver policies, RBAC, VPA, and network rules.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  - policy.yaml
+  - service-account.yaml
+  - vpa.yaml
+  # keep-sorted end

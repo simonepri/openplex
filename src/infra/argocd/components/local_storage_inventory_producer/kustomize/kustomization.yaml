@@ -1,0 +1,11 @@
+# Composes the local storage inventory producer resources for scheduled cell inventory execution.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - configmap.yaml
+  - cronjob.yaml
+  - network-policy.yaml
+  - service-account.yaml
+  # keep-sorted end
