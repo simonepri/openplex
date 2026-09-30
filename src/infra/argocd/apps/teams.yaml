@@ -1,0 +1,131 @@
+# ApplicationSet dispatching team workloads across registered cell clusters.
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: team-apps
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "150"
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  syncPolicy:
+    applicationsSync: sync
+  generators:
+    - matrix:
+        generators:
+          - matrix:
+              generators:
+                - clusters:
+                    selector:
+                      matchLabels:
+                        role: ctrl
+                - git:
+                    repoURL: '{{ index .metadata.annotations "git-repo-url" }}'
+                    revision: HEAD
+                    files:
+                      - path: src/infra/definitions/teams/*.yaml
+          - clusters:
+              flatList: true
+              selector:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values: [ctrl, cell]
+  template:
+    metadata:
+      name: 'team-{{ .slug }}'
+      namespace: argocd
+      labels:
+        # keep-sorted start
+        cluster: '{{ .nameNormalized }}'
+        role: ctrl
+        team: '{{ .slug }}'
+        wave: '150'
+        # keep-sorted end
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: team-bootstrap
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'team-{{ .slug }}'
+      source:
+        repoURL: '{{ index .metadata.annotations "git-repo-url" }}'
+        targetRevision: HEAD
+        path: src/infra/argocd/components/team_lane/helm
+        helm:
+          valueFiles:
+            - values.yaml
+          values: |
+            accessAliasDomain: {{ default "c.corp.local.internal" (or (index (default dict .metadata.annotations) "cluster-domain") (index (default dict .metadata.annotations) "access-domain")) | toJson }}
+            {{- $annotations := default dict .metadata.annotations }}
+            {{- $ecrRegistry := index $annotations "ecr-registry" }}
+            {{- $awsAccountId := index $annotations "aws-account-id" }}
+            {{- if $awsAccountId }}
+            awsAccountId: {{ $awsAccountId | toJson }}
+            {{- end }}
+            {{- $gcpProjectId := or (index $annotations "gcp-project-id") (index $annotations "project-id") }}
+            {{- if $gcpProjectId }}
+            gcpProjectId: {{ $gcpProjectId | toJson }}
+            {{- end }}
+            {{- $gcpProjectNumber := index $annotations "gcp-project-number" }}
+            {{- if $gcpProjectNumber }}
+            gcpProjectNumber: {{ $gcpProjectNumber | toJson }}
+            {{- end }}
+            {{- if $ecrRegistry }}
+            ecrRegistry: {{ $ecrRegistry | toJson }}
+            delivery:
+              originRepositories:
+                src/examples/batch_cron: {{ printf "%s/src/examples/batch_cron" $ecrRegistry | toJson }}
+                src/examples/ray_data: {{ printf "%s/src/examples/ray_data" $ecrRegistry | toJson }}
+                src/examples/ray_serve: {{ printf "%s/src/examples/ray_serve" $ecrRegistry | toJson }}
+                src/examples/ray_train: {{ printf "%s/src/examples/ray_train" $ecrRegistry | toJson }}
+                src/examples/svelte_web: {{ printf "%s/src/examples/svelte_web" $ecrRegistry | toJson }}
+            {{- end }}
+            registeredClusters:
+            {{- range .clusters }}
+              - name: {{ .name | toJson }}
+                server: {{ .server | toJson }}
+                {{- if .metadata.annotations }}
+                annotations: {{ .metadata.annotations | toJson }}
+                {{- end }}
+                {{- if .metadata.labels }}
+                labels: {{ .metadata.labels | toJson }}
+                {{- end }}
+            {{- end }}
+            repository:
+              url: {{ index .metadata.annotations "git-repo-url" | toJson }}
+              transportURL: {{ (index .metadata.annotations "git-transport-url" | default (index .metadata.annotations "git-repo-url")) | toJson }}
+              revision: HEAD
+            team:
+              slug: {{ .slug | toJson }}
+              cells: {{ .cells | toJson }}
+              projects: {{ .projects | toJson }}
+              quota: {{ .quota | toJson }}
+              dev_secrets: {{ dig "dev_secrets" (list) . | toJson }}
+              promotion: {{ dig "promotion" "manual" . | toJson }}
+              workspaces: {{ dig "workspaces" true . | toJson }}
+              archive: {{ dig "archive" false . | toJson }}
+              members: {{ dig "members" (list) . | toJson }}
+              capabilities: {{ dig "capabilities" (dict) . | toJson }}
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        # LINT.IfChange(sync-retry)
+        retry:
+          limit: -1
+          refresh: true
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
+        # LINT.ThenChange(//src/infra/argocd/apps/ctrl.yaml:sync-retry,//src/infra/argocd/apps/cells.yaml:sync-retry)
+        syncOptions:
+          # keep-sorted start
+          - CreateNamespace=true
+          - ServerSideApply=true
+          # keep-sorted end
