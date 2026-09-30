@@ -1,0 +1,162 @@
+// Renders high-level platform topology and component relationships across clusters.
+
+digraph overview {
+  rankdir=LR; compound=true; newrank=true;
+  graph [fontname="Helvetica", nodesep=0.45, ranksep=0.9, bgcolor="transparent"];
+  node  [fontname="Helvetica"];
+  edge  [fontname="Helvetica", fontsize=9, color="#94A3B8", fontcolor="#475569", arrowsize=0.7, penwidth=1.5];
+
+  subgraph cluster_dev {
+    label="Developer Access & Version Control";
+    style="filled,rounded";
+    fillcolor="#F8FAFC";
+    color="#CBD5E1";
+    fontsize=11;
+    fontcolor="#334155";
+    penwidth=1.2;
+
+    dev [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/person.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Engineers</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">LOCAL WORKSPACES</FONT></TD></TR>
+    </TABLE>>];
+
+    tailnet [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/tailscale.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Tailscale</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">ZERO-TRUST MESH</FONT></TD></TR>
+    </TABLE>>];
+
+    github [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/github.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>GitHub</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">MONOREPO &amp; GITOPS</FONT></TD></TR>
+    </TABLE>>];
+  }
+
+  subgraph cluster_ctrl {
+    label="Control Cluster (ctrl-)";
+    style="filled,rounded";
+    fillcolor="#F5F3FF";
+    color="#C4B5FD";
+    fontsize=12;
+    fontcolor="#5B21B6";
+    penwidth=1.4;
+
+    atlantis [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/atlantis.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Atlantis</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">IAC PULL-REQUESTS</FONT></TD></TR>
+    </TABLE>>];
+
+    opentofu [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/opentofu.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>OpenTofu</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">INFRASTRUCTURE AS CODE</FONT></TD></TR>
+    </TABLE>>];
+
+    argocd [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/argocd.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Argo CD</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">GITOPS CONTROLLER</FONT></TD></TR>
+    </TABLE>>];
+
+    kargo [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/kargo.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Kargo</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">MULTI-STAGE PROMOTION</FONT></TD></TR>
+    </TABLE>>];
+
+    homer [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/homer.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Homer &amp; Dex</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">DASHBOARD &amp; SSO</FONT></TD></TR>
+    </TABLE>>];
+
+    signoz [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/signoz.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>SigNoz</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">METRICS, TRACES &amp; LOGS</FONT></TD></TR>
+    </TABLE>>];
+  }
+
+  subgraph cluster_cells {
+    label="Workload Clusters (cell-)";
+    style="filled,rounded";
+    fillcolor="#F0FDF4";
+    color="#86EFAC";
+    fontsize=12;
+    fontcolor="#166534";
+    penwidth=1.4;
+
+    coder [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/coder.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Coder</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">CLOUD DEV ENVIRONMENTS</FONT></TD></TR>
+    </TABLE>>];
+
+    kueue [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/kueue.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Kueue</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">FAIR-SHARE QUEUING</FONT></TD></TR>
+    </TABLE>>];
+
+    ray [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/ray.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Ray Cluster</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">DISTRIBUTED ML RUNTIME</FONT></TD></TR>
+    </TABLE>>];
+  }
+
+  subgraph cluster_found {
+    label="Multi-Cloud Foundations &amp; Local Substrates";
+    style="filled,rounded";
+    fillcolor="#FFFBEB";
+    color="#FDE68A";
+    fontsize=12;
+    fontcolor="#92400E";
+    penwidth=1.4;
+
+    fk8s [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/kubernetes.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Kubernetes</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">EKS · GKE · FLOCI LOCAL</FONT></TD></TR>
+    </TABLE>>];
+
+    fcpu [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/cpu.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Compute &amp; Accelerators</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">CPU &amp; NVIDIA GPU POOLS</FONT></TD></TR>
+    </TABLE>>];
+
+    fobj [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#E2E8F0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#FFFFFF" STYLE="rounded">
+      <TR><TD ALIGN="CENTER" FIXEDSIZE="TRUE" WIDTH="44" HEIGHT="44"><IMG SRC="src/infra/docs/assets/icons/generic-object-store.svg" SCALE="TRUE"/></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="11" COLOR="#0F172A"><B>Object Storage</B></FONT></TD></TR>
+      <TR><TD ALIGN="CENTER"><FONT POINT-SIZE="8" COLOR="#64748B">S3 · GCS · DUCKDB DELTA</FONT></TD></TR>
+    </TABLE>>];
+  }
+
+  // Edge routing
+  dev -> tailnet [label="VPN mesh", color="#3B82F6", fontcolor="#1D4ED8", penwidth=1.8];
+  tailnet -> homer [label="portal SSO", color="#3B82F6", fontcolor="#1D4ED8", penwidth=1.6];
+  tailnet -> coder [label="ssh & web IDE", color="#3B82F6", fontcolor="#1D4ED8", penwidth=1.6];
+  tailnet -> argocd [label="admin console", color="#3B82F6", fontcolor="#1D4ED8", penwidth=1.6];
+
+  github -> atlantis [label="IaC pull-requests", color="#8B5CF6", fontcolor="#6D28D9", penwidth=1.8];
+  atlantis -> opentofu [label="plans & applies", color="#8B5CF6", fontcolor="#6D28D9", penwidth=1.8];
+  opentofu -> fk8s [label="provisions infrastructure", color="#10B981", fontcolor="#047857", penwidth=1.8];
+  opentofu -> argocd [label="bootstraps GitOps", color="#8B5CF6", fontcolor="#6D28D9", penwidth=1.6];
+
+  github -> kargo [label="manifest triggers", color="#8B5CF6", fontcolor="#6D28D9", penwidth=1.6];
+  kargo -> argocd [label="stage promotion", color="#8B5CF6", fontcolor="#6D28D9", penwidth=1.6];
+
+  argocd -> coder [label="deploys & manages", color="#10B981", fontcolor="#047857", penwidth=1.8];
+  argocd -> kueue [label="deploys & manages", color="#10B981", fontcolor="#047857", penwidth=1.8];
+  argocd -> ray [label="deploys & manages", color="#10B981", fontcolor="#047857", penwidth=1.8];
+
+  kueue -> ray [label="schedules jobs", color="#10B981", fontcolor="#047857", penwidth=1.6];
+
+  coder -> fcpu [label="workspaces run on", color="#D97706", fontcolor="#B45309", penwidth=1.6];
+  ray -> fcpu [label="training runs on", color="#D97706", fontcolor="#B45309", penwidth=1.6];
+  ray -> fobj [label="reads & writes datasets", color="#D97706", fontcolor="#B45309", penwidth=1.6];
+}
