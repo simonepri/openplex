@@ -1,0 +1,10 @@
+"""Defines OpenTofu module check targets for the provider-neutral cell topology interface."""
+
+load("@rules_tf//tf:def.bzl", "tf_module")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+tf_module(
+    name = "_interface",
+)
+
+package_sources()
