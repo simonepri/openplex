@@ -1,0 +1,5 @@
+# Configures local development tasks and hot-reloading dev server loops for the SvelteKit example application.
+
+[tasks.dev]
+description = "Run the SvelteKit dev server with native hot reload"
+run = "ibazel run --output_base={{env.BAZEL_OUTPUT_ROOT}}/ibazel //src/examples/svelte_web:dev"
