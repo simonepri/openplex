@@ -1,0 +1,344 @@
+{{- /* Enforces security profile and privilege constraints on the local Tailscale subnet router. */ -}}
+
+{{- if eq .Values.mode "local-router" }}
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: local-tailscale-router-security-profile
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Enforce
+  rules:
+    - name: require-reviewed-tailscale-router-security-profile
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [tailscale-system]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: tailscale-subnet-router
+      validate:
+        allowExistingViolations: true
+        message: The local Tailscale router must retain its reviewed forwarding profile.
+        deny:
+          conditions:
+            any:
+              - key: '{{ "{{" }} request.object.spec.automountServiceAccountToken }}'
+                operator: NotEquals
+                value: false
+              - key: "{{ "{{" }} request.object.spec.serviceAccountName || 'default' }}"
+                operator: NotEquals
+                value: default
+              - key: '{{ "{{" }} request.object.spec.hostNetwork || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.hostPID || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.hostIPC || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ "{{" }} length(request.object.spec.containers) }}'
+                operator: AnyNotIn
+                value: [1, 2]
+              - key: '{{ "{{" }} length(request.object.spec.initContainers) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ "{{" }} length(request.object.spec.ephemeralContainers || `[]`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ "{{" }} request.object.spec.initContainers[0].name }}'
+                operator: NotEquals
+                value: sysctls
+              - key: "{{ "{{" }} regex_match('^ghcr[.]io/tailscale/tailscale:v[^@]+@sha256:[0-9a-f]{64}$', request.object.spec.initContainers[0].image) }}"
+                operator: Equals
+                value: false
+              - key: "{{ "{{" }} regex_match('^ghcr[.]io/tailscale/tailscale:v[^@]+@sha256:[0-9a-f]{64}$', request.object.spec.containers[0].image) }}"
+                operator: Equals
+                value: false
+              - key: '{{ "{{" }} request.object.spec.initContainers[0].securityContext.privileged }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.initContainers[0].securityContext.readOnlyRootFilesystem }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.initContainers[0].securityContext.runAsGroup }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ "{{" }} request.object.spec.initContainers[0].securityContext.runAsUser }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ "{{" }} length(request.object.spec.initContainers[0].command) }}'
+                operator: NotEquals
+                value: 2
+              - key: '{{ "{{" }} request.object.spec.initContainers[0].command[0] }}'
+                operator: NotEquals
+                value: /bin/sh
+              - key: '{{ "{{" }} request.object.spec.initContainers[0].command[1] }}'
+                operator: NotEquals
+                value: -ceu
+              - key: '{{ "{{" }} request.object.spec.initContainers[0].args[0] }}'
+                operator: NotEquals
+                value: sysctl -w net.ipv4.ip_forward=1; sysctl -w net.ipv6.conf.all.forwarding=1; iptables -t nat -C POSTROUTING -o tailscale+ -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o tailscale+ -j MASQUERADE 2>/dev/null || iptables-legacy -t nat -A POSTROUTING -o tailscale+ -j MASQUERADE 2>/dev/null || true
+              - key: '{{ "{{" }} length(request.object.spec.initContainers[?securityContext.privileged == `true`]) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ "{{" }} request.object.spec.containers[0].name }}'
+                operator: NotEquals
+                value: tailscaled
+              - key: '{{ "{{" }} request.object.spec.containers[0].securityContext.privileged || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.containers[0].securityContext.allowPrivilegeEscalation }}'
+                operator: NotEquals
+                value: false
+              - key: '{{ "{{" }} request.object.spec.containers[0].securityContext.readOnlyRootFilesystem }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.containers[0].securityContext.runAsGroup }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ "{{" }} request.object.spec.containers[0].securityContext.runAsUser }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ "{{" }} length(request.object.spec.containers[0].securityContext.capabilities.add) }}'
+                operator: NotEquals
+                value: 2
+              - key: '{{ "{{" }} request.object.spec.containers[0].securityContext.capabilities.add[0] }}'
+                operator: NotEquals
+                value: NET_ADMIN
+              - key: '{{ "{{" }} request.object.spec.containers[0].securityContext.capabilities.add[1] }}'
+                operator: NotEquals
+                value: NET_RAW
+              - key: '{{ "{{" }} length(request.object.spec.containers[0].securityContext.capabilities.drop) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ "{{" }} request.object.spec.containers[0].securityContext.capabilities.drop[0] }}'
+                operator: NotEquals
+                value: ALL
+              # LINT.IfChange(tailscale-local-router-extension-contract)
+              - key: '{{ "{{" }} length(request.object.spec.volumes[?hostPath]) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ "{{" }} length(request.object.spec.volumes) }}'
+                operator: AnyNotIn
+                value: [5, 6, 7]
+              - key: "{{ "{{" }} request.object.spec.volumes[?name == 'tun'].hostPath.path | [0] }}"
+                operator: NotEquals
+                value: /dev/net/tun
+              - key: "{{ "{{" }} request.object.spec.volumes[?name == 'tun'].hostPath.type | [0] }}"
+                operator: NotEquals
+                value: CharDevice
+              - key: >-
+                  {{ "{{" }} request.object.spec.volumes[?name == 'state'].persistentVolumeClaim.claimName | [0] }}
+                operator: NotEquals
+                value: subnet-router-state
+              - key: '{{ "{{" }} length(request.object.spec.containers[0].volumeMounts) }}'
+                operator: AnyNotIn
+                value: [5, 6]
+              - key: >-
+                  {{ "{{" }} request.object.spec.containers[0].volumeMounts[?name == 'state'].mountPath | [0] }}
+                operator: NotEquals
+                value: /var/lib/tailscale
+              - key: >-
+                  {{ "{{" }} contains(request.object.spec.containers[0].volumeMounts[].mountPath, '/dev/net/tun') }}
+                operator: Equals
+                value: false
+    - name: require-reviewed-tailscale-router-cell-profile
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [tailscale-system]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: tailscale-subnet-router
+      preconditions:
+        all:
+          - key: '{{ "{{" }} length(request.object.spec.volumes) }}'
+            operator: Equals
+            value: 5
+          - key: '{{ "{{" }} length(request.object.spec.containers) }}'
+            operator: Equals
+            value: 1
+      validate:
+        allowExistingViolations: true
+        message: The local Tailscale cell router must retain its five-volume profile.
+        deny:
+          conditions:
+            any:
+              - key: '{{ "{{" }} length(request.object.spec.containers[0].volumeMounts) }}'
+                operator: NotEquals
+                value: 5
+              - key: "{{ "{{" }} length(request.object.spec.volumes[?name == 'serve']) }}"
+                operator: NotEquals
+                value: 0
+              - key: "{{ "{{" }} length(request.object.spec.containers[0].volumeMounts[?name == 'serve']) }}"
+                operator: NotEquals
+                value: 0
+    - name: require-reviewed-tailscale-router-serve-extension
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [tailscale-system]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: tailscale-subnet-router
+      preconditions:
+        all:
+          - key: '{{ "{{" }} length(request.object.spec.volumes[?name == "serve"]) }}'
+            operator: Equals
+            value: 1
+      validate:
+        allowExistingViolations: true
+        message: The local Tailscale ctrl router must retain its reviewed Serve configuration.
+        deny:
+          conditions:
+            any:
+              - key: "{{ "{{" }} request.object.spec.volumes[?name == 'serve'].configMap.name | [0] }}"
+                operator: NotEquals
+                value: runtime-serve
+              - key: '{{ "{{" }} length(request.object.spec.containers[0].volumeMounts) }}'
+                operator: NotEquals
+                value: 6
+              - key: >-
+                  {{ "{{" }} request.object.spec.containers[0].volumeMounts[?name == 'serve'].mountPath | [0] }}
+                operator: NotEquals
+                value: /etc/tailscale-serve
+              - key: >-
+                  {{ "{{" }} request.object.spec.containers[0].volumeMounts[?name == 'serve'].readOnly | [0] }}
+                operator: NotEquals
+                value: true
+    - name: require-reviewed-tailscale-router-private-egress-extension
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [tailscale-system]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: tailscale-subnet-router
+      preconditions:
+        all:
+          - key: '{{ "{{" }} length(request.object.spec.containers) }}'
+            operator: Equals
+            value: 2
+      validate:
+        allowExistingViolations: true
+        message: The local Tailscale cell router must retain its reviewed private egress sidecar.
+        deny:
+          conditions:
+            any:
+              - key: '{{ "{{" }} length(request.object.spec.volumes) }}'
+                operator: AnyNotIn
+                value: [6, 7]
+              - key: '{{ "{{" }} length(request.object.spec.containers[0].volumeMounts) }}'
+                operator: AnyNotIn
+                value: [5, 6]
+              - key: "{{ "{{" }} length(request.object.spec.volumes[?name == 'serve']) }}"
+                operator: AnyNotIn
+                value: [0, 1]
+              - key: "{{ "{{" }} length(request.object.spec.containers[0].volumeMounts[?name == 'serve']) }}"
+                operator: AnyNotIn
+                value: [0, 1]
+              - key: "{{ "{{" }} request.object.spec.volumes[?name == 'private-egress'].configMap.name | [0] }}"
+                operator: NotEquals
+                value: private-egress
+              - key: "{{ "{{" }} length(request.object.spec.containers[0].env[?name == 'TS_EXTRA_ARGS']) }}"
+                operator: NotEquals
+                value: 1
+              - key: >-
+                  {{ "{{" }} starts_with(request.object.spec.containers[0].env[?name == 'TS_EXTRA_ARGS'].value | [0], '--advertise-tags= --accept-routes=true --login-server=https://headscale.') }}
+                operator: NotEquals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.containers[1].name }}'
+                operator: NotEquals
+                value: private-egress
+              - key: "{{ "{{" }} regex_match('^docker[.]io/envoyproxy/envoy:[^@]+@sha256:[0-9a-f]{64}$', request.object.spec.containers[1].image) }}"
+                operator: Equals
+                value: false
+              - key: '{{ "{{" }} length(request.object.spec.containers[1].args) }}'
+                operator: NotEquals
+                value: 2
+              - key: '{{ "{{" }} request.object.spec.containers[1].args[0] }}'
+                operator: NotEquals
+                value: --config-path
+              - key: '{{ "{{" }} request.object.spec.containers[1].args[1] }}'
+                operator: NotEquals
+                value: /etc/private-egress/envoy.yaml
+              - key: '{{ "{{" }} length(request.object.spec.containers[1].ports) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ "{{" }} request.object.spec.containers[1].ports[0].containerPort }}'
+                operator: NotEquals
+                value: 8443
+              - key: '{{ "{{" }} request.object.spec.containers[1].ports[0].name }}'
+                operator: NotEquals
+                value: private-egress
+              - key: '{{ "{{" }} request.object.spec.containers[1].ports[0].protocol }}'
+                operator: NotEquals
+                value: TCP
+              - key: '{{ "{{" }} request.object.spec.containers[1].securityContext.privileged || `false` }}'
+                operator: Equals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.containers[1].securityContext.allowPrivilegeEscalation }}'
+                operator: NotEquals
+                value: false
+              - key: '{{ "{{" }} request.object.spec.containers[1].securityContext.readOnlyRootFilesystem }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.containers[1].securityContext.runAsGroup }}'
+                operator: NotEquals
+                value: 65532
+              - key: '{{ "{{" }} request.object.spec.containers[1].securityContext.runAsNonRoot }}'
+                operator: NotEquals
+                value: true
+              - key: '{{ "{{" }} request.object.spec.containers[1].securityContext.runAsUser }}'
+                operator: NotEquals
+                value: 65532
+              - key: '{{ "{{" }} request.object.spec.containers[1].securityContext.seccompProfile.type }}'
+                operator: NotEquals
+                value: RuntimeDefault
+              - key: '{{ "{{" }} length(request.object.spec.containers[1].securityContext.capabilities.add || `[]`) }}'
+                operator: NotEquals
+                value: 0
+              - key: '{{ "{{" }} length(request.object.spec.containers[1].securityContext.capabilities.drop) }}'
+                operator: NotEquals
+                value: 1
+              - key: '{{ "{{" }} request.object.spec.containers[1].securityContext.capabilities.drop[0] }}'
+                operator: NotEquals
+                value: ALL
+              - key: '{{ "{{" }} length(request.object.spec.containers[1].volumeMounts) }}'
+                operator: NotEquals
+                value: 1
+              - key: >-
+                  {{ "{{" }} request.object.spec.containers[1].volumeMounts[0].name }}
+                operator: NotEquals
+                value: private-egress
+              - key: >-
+                  {{ "{{" }} request.object.spec.containers[1].volumeMounts[0].mountPath }}
+                operator: NotEquals
+                value: /etc/private-egress
+              - key: >-
+                  {{ "{{" }} request.object.spec.containers[1].volumeMounts[0].readOnly }}
+                operator: NotEquals
+                value: true
+            # LINT.ThenChange(//src/infra/argocd/components/tailscale_access/helm/templates/local-router.yaml:tailscale-local-router-extension-contract)
+{{- end }}

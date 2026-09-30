@@ -1,0 +1,9 @@
+# Configures base Helm values for Tailscale Kubernetes operator.
+
+oauth:
+  secret: operator-oauth
+
+oauthSecretVolume:
+  secret:
+    secretName: operator-oauth
+

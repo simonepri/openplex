@@ -1,0 +1,336 @@
+{{- /* Deploys local plain tailscaled subnet router advertising cluster CIDR without SaaS operator. */ -}}
+
+{{- if eq .Values.mode "local-router" }}
+{{- include "tailscale-access.validate" . -}}
+{{- $routerHostname := printf "%s-services" .Values.clusterName -}}
+{{- if ne .Values.local.runtimeForwardTarget "" -}}
+{{- $routerHostname = printf "%s-runtime-services" .Values.clusterName -}}
+{{- end -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tailscale-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/part-of: cluster-runtime
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: headscale-preauth
+  namespace: tailscale-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: headscale-preauth
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ .Values.local.secretStoreName }}
+  target:
+    name: {{ .Values.local.authSecretName }}
+    creationPolicy: Owner
+    deletionPolicy: Delete
+    template:
+      engineVersion: v2
+      type: Opaque
+  data:
+    - secretKey: authkey
+      remoteRef:
+        key: {{ .Values.local.recordName }}
+        property: authkey
+{{- if ne .Values.local.runtimeForwardTarget "" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-serve
+  namespace: tailscale-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: tailscale-subnet-router
+data:
+  serve.json: |
+    {"TCP":{"8444":{"TCPForward":{{ .Values.local.runtimeForwardTarget | quote }}}}}
+{{- end }}
+{{- if .Values.egress.enabled }}
+{{- $egressServiceName := ternary "active-ctrl-private-access" "active-cell-private-access" (hasPrefix "cell-" .Values.clusterName) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: private-egress
+  namespace: tailscale-system
+  labels:
+    app.kubernetes.io/component: private-egress
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: {{ $egressServiceName }}
+data:
+  envoy.yaml: |
+    static_resources:
+      listeners:
+        - name: {{ $egressServiceName }}
+          address: {socket_address: {address: 0.0.0.0, port_value: 8443}}
+          filter_chains:
+            - filters:
+                - name: envoy.filters.network.tcp_proxy
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+                    stat_prefix: {{ $egressServiceName }}
+                    cluster: {{ $egressServiceName }}
+      clusters:
+        - name: {{ $egressServiceName }}
+          connect_timeout: 5s
+          type: STATIC
+          load_assignment:
+            cluster_name: {{ $egressServiceName }}
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address: {address: {{ .Values.egress.gatewayIPv4 | quote }}, port_value: 443}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $egressServiceName }}
+  namespace: tailscale-system
+  labels:
+    app.kubernetes.io/component: private-egress
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: {{ $egressServiceName }}
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/name: tailscale-subnet-router}
+  ports:
+    - {name: https, port: 443, protocol: TCP, targetPort: private-egress}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: private-egress
+  namespace: tailscale-system
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: tailscale-subnet-router}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {protocol: UDP}
+    - from:
+        # LINT.IfChange(tailscale-private-egress-clients)
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: signoz}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: otel-system}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-oidc-proxy-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: kube-oidc-proxy}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: headlamp}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: parca}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: profiler
+              app.kubernetes.io/instance: parca-agent
+              app.kubernetes.io/name: parca-agent
+        - namespaceSelector:
+            matchExpressions:
+              - {key: team, operator: Exists}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: coder-workspace
+              app.kubernetes.io/part-of: coder
+              com.coder.resource: "true"
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: velero-system}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: authentication
+              app.kubernetes.io/part-of: velero-ui
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: coder-workspace-backup-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: workspace-snapshot-catalog}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: dragonfly-system}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: opencost}
+        # LINT.ThenChange(//src/infra/argocd/components/tailscale_access/helm/templates/cloud.yaml:tailscale-private-egress-clients)
+      ports:
+        - {port: 443, protocol: TCP}
+        - {port: 8443, protocol: TCP}
+{{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: subnet-router-state
+  namespace: tailscale-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: tailscale-subnet-router
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 64Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: subnet-router
+  namespace: tailscale-system
+  annotations:
+    ignore-check.kube-linter.io/drop-net-raw-capability: >-
+      Kernel-mode tailscaled needs NET_RAW for privileged socket operations
+      while configuring the TUN interface and subnet-router netfilter rules.
+    ignore-check.kube-linter.io/privilege-escalation-container: >-
+      The forwarding sysctls init container must run privileged so Kubernetes
+      can enable the network namespace settings required by this router.
+    ignore-check.kube-linter.io/privileged-container: >-
+      The forwarding sysctls init container must run privileged to configure
+      IP forwarding before the kernel-mode subnet router starts.
+    ignore-check.kube-linter.io/run-as-non-root: >-
+      The sysctls init container and kernel-mode tailscaled must run as root to
+      configure forwarding, create or access the TUN device, and install routes.
+    ignore-check.kube-linter.io/writable-host-mount: >-
+      The kernel-mode tailscaled container requires read-write access to /dev/net/tun to manage the virtual network interface.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Tailscale router requires Headscale pre-auth key via environment variable.
+    ignore-check.kube-linter.io/no-liveness-probe: >-
+      Tailscale subnet router relies on readiness probe to verify network convergence and backend state.
+    ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+      Tailscale subnet router is an active singleton wireguard router requiring Recreate strategy to avoid routing conflicts.
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: tailscale-subnet-router
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale-subnet-router
+  template:
+    metadata:
+      annotations:
+        checksum/private-egress: {{ .Values.egress | toJson | sha256sum | quote }}
+        ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+          Tailscale subnet router is an active singleton wireguard router requiring Recreate strategy to avoid routing conflicts.
+      labels:
+        app.kubernetes.io/managed-by: argocd
+        app.kubernetes.io/name: tailscale-subnet-router
+    spec:
+      automountServiceAccountToken: false
+      priorityClassName: cluster-operators
+      initContainers:
+        - name: sysctls
+          image: {{ printf "%s:%s@%s" .Values.image.repository .Values.image.tag .Values.image.digest }}
+          command: [/bin/sh, -ceu]
+          args:
+            - >-
+              sysctl -w net.ipv4.ip_forward=1;
+              sysctl -w net.ipv6.conf.all.forwarding=1;
+              iptables -t nat -C POSTROUTING -o tailscale+ -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o tailscale+ -j MASQUERADE 2>/dev/null || iptables-legacy -t nat -A POSTROUTING -o tailscale+ -j MASQUERADE 2>/dev/null || true
+          resources:
+            requests: {cpu: 1m, memory: 4Mi}
+            limits: {cpu: 10m, memory: 16Mi}
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: true
+            runAsGroup: 0
+            runAsUser: 0
+      containers:
+        - name: tailscaled
+          image: {{ printf "%s:%s@%s" .Values.image.repository .Values.image.tag .Values.image.digest }}
+          env:
+            - {name: TS_AUTHKEY, valueFrom: {secretKeyRef: {name: {{ .Values.local.authSecretName }}, key: authkey}}}
+            - {name: TS_HOSTNAME, value: {{ $routerHostname | quote }}}
+            - {name: TS_ROUTES, value: {{ .Values.serviceCIDR | quote }}}
+            - {name: TS_STATE_DIR, value: /var/lib/tailscale}
+            - {name: TS_USERSPACE, value: "false"}
+            - {name: TS_KUBE_SECRET, value: ""}
+            - {name: SSL_CERT_FILE, value: /etc/local-ca/ca.crt}
+            - {name: TS_EXTRA_ARGS, value: {{ printf "--advertise-tags= %s--login-server=%s" (ternary "--accept-routes=true " "" .Values.egress.enabled) .Values.local.loginServer | quote }}}
+{{- if ne .Values.local.runtimeForwardTarget "" }}
+            - {name: TS_SERVE_CONFIG, value: /etc/tailscale-serve/serve.json}
+{{- end }}
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -ceu
+                - >-
+                  tailscale --socket=/tmp/tailscaled.sock status --json |
+                  grep -Eq '\"BackendState\"[[:space:]]*:[[:space:]]*\"Running\"'
+            periodSeconds: 5
+            timeoutSeconds: 5
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {cpu: 1000m, memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {add: [NET_ADMIN, NET_RAW], drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 0
+            runAsUser: 0
+          # LINT.IfChange(tailscale-local-router-extension-contract)
+          volumeMounts:
+            - {name: ca, mountPath: /etc/local-ca, readOnly: true}
+            - {name: run, mountPath: /run}
+            - {name: state, mountPath: /var/lib/tailscale}
+            - {name: tmp, mountPath: /tmp}
+            - {name: tun, mountPath: /dev/net/tun}
+{{- if ne .Values.local.runtimeForwardTarget "" }}
+            - {name: serve, mountPath: /etc/tailscale-serve, readOnly: true}
+{{- end }}
+{{- if .Values.egress.enabled }}
+        - name: private-egress
+          image: docker.io/envoyproxy/envoy:distroless-v1.39.0@sha256:7877ad87afd7459e1bd2a077ff601fec7c93aeecd62e71664560d96328c62cf4
+          args: [--config-path, /etc/private-egress/envoy.yaml]
+          ports: [{containerPort: 8443, name: private-egress, protocol: TCP}]
+          readinessProbe: {tcpSocket: {port: private-egress}, initialDelaySeconds: 3, periodSeconds: 5}
+          livenessProbe: {tcpSocket: {port: private-egress}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {cpu: 1000m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: private-egress, mountPath: /etc/private-egress, readOnly: true}
+{{- end }}
+      volumes:
+        - name: ca
+          configMap:
+            name: {{ .Values.local.caConfigMapName }}
+        - name: state
+          persistentVolumeClaim:
+            claimName: subnet-router-state
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: tun
+          hostPath: {path: /dev/net/tun, type: CharDevice}
+{{- if ne .Values.local.runtimeForwardTarget "" }}
+        - name: serve
+          configMap:
+            name: runtime-serve
+{{- end }}
+{{- if .Values.egress.enabled }}
+        - name: private-egress
+          configMap:
+            name: private-egress
+{{- end }}
+        # LINT.ThenChange(//src/infra/argocd/components/tailscale_access/helm/templates/router-policy.yaml:tailscale-local-router-extension-contract)
+{{- end }}

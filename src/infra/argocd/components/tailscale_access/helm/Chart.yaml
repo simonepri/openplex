@@ -1,0 +1,8 @@
+# Defines Helm chart metadata for cloud Connector resources and plain local tailscaled subnet routers.
+
+apiVersion: v2
+name: tailscale-access
+description: Private operator-access routes to one cluster Service CIDR.
+type: application
+version: 0.1.0
+appVersion: 1.102.4
