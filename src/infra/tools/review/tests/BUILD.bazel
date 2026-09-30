@@ -1,0 +1,48 @@
+"""Defines unit test targets for the automated pull request review tool context and engine components."""
+
+load("@rules_python//python:defs.bzl", "py_test")
+
+py_test(
+    name = "test_git_diff",
+    size = "small",
+    srcs = ["test_git_diff.py"],
+    deps = ["//src/infra/tools/review/context:git_diff"],
+)
+
+py_test(
+    name = "test_matrix",
+    size = "small",
+    srcs = ["test_matrix.py"],
+    deps = [
+        "//src/infra/tools/review/context:rules_index",
+        "//src/infra/tools/review/engine:matrix",
+    ],
+)
+
+py_test(
+    name = "test_rules_index",
+    size = "small",
+    srcs = ["test_rules_index.py"],
+    deps = ["//src/infra/tools/review/context:rules_index"],
+)
+
+py_test(
+    name = "test_bazel_diff",
+    size = "small",
+    srcs = ["test_bazel_diff.py"],
+    deps = ["//src/infra/tools/review/context:bazel_diff"],
+)
+
+py_test(
+    name = "test_report",
+    size = "small",
+    srcs = ["test_report.py"],
+    deps = ["//src/infra/tools/review/engine:report"],
+)
+
+py_test(
+    name = "test_github_comment",
+    size = "small",
+    srcs = ["test_github_comment.py"],
+    deps = ["//src/infra/tools/review/engine:github_comment"],
+)
