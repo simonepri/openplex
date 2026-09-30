@@ -1,0 +1,24 @@
+# Defines LimitRange for kubescape-operator namespace bounding unconstrained upstream init containers.
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: kubescape-operator-container-defaults
+  namespace: kubescape-system
+  labels:
+    app.kubernetes.io/component: security-posture-scanner
+    app.kubernetes.io/managed-by: argocd
+spec:
+  limits:
+    # Upstream certificate init containers do not expose resource values. This
+    # admission default makes their budget explicit while component-specific
+    # values retain tighter requests and limits for every long-running Pod.
+    - type: Container
+      defaultRequest:
+        cpu: 10m
+        memory: 32Mi
+        ephemeral-storage: 64Mi
+      default:
+        cpu: 250m
+        memory: 256Mi
+        ephemeral-storage: 512Mi
