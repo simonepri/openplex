@@ -1,0 +1,89 @@
+# Template for storage-sync Kubernetes Job moving data across cell storage endpoints.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "${NAME}"
+  namespace: "${NAMESPACE}"
+  labels:
+    app.kubernetes.io/component: storage-sync
+    app.kubernetes.io/managed-by: storage-sync-submit
+    app.kubernetes.io/name: storage-sync
+    availability-class: "${AVAILABILITY}"
+    latency-class: "${LATENCY}"
+spec:
+  activeDeadlineSeconds: 86400
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: storage-sync
+        app.kubernetes.io/managed-by: storage-sync-submit
+        app.kubernetes.io/name: storage-sync
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      serviceAccountName: storage-sync
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sync
+          image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+          env:
+            - name: HOME
+              value: /tmp
+            - name: RCLONE_CONFIG
+              value: /etc/storage-sync/rclone.conf
+            - name: SYNC_APPROVED
+              value: "${SYNC_APPROVED}"
+            - name: SYNC_JOB
+              value: "${NAME}"
+            - name: SYNC_REQUESTER
+              value: "${SYNC_REQUESTER}"
+            - name: SYNC_SOURCE_URI
+              value: "${SYNC_SOURCE_URI}"
+            - name: SYNC_TARGET_URI
+              value: "${SYNC_TARGET_URI}"
+            - name: SYNC_TIMESTAMP
+              value: "${SYNC_TIMESTAMP}"
+          resources:
+            requests:
+              cpu: 250m
+              ephemeral-storage: 64Mi
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              ephemeral-storage: 1Gi
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: local-ca
+              mountPath: /etc/storage-sync-ca
+              readOnly: true
+            - name: scratch
+              mountPath: /tmp
+            - name: topology
+              mountPath: /etc/storage-sync
+              readOnly: true
+      volumes:
+        - name: local-ca
+          configMap:
+            name: storage-sync-local-ca
+            optional: true
+        - name: scratch
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: topology
+          configMap:
+            name: storage-sync-topology
