@@ -1,0 +1,47 @@
+# Allows the shared Envoy Gateway to reach Kargo's native-OIDC API and the Kubernetes API server to reach Kargo's admission webhooks before the fleet ingress-isolation baseline selects the namespace.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kargo-api
+  namespace: kargo
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kargo-api
+    app.kubernetes.io/part-of: kargo
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: api
+      app.kubernetes.io/instance: kargo
+      app.kubernetes.io/name: kargo
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kargo-webhooks-server
+  namespace: kargo
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kargo-webhooks-server
+    app.kubernetes.io/part-of: kargo
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: kubernetes-webhooks-server
+      app.kubernetes.io/instance: kargo
+      app.kubernetes.io/name: kargo
+  policyTypes: [Ingress]
+  # The Kubernetes API server reaches this webhook from outside the pod
+  # network. Limit that source-agnostic path to the TLS listener.
+  ingress:
+    - ports:
+        - {protocol: TCP, port: 9443}

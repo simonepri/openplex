@@ -1,0 +1,29 @@
+# Non-secret Helm lint fixture for validating the upstream Atlantis chart.
+
+atlantisUrl: https://atlantis.ctrl-example.example.invalid
+orgAllowlist: github.com/example/cluster-config
+githubApp: {id: "123456", slug: cluster-atlantis}
+vcsSecretName: atlantis-github-app
+environment:
+  ATLANTIS_ACTIVE_CTRL: ctrl-aws-usw2
+  ATLANTIS_TERRAFORM_DISTRIBUTION: tofu
+loadEnvFromSecrets:
+  - atlantis-runtime-environment
+repoConfig: |
+  repos:
+    - id: github.com/example/cluster-config
+      plan_requirements: [approved, mergeable, undiverged]
+      apply_requirements: [approved, mergeable, undiverged]
+      allowed_overrides: []
+      allow_custom_workflows: false
+      autodiscover: {mode: disabled}
+      workflow: opentofu
+  workflows:
+    opentofu:
+      plan:
+        steps:
+          - init
+          - plan
+      apply:
+        steps:
+          - apply

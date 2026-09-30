@@ -1,0 +1,46 @@
+# Kustomize base assembling Coder server, PostgreSQL database, OIDC entrypoint, and reconciler.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+configMapGenerator:
+  - name: coder-oidc-entrypoint
+    namespace: coder
+    files:
+      - scripts/oidc_entrypoint.py
+  - name: coder-template-reconciler
+    namespace: coder
+    files:
+      # keep-sorted start
+      - scripts/bootstrap_template_publisher.py
+      - scripts/coder_api.py
+      - scripts/git-askpass.sh
+      - scripts/prepare-template-source.sh
+      - scripts/reconcile_snapshot_oauth.py
+      - scripts/resolve-template-image.sh
+      - scripts/stage-template-publisher-token.sh
+      - scripts/template-reconciler.sh
+      - scripts/template-watcher.sh
+      # keep-sorted end
+  - name: coder-workspace-healer
+    namespace: coder
+    files:
+      # keep-sorted start
+      - scripts/bootstrap_healer_session.py
+      - scripts/coder_api.py
+      - scripts/workspace_healer.py
+      - scripts/workspace_healer_state.py
+      # keep-sorted end
+resources:
+  # keep-sorted start
+  - database.yaml
+  - drain-policy.yaml
+  - external-secrets.yaml
+  - namespace.yaml
+  - oidc-entrypoint.k8s.yaml
+  - server-network-policy.yaml
+  - service-account.yaml
+  - snapshot-oauth-rbac.yaml
+  - template-reconciler.k8s.yaml
+  - template-reconciler.network-policy.k8s.yaml
+  - workspace-healer.k8s.yaml
+  # keep-sorted end

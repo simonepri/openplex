@@ -1,0 +1,22 @@
+{{- /* Projects the cell-owned workload origin contract into each eligible Coder namespace. */ -}}
+
+{{- if and (eq .Values.mode "cell") .Values.devWorkspaces.enabled }}
+{{- $namespace := include "team-namespace.namespace" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coder-workspace-origin
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+    app.kubernetes.io/name: coder-workspace-origin
+data:
+  authMode: {{ .Values.devWorkspaces.origin.authMode | quote }}
+  cell: {{ .Values.devWorkspaces.cell | quote }}
+  originRegion: {{ .Values.devWorkspaces.origin.region | quote }}
+  originRegistry: {{ .Values.devWorkspaces.origin.registry | quote }}
+  provider: {{ .Values.devWorkspaces.origin.provider | quote }}
+  roleArn: {{ .Values.devWorkspaces.origin.roleArn | quote }}
+  tokenAudience: {{ .Values.devWorkspaces.origin.tokenAudience | quote }}
+  tokenFile: {{ .Values.devWorkspaces.origin.tokenFile | quote }}
+{{- end }}

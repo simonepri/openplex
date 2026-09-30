@@ -1,0 +1,21 @@
+{{- /* Establishes baseline resource quotas and limits for team namespaces. */ -}}
+
+{{- if eq .Values.mode "cell" }}
+{{- $namespace := include "team-namespace.namespace" . -}}
+{{- $quota := .Values.quota | default dict -}}
+{{- $baseline := $quota.baseline | default dict -}}
+{{- $limits := $baseline.limits | default dict -}}
+{{- $requests := $baseline.requests | default dict -}}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: baseline
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  hard:
+    limits.ephemeral-storage: {{ $limits.ephemeralStorage | default "1Ti" | quote }}
+    requests.ephemeral-storage: {{ $requests.ephemeralStorage | default "500Gi" | quote }}
+    general-ephemeral.storageclass.storage.k8s.io/requests.storage: {{ $requests.storage | default "1Ti" | quote }}
+{{- end }}

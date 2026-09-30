@@ -1,0 +1,8 @@
+# Defines team-lane resource chart consumed by the team foundation ApplicationSet: stamps one team namespace, its queue bindings, and in-namespace RBAC.
+
+apiVersion: v2
+name: team-namespace
+description: Team namespace foundation chart configuring cell-local storage, network policies, S3 gateway access, and dev workspaces.
+type: application
+version: 0.1.0
+appVersion: 1.0.0

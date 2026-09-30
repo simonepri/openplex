@@ -1,0 +1,53 @@
+{{- /* Grants ESO token minting only for identities named by this team lane. */ -}}
+
+{{- if eq .Values.mode "cell" }}
+{{- $namespace := include "team-namespace.namespace" . -}}
+{{- $serviceAccounts := list -}}
+{{- if .Values.storageProjection.enabled -}}
+{{- $serviceAccounts = append $serviceAccounts .Values.storageProjection.handoff.secretStore.serviceAccount -}}
+{{- end -}}
+{{- $runtimeSecrets := include "team-namespace.runtimeSecrets" . | fromJson -}}
+{{- if and .Values.devSecrets.names (eq $runtimeSecrets.adapter "kubernetes") -}}
+{{- $serviceAccounts = append $serviceAccounts "team-dev-secrets" -}}
+{{- end -}}
+{{- if .Values.devWorkspaces.enabled -}}
+{{- $buildbuddyAuth := include "team-namespace.buildbuddyAuth" . | fromJson -}}
+{{- if eq $buildbuddyAuth.adapter "kubernetes" -}}
+{{- $serviceAccounts = append $serviceAccounts "workspace-buildbuddy-auth" -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.workloadImagePull.enabled -}}
+{{- $serviceAccounts = append $serviceAccounts "ecr-pull-token" -}}
+{{- end -}}
+{{- if $serviceAccounts }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: external-secrets-token-request
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts/token]
+    resourceNames:
+{{ $serviceAccounts | uniq | sortAlpha | toYaml | nindent 6 }}
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: external-secrets-token-request
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: external-secrets
+    namespace: external-secrets-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: external-secrets-token-request
+{{- end }}
+{{- end }}

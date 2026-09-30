@@ -1,0 +1,10 @@
+# Defaults for the first-party Kargo promotion chart. Disabled values render no resources; team fan-out supplies the complete promotion contract after team Applications exist.
+
+mode: disabled
+promotionMode: automatic
+teamSlug: ""
+repositoryURL: ""
+originRepositories: {}
+images: []
+warehouses: []
+stage: {}

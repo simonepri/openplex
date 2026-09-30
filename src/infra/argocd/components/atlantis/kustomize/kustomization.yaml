@@ -1,0 +1,14 @@
+# Kustomize base for Atlantis companion resources: RBAC, auth proxy, secrets, and policies.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - auth-proxy.yaml
+  - external-secrets.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - priority-class.yaml
+  - rbac.yaml
+  - vpa.yaml
+  # keep-sorted end

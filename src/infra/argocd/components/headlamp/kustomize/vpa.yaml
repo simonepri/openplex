@@ -1,0 +1,28 @@
+# VerticalPodAutoscaler sizing for Headlamp. Updates requests in place without evicting active user sessions.
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: headlamp
+  namespace: headlamp
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: headlamp
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: headlamp
+  updatePolicy:
+    updateMode: "InPlace"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: headlamp
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+        minAllowed:
+          cpu: 50m
+          memory: 128Mi
+        maxAllowed:
+          cpu: "2"
+          memory: 4Gi

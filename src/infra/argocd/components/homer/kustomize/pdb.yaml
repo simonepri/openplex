@@ -1,0 +1,17 @@
+# Disruption budget for Homer dashboard.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: homer
+  namespace: homer
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: homer
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: homer
+      app.kubernetes.io/name: homer

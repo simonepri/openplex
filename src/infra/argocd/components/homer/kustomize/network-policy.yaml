@@ -1,0 +1,27 @@
+# Ingress NetworkPolicy for Homer: allows traffic from Envoy Gateway.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: homer
+  namespace: homer
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: homer
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: homer
+      app.kubernetes.io/name: homer
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 8080}

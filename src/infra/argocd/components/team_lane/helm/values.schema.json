@@ -1,0 +1,828 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "accessAliasDomain",
+    "clusterRegistry",
+    "delivery",
+    "enabledPacks",
+    "projectIndex",
+    "repository",
+    "resourcePacks",
+    "team"
+  ],
+  "properties": {
+    "accessAliasDomain": {
+      "type": "string",
+      "pattern": "^(?:c|k8s)\\.[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$",
+      "not": { "pattern": "\\.localhost$" }
+    },
+    "awsAccountId": {
+      "type": "string",
+      "pattern": "^[0-9]{12}$"
+    },
+    "gcpProjectNumber": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "clusterRegistry": { "$ref": "#/definitions/clusterRegistry" },
+    "ecrRegistry": {
+      "$ref": "#/definitions/repository"
+    },
+    "registeredClusters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "server"],
+        "properties": {
+          "annotations": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "properties": {
+              "buildbuddy.io/enterprise-proxy": { "enum": ["disabled", "enabled"] },
+              "buildbuddy.io/executors": { "enum": ["none", "cpu", "gpu", "all"] },
+              "buildbuddy.io/mode": { "enum": ["cloud", "community"] }
+            }
+          },
+          "name": { "$ref": "#/definitions/dnsLabel" },
+          "server": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["images", "originRepositories"],
+      "properties": {
+        "originRepositories": { "$ref": "#/definitions/repositoryMap" },
+        "images": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/image" }
+        }
+      }
+    },
+    "projectIndex": { "$ref": "#/definitions/projectIndex" },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "url"],
+      "properties": {
+        "revision": { "type": "string", "pattern": "^(HEAD|[0-9a-f]{40}|[0-9a-f]{64})$" },
+        "transportURL": { "type": "string", "pattern": "^(git|https)://[^\\s]+$" },
+        "url": { "type": "string", "pattern": "^(git|https?)://[^\\s]+$" }
+      }
+    },
+    "team": { "$ref": "#/definitions/team" },
+    "enabledPacks": {
+      "type": "array",
+      "items": { "enum": ["cloudnative-pg", "keda", "kuberay"] },
+      "uniqueItems": true
+    },
+    "resourcePacks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "cloudnative-pg", "keda", "kuberay"],
+      "properties": {
+        "base": { "type": "array", "items": { "$ref": "#/definitions/resource" } },
+        "cloudnative-pg": { "type": "array", "items": { "$ref": "#/definitions/resource" } },
+        "keda": { "type": "array", "items": { "$ref": "#/definitions/resource" } },
+        "kuberay": { "type": "array", "items": { "$ref": "#/definitions/resource" } }
+      }
+    }
+  },
+  "definitions": {
+    "clusterRegistry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clusters", "version"],
+      "properties": {
+        "version": { "const": 1 },
+        "clusters": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/clusterRegistryEntry" }
+        }
+      }
+    },
+    "clusterRegistryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cloud", "name", "provider", "region", "role", "server"],
+      "properties": {
+        "coderProvisioner": { "$ref": "#/definitions/coderProvisioner" },
+        "workloadImagePull": { "$ref": "#/definitions/workloadImagePull" },
+        "workloadImagePush": { "$ref": "#/definitions/workloadImagePush" },
+        "cellRecord": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workspaces": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled"],
+              "properties": {
+                "enabled": { "const": true },
+                "resource_envelope": { "$ref": "#/definitions/workspaceResourceEnvelope" }
+              }
+            }
+          }
+        },
+        "cloud": { "enum": ["aws", "eaws", "gcp"] },
+        "delivery": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["deploymentRepositories"],
+          "properties": { "deploymentRepositories": { "$ref": "#/definitions/repositoryMap" } }
+        },
+        "name": { "$ref": "#/definitions/dnsLabel" },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["apiServerCIDRs"],
+          "properties": {
+            "apiServerCIDRs": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32$" }
+            }
+          }
+        },
+        "localRuntime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gatewayIPv4", "originRegistry"],
+          "properties": {
+            "gatewayIPv4": { "type": "string", "format": "ipv4" },
+            "originRegistry": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["ipv4", "workloadRoot", "workspaceRepository", "workspaceSource"],
+              "properties": {
+                "ipv4": { "type": "string", "format": "ipv4" },
+                "workloadRoot": { "$ref": "#/definitions/repository" },
+                "workspaceRepository": { "$ref": "#/definitions/repository" },
+                "workspaceSource": { "$ref": "#/definitions/repository" }
+              }
+            }
+          }
+        },
+        "providerConfig": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "gcp": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["projectID"],
+              "properties": { "projectID": { "type": "string", "minLength": 1 } }
+            }
+          }
+        },
+        "provider": { "enum": ["aws", "floci", "gcp"] },
+        "region": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["cell", "ctrl"] },
+        "server": { "type": "string", "minLength": 1 },
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "gateway": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["config"],
+              "properties": { "config": { "type": "object", "minProperties": 1 } }
+            },
+            "teams": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "gatewayIdentities": { "type": "object" },
+                "handoffs": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "coderProvisioner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authentication",
+        "control",
+        "federation",
+        "identity",
+        "incarnation",
+        "kubeconfig",
+        "kubeconfigFile",
+        "schemaVersion"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "incarnation": { "type": "string", "pattern": "^[0-9a-f]{12}$" },
+        "kubeconfig": {
+          "type": "string",
+          "minLength": 1,
+          "not": { "pattern": "client-key-data|PRIVATE KEY" }
+        },
+        "kubeconfigFile": { "type": "string", "pattern": "^/[^\\s]+$" },
+        "control": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cluster", "namespace", "serviceAccount", "subject"],
+          "properties": {
+            "cluster": { "type": "string", "minLength": 1 },
+            "namespace": { "type": "string", "minLength": 1 },
+            "serviceAccount": { "type": "string", "minLength": 1 },
+            "subject": { "type": "string", "pattern": "^system:serviceaccount:[^:\\s]+:[^:\\s]+$" }
+          }
+        },
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kubernetesSubject"],
+          "properties": {
+            "roleArn": {
+              "type": "string",
+              "pattern": "^arn:[^:\\s]+:iam::[0-9]{12}:role/[^\\s]+$"
+            },
+            "serviceAccount": { "type": "string", "minLength": 1 },
+            "clientId": { "type": "string", "minLength": 1 },
+            "principalId": { "type": "string", "minLength": 1 },
+            "tenantId": { "type": "string", "minLength": 1 },
+            "kubernetesSubject": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["apiGroup", "kind", "name"],
+              "properties": {
+                "apiGroup": { "const": "rbac.authorization.k8s.io" },
+                "kind": { "enum": ["Group", "User"] },
+                "name": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "oneOf": [
+            {
+              "required": ["roleArn"],
+              "not": {
+                "anyOf": [
+                  { "required": ["serviceAccount"] },
+                  { "required": ["clientId"] },
+                  { "required": ["principalId"] },
+                  { "required": ["tenantId"] }
+                ]
+              }
+            },
+            {
+              "required": ["serviceAccount"],
+              "not": {
+                "anyOf": [
+                  { "required": ["roleArn"] },
+                  { "required": ["clientId"] },
+                  { "required": ["principalId"] },
+                  { "required": ["tenantId"] }
+                ]
+              }
+            },
+            {
+              "required": ["clientId", "principalId", "tenantId"],
+              "not": { "anyOf": [{ "required": ["roleArn"] }, { "required": ["serviceAccount"] }] }
+            }
+          ]
+        },
+        "federation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expirationSeconds", "tokenAudience", "tokenFile"],
+          "properties": {
+            "expirationSeconds": { "const": 3600 },
+            "tokenAudience": { "type": "string", "minLength": 1 },
+            "tokenFile": { "type": "string", "pattern": "^/[^\\s]+$" },
+            "credentialConfiguration": { "type": "string", "minLength": 1 },
+            "credentialFile": { "type": "string", "pattern": "^/[^\\s]+$" }
+          },
+          "oneOf": [
+            {
+              "not": {
+                "anyOf": [
+                  { "required": ["credentialConfiguration"] },
+                  { "required": ["credentialFile"] }
+                ]
+              }
+            },
+            { "required": ["credentialConfiguration", "credentialFile"] }
+          ]
+        },
+        "authentication": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["apiVersion", "args", "command"],
+          "properties": {
+            "apiVersion": { "const": "client.authentication.k8s.io/v1beta1" },
+            "command": { "const": "/opt/coder-provisioner-auth/argocd-k8s-auth" },
+            "args": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "workspaceResourceEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpu",
+        "cpu_capacity_witness",
+        "gpu_offers",
+        "memory_gib",
+        "storage_gib",
+        "tpu_offers"
+      ],
+      "properties": {
+        "cpu": { "$ref": "#/definitions/workspaceResourceRange" },
+        "cpu_capacity_witness": { "$ref": "#/definitions/workspaceCpuCapacityWitness" },
+        "gpu_offers": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+          "additionalProperties": { "$ref": "#/definitions/workspaceGpuOffer" }
+        },
+        "memory_gib": { "$ref": "#/definitions/workspaceResourceRange" },
+        "storage_gib": { "$ref": "#/definitions/workspaceResourceRange" },
+        "tmp_storage_gib": { "type": "integer", "minimum": 1 },
+        "tpu_offers": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+          "additionalProperties": { "$ref": "#/definitions/workspaceTpuOffer" }
+        }
+      }
+    },
+    "workspaceResourceRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default", "max", "min"],
+      "properties": {
+        "default": { "type": "integer", "minimum": 1 },
+        "max": { "type": "integer", "minimum": 1 },
+        "min": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "workspaceResourceMaximum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory_gib"],
+      "properties": {
+        "cpu": { "type": "integer", "minimum": 1 },
+        "memory_gib": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "workspaceKubernetesReserve": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_millicores", "memory_mib"],
+      "properties": {
+        "cpu_millicores": { "type": "integer", "minimum": 0 },
+        "memory_mib": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "workspaceCpuCapacityWitness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "instance_type", "kubernetes_reserve", "memory_gib", "source"],
+      "properties": {
+        "cpu": { "type": "integer", "minimum": 1 },
+        "instance_type": { "type": "string", "minLength": 1 },
+        "kubernetes_reserve": { "$ref": "#/definitions/workspaceKubernetesReserve" },
+        "memory_gib": { "type": "integer", "minimum": 1 },
+        "node_labels": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "type": "string", "minLength": 1 },
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "requirement_key": { "type": "string", "minLength": 1 },
+        "requirement_value": { "type": "string", "minLength": 1 },
+        "source": { "enum": ["fixed_runtime", "node_pool"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "source": { "const": "node_pool" } } },
+          "then": { "required": ["node_labels", "requirement_key", "requirement_value"] },
+          "else": {
+            "not": {
+              "anyOf": [{ "required": ["requirement_key"] }, { "required": ["requirement_value"] }]
+            }
+          }
+        }
+      ]
+    },
+    "workspaceGpuOffer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capacity_type", "max_count", "model", "workspace_max"],
+      "properties": {
+        "capacity_type": { "type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+        "max_count": { "type": "integer", "minimum": 1 },
+        "model": { "type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+        "workspace_max": { "$ref": "#/definitions/workspaceResourceMaximum" }
+      }
+    },
+    "workspaceTpuOffer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capacity_type", "class", "max_count", "workspace_max"],
+      "properties": {
+        "capacity_type": { "type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+        "class": { "type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+        "max_count": { "type": "integer", "minimum": 1 },
+        "workspace_max": { "$ref": "#/definitions/workspaceResourceMaximum" }
+      }
+    },
+    "workloadImagePull": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["region", "roles"],
+      "properties": {
+        "region": { "type": "string", "pattern": "^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$" },
+        "roles": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^arn:[^:\\s]+:iam::[0-9]{12}:role/[^\\s]+$"
+          }
+        }
+      }
+    },
+    "workloadImagePush": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["network", "region", "roles"],
+      "properties": {
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["privateHttpsCIDRs", "publicHTTPS"],
+          "properties": {
+            "privateHttpsCIDRs": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32$" }
+            },
+            "publicHTTPS": { "const": true }
+          }
+        },
+        "region": { "type": "string", "pattern": "^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$" },
+        "roles": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^arn:[^:\\s]+:iam::[0-9]{12}:role/[^\\s]+$"
+          }
+        }
+      }
+    },
+    "dnsLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9.-]*(:[0-9]+)?(?:/[a-z0-9._-]+)*$"
+    },
+    "repositoryMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^src/[a-z0-9_/-]+$" },
+      "additionalProperties": { "$ref": "#/definitions/repository" }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifestRepository", "package", "repository", "sourceName", "target"],
+      "properties": {
+        "manifestRepository": { "$ref": "#/definitions/repository" },
+        "package": { "type": "string", "pattern": "^src/[a-z0-9_/-]+$" },
+        "repository": { "type": "string", "pattern": "^src/[a-z0-9_/-]+$" },
+        "sourceName": { "$ref": "#/definitions/dnsLabel" },
+        "target": { "type": "string", "pattern": "^//src/[a-z0-9_/-]+:image_push$" }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delivery", "deployments", "name", "path", "team"],
+      "properties": {
+        "delivery": { "enum": ["promoted", "submitted"] },
+        "deployments": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/projectDeployment" }
+        },
+        "name": { "$ref": "#/definitions/sourceName" },
+        "path": {
+          "type": "string",
+          "pattern": "^src/[a-z0-9_]+(?:/[a-z0-9_]+)*$"
+        },
+        "team": { "$ref": "#/definitions/dnsLabel" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "delivery": { "const": "promoted" } },
+            "required": ["delivery"]
+          },
+          "then": {
+            "properties": {
+              "deployments": {
+                "items": { "required": ["promotion", "source", "stage"] }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "delivery": { "const": "submitted" } },
+            "required": ["delivery"]
+          },
+          "then": {
+            "properties": {
+              "deployments": {
+                "items": {
+                  "not": {
+                    "anyOf": [
+                      { "required": ["promotion"] },
+                      { "required": ["source"] },
+                      { "required": ["stage"] }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "projectDeployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^src/[a-z0-9_]+(?:/[a-z0-9_]+)*$"
+        },
+        "promotion": { "enum": ["automatic", "manual"] },
+        "source": { "$ref": "#/definitions/promotionSource" },
+        "stage": { "$ref": "#/definitions/sourceName" }
+      }
+    },
+    "promotionSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["stage", "warehouse"] },
+        "name": { "$ref": "#/definitions/sourceName" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "stage" } }, "required": ["kind"] },
+          "then": { "required": ["name"] },
+          "else": { "not": { "required": ["name"] } }
+        }
+      ]
+    },
+    "projectIndex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projects", "version"],
+      "properties": {
+        "version": { "const": 3 },
+        "projects": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/project" }
+        }
+      }
+    },
+    "sourceName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*$"
+    },
+    "labelSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "matchLabels": {
+          "type": "object",
+          "propertyNames": { "enum": ["cloud", "name", "provider", "region", "role"] },
+          "additionalProperties": { "type": "string" }
+        },
+        "matchExpressions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "operator"],
+            "properties": {
+              "key": { "enum": ["cloud", "name", "provider", "region", "role"] },
+              "operator": { "enum": ["DoesNotExist", "Exists", "In", "NotIn"] },
+              "values": {
+                "type": "array",
+                "items": { "type": "string" },
+                "uniqueItems": true
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": { "operator": { "enum": ["In", "NotIn"] } },
+                  "required": ["operator"]
+                },
+                "then": {
+                  "required": ["values"],
+                  "properties": { "values": { "minItems": 1 } }
+                }
+              },
+              {
+                "if": {
+                  "properties": { "operator": { "enum": ["DoesNotExist", "Exists"] } },
+                  "required": ["operator"]
+                },
+                "then": {
+                  "properties": { "values": { "maxItems": 0 } }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["access", "apiGroup", "kind", "project", "resource"],
+      "properties": {
+        "access": { "enum": ["edit", "view"] },
+        "apiGroup": { "type": "string" },
+        "kind": { "type": "string", "minLength": 1 },
+        "project": { "type": "boolean" },
+        "resource": { "type": "string", "minLength": 1 }
+      }
+    },
+    "quotaClasses": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "be": { "$ref": "#/definitions/quotaResources" },
+        "ha": { "$ref": "#/definitions/quotaResources" },
+        "ma": { "$ref": "#/definitions/quotaResources" },
+        "wa": { "$ref": "#/definitions/quotaResources" }
+      }
+    },
+    "accelerators": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "a10": { "type": "string", "pattern": "^[0-9]+$" },
+        "a100-40gb": { "type": "string", "pattern": "^[0-9]+$" },
+        "a100-80gb": { "type": "string", "pattern": "^[0-9]+$" },
+        "a10g": { "type": "string", "pattern": "^[0-9]+$" },
+        "b200": { "type": "string", "pattern": "^[0-9]+$" },
+        "b300": { "type": "string", "pattern": "^[0-9]+$" },
+        "h100": { "type": "string", "pattern": "^[0-9]+$" },
+        "h100-nvl-94gb": { "type": "string", "pattern": "^[0-9]+$" },
+        "h200": { "type": "string", "pattern": "^[0-9]+$" },
+        "l4": { "type": "string", "pattern": "^[0-9]+$" },
+        "l40s": { "type": "string", "pattern": "^[0-9]+$" },
+        "rtx-pro-server-6000": { "type": "string", "pattern": "^[0-9]+$" },
+        "t4": { "type": "string", "pattern": "^[0-9]+$" },
+        "v100": { "type": "string", "pattern": "^[0-9]+$" },
+        "v5e-2x2": { "type": "string", "pattern": "^[0-9]+$" }
+      }
+    },
+    "quotaResources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": {
+        "accelerators": { "$ref": "#/definitions/accelerators" },
+        "a10": { "type": "string", "pattern": "^[0-9]+$" },
+        "a100-40gb": { "type": "string", "pattern": "^[0-9]+$" },
+        "a100-80gb": { "type": "string", "pattern": "^[0-9]+$" },
+        "a10g": { "type": "string", "pattern": "^[0-9]+$" },
+        "b200": { "type": "string", "pattern": "^[0-9]+$" },
+        "b300": { "type": "string", "pattern": "^[0-9]+$" },
+        "cpu": { "type": "string", "pattern": "^[0-9]+$" },
+        "google.com/tpu": { "type": "string", "pattern": "^[0-9]+$" },
+        "h100": { "type": "string", "pattern": "^[0-9]+$" },
+        "h100-nvl-94gb": { "type": "string", "pattern": "^[0-9]+$" },
+        "h200": { "type": "string", "pattern": "^[0-9]+$" },
+        "l4": { "type": "string", "pattern": "^[0-9]+$" },
+        "l40s": { "type": "string", "pattern": "^[0-9]+$" },
+        "memory": { "type": "string", "pattern": "^(0|[1-9][0-9]*Gi)$" },
+        "nvidia.com/gpu": { "type": "string", "pattern": "^[0-9]+$" },
+        "rtx-pro-server-6000": { "type": "string", "pattern": "^[0-9]+$" },
+        "t4": { "type": "string", "pattern": "^[0-9]+$" },
+        "v100": { "type": "string", "pattern": "^[0-9]+$" },
+        "v5e-2x2": { "type": "string", "pattern": "^[0-9]+$" }
+      }
+    },
+    "team": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archive", "cells", "projects", "promotion", "quota", "slug"],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "maxLength": 31,
+          "pattern": "^[a-z][a-z0-9]{1,30}$"
+        },
+        "cells": { "$ref": "#/definitions/labelSelector" },
+        "projects": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/sourceName" },
+          "uniqueItems": true
+        },
+        "dev_secrets": {
+          "description": "Debug-tier secret names readable by every developer and process in the team's workspaces, including coding agents; never use them as workload or production credentials.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 81,
+            "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"
+          },
+          "uniqueItems": true
+        },
+        "quota": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["classes"],
+          "properties": {
+            "classes": { "$ref": "#/definitions/quotaClasses" },
+            "cells": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^cell-[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["classes"],
+                "properties": {
+                  "classes": { "$ref": "#/definitions/quotaClasses" }
+                }
+              }
+            }
+          }
+        },
+        "promotion": { "enum": ["automatic", "manual", "triggered"] },
+        "workspaces": { "type": "boolean" },
+        "archive": { "type": "boolean" },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "email": { "type": "string", "format": "email" },
+              "roles": {
+                "type": "array",
+                "items": { "enum": ["dev", "ops"] },
+                "minItems": 1,
+                "uniqueItems": true
+              }
+            },
+            "required": ["id", "email", "roles"],
+            "additionalProperties": false
+          },
+          "uniqueItems": true
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "dev": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "ops": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}

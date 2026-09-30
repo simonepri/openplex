@@ -1,0 +1,20 @@
+# Exposes Floci's Docker-network ECR data plane under the stable in-cluster name consumed by local Kargo Warehouses.
+
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    ignore-check.kube-linter.io/dangling-service: >-
+      The companion EndpointSlice targets Floci's registry outside Kubernetes.
+  name: origin-registry
+  namespace: kargo
+  labels:
+    app.kubernetes.io/component: origin-registry-alias
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kargo
+    app.kubernetes.io/part-of: delivery
+spec:
+  ports:
+    - {name: registry, port: 5000, protocol: TCP, targetPort: 5000}
+  selector:
+    app.kubernetes.io/name: origin-registry-proxy

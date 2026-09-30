@@ -1,0 +1,330 @@
+{{- /* Stamps the team security boundary including labeled namespace and RBAC roles. */ -}}
+
+{{- if eq .Values.mode "cell" }}
+{{- include "team-namespace.validate" . -}}
+{{- $namespace := include "team-namespace.namespace" . -}}
+{{- $runtimeSecrets := include "team-namespace.runtimeSecrets" . | fromJson -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+{{- if .Values.storageProjection.enabled }}
+    app.kubernetes.io/component: storage-projection
+{{- end }}
+    cost-center: {{ .Values.team.slug | quote }}
+{{- if .Values.devWorkspaces.enabled }}
+    # LINT.IfChange(workspace-buildbuddy-cell-label)
+    cell: {{ .Values.devWorkspaces.cell | quote }}
+    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/dev-secrets-policy.yaml:workspace-buildbuddy-cell-label)
+{{- end }}
+    environment: production
+    kueue.x-k8s.io/managed: "true"
+{{- if .Values.rayDashboard.enabled }}
+    ray-dashboard-routes: "true"
+{{- end }}
+    # LINT.IfChange(team-pod-security-profile)
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/team-pod-security-policy.yaml:team-pod-security-profile)
+    team: {{ .Values.team.slug | quote }}
+{{- if .Values.devWorkspaces.enabled }}
+# LINT.IfChange(dev-workspace-secret-projection)
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: workspace-backups
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ .Values.devWorkspaces.secretStoreName }}
+  target:
+    name: workspace-backups
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      data:
+        access_key_id: {{`'{{ .access_key_id }}'`}}
+        secret_access_key: {{`'{{ .secret_access_key }}'`}}
+  data:
+    - secretKey: access_key_id
+      remoteRef:
+        key: {{ .Values.devWorkspaces.recordName | quote }}
+        property: access_key_id
+    - secretKey: secret_access_key
+      remoteRef:
+        key: {{ .Values.devWorkspaces.recordName | quote }}
+        property: secret_access_key
+# LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/dev-secrets-policy.yaml:dev-workspace-secret-projection,//src/infra/argocd/components/coder_workspace_secret_store/helm/templates/store.yaml:dev-workspace-secret-projection,//src/infra/definitions/workspaces/templates/dev/deployment.tf:dev-workspace-secret-projection)
+{{- end }}
+{{- range $class := .Values.team.classes }}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: {{ $class }}
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" $ | nindent 4 }}
+spec:
+  clusterQueue: {{ printf "team-%s-%s" $.Values.team.slug $class }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: team-developer
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+rules:
+{{- range $resource := .Values.resources }}
+{{- if not (and (eq $resource.apiGroup "") (eq $resource.resource "secrets")) }}
+  - apiGroups: [{{ $resource.apiGroup | quote }}]
+    resources: [{{ $resource.resource | quote }}]
+{{- if eq $resource.access "edit" }}
+    verbs: [create, delete, get, list, patch, update, watch]
+{{- else }}
+    verbs: [get, list, watch]
+{{- end }}
+{{- end }}
+{{- end }}
+  - apiGroups: [""]
+    resources: [pods/exec, pods/portforward]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: team-developer
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: {{ .Values.team.group | quote }}
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: {{ printf "%s:dev" .Values.team.group | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: team-developer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: team-operator
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims, pods]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [kueue.x-k8s.io]
+    resources: [localqueues]
+    verbs: [create, delete, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: team-operator
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: {{ printf "%s:ops" .Values.team.group | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: team-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ printf "%s-job-observer" $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: {{ .Values.team.group | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: team-job-observer
+{{- if .Values.rayDashboard.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ray-dashboard-generator
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [ray.io]
+    resources: [rayjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes]
+    verbs: [create, delete, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ray-dashboard-generator
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+subjects:
+  - {kind: ServiceAccount, name: kyverno-background-controller, namespace: kyverno-system}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ray-dashboard-generator
+{{- end }}
+{{- if .Values.storageProjection.enabled }}
+{{- $handoff := .Values.storageProjection.handoff }}
+{{- $storageContract := dict }}
+{{- if .Values.devWorkspaces.enabled }}
+{{- $storageContract = required "storageProjection.handoff.storageContract is required for dev workspaces" $handoff.storageContract }}
+{{- end }}
+{{- $storageAuthAdapter := include "team-namespace.storageAuthAdapter" $handoff -}}
+{{- $storageKubernetesAuth := dict -}}
+{{- if eq $storageAuthAdapter "kubernetes" -}}
+{{- $storageKubernetesAuth = include "team-namespace.storageKubernetesAuth" $handoff | fromJson -}}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $handoff.secretStore.serviceAccount }}
+  namespace: {{ $namespace }}
+{{- if or (and (eq $storageAuthAdapter "aws") $handoff.secretStore.auth.aws.roleArn) (eq $storageAuthAdapter "gcp") }}
+  annotations:
+{{- if and (eq $storageAuthAdapter "aws") $handoff.secretStore.auth.aws.roleArn }}
+    eks.amazonaws.com/role-arn: {{ $handoff.secretStore.auth.aws.roleArn | quote }}
+{{- else if eq $storageAuthAdapter "gcp" }}
+    iam.gke.io/gcp-service-account: {{ $handoff.secretStore.auth.gcp.serviceAccountEmail | quote }}
+{{- end }}
+{{- end }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: {{ $handoff.secretStore.name }}
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  provider:
+{{- if eq $storageAuthAdapter "aws" }}
+    aws:
+      service: SecretsManager
+      region: {{ $handoff.secretStore.auth.aws.region | quote }}
+{{- if $handoff.secretStore.auth.aws.roleArn }}
+      auth:
+        jwt:
+          serviceAccountRef:
+            name: {{ $handoff.secretStore.serviceAccount }}
+{{- end }}
+{{- else if eq $storageAuthAdapter "gcp" }}
+    gcpsm:
+      projectID: {{ $handoff.secretStore.auth.gcp.projectId | quote }}
+      auth:
+        workloadIdentity:
+          clusterLocation: {{ $handoff.secretStore.auth.gcp.clusterLocation | quote }}
+          clusterName: {{ $handoff.secretStore.auth.gcp.clusterName | quote }}
+          serviceAccountRef:
+            name: {{ $handoff.secretStore.serviceAccount }}
+{{- else if eq $storageAuthAdapter "kubernetes" }}
+    kubernetes:
+      remoteNamespace: {{ $storageKubernetesAuth.remoteNamespace | quote }}
+      server:
+        url: https://kubernetes.default.svc
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+      auth:
+        serviceAccount:
+          name: {{ $handoff.secretStore.serviceAccount }}
+{{- end }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $handoff.externalSecret.name }}
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: {{ $handoff.secretStore.name }}
+  target:
+    name: {{ $handoff.externalSecret.targetSecretName }}
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      data:
+        credentials: |-
+          [team-s3]
+          aws_access_key_id = {{`{{ .access_key_id }}`}}
+          aws_secret_access_key = {{`{{ .secret_access_key }}`}}
+{{- if .Values.devWorkspaces.enabled }}
+        configData: |-
+          [gateway]
+          type = s3
+          provider = Other
+          access_key_id = {{`{{ .access_key_id }}`}}
+          secret_access_key = {{`{{ .secret_access_key }}`}}
+          endpoint = {{ $storageContract.gateway.endpoint }}
+          force_path_style = true
+          no_check_bucket = true
+
+{{- range $mountName := keys $storageContract.mounts | sortAlpha }}
+{{- $mount := index $storageContract.mounts $mountName }}
+
+          [{{ $mount.remote }}]
+          type = alias
+          remote = gateway:{{ $mount.bucket }}/{{ $mount.keyPrefix }}
+{{- end }}
+{{- end }}
+  data:
+    - secretKey: access_key_id
+      remoteRef:
+        key: {{ $handoff.recordName | quote }}
+        property: {{ $handoff.externalSecret.remoteProperties.accessKeyId }}
+    - secretKey: secret_access_key
+      remoteRef:
+        key: {{ $handoff.recordName | quote }}
+        property: {{ $handoff.externalSecret.remoteProperties.secretAccessKey }}
+{{- end }}
+{{- end }}

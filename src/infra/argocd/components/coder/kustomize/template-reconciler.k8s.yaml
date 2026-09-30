@@ -1,0 +1,207 @@
+# PostSync Job reconciling Coder workspace templates from the version-controlled repository.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: coder-template-reconciler
+  namespace: coder
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    ignore-check.kube-linter.io/no-liveness-probe: >-
+      Template publication Job runs to completion and exits.
+    ignore-check.kube-linter.io/no-readiness-probe: >-
+      Template publication Job runs to completion and exits.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Template reconciler Job requires Coder OIDC credentials via environment.
+  labels:
+    app.kubernetes.io/component: template-publication
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: template-publication
+        app.kubernetes.io/part-of: coder
+    spec:
+      serviceAccountName: coder-oauth-bootstrap
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: source
+          image: docker.io/alpine/git:v2.54.0@sha256:832b1cd1a271509f3d5272a1a62d4cb2ab1a53426ebde1f6c2cb7349f907dc6f
+          command: [/program/prepare-template-source.sh]
+          env:
+            - {name: SOURCE_REPOSITORY, value: 'git://172.19.255.21:9418/openplex.git'}
+            - {name: SOURCE_REVISION, value: main}
+            - {name: GIT_TOKEN_FILE, value: /var/run/coder/template-publication/git-token}
+            - {name: GIT_USERNAME_FILE, value: /var/run/coder/template-publication/git-username}
+            - {name: GIT_LFS_SKIP_SMUDGE, value: '1'}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          volumeMounts:
+            - {name: program, mountPath: /program, readOnly: true}
+            - {name: source, mountPath: /source}
+            - {name: state, mountPath: /state}
+            - {name: template-publication-credentials, mountPath: /var/run/coder/template-publication, readOnly: true}
+        - name: resolve-workspace-image
+          image: gcr.io/go-containerregistry/crane:debug@sha256:e78770b31258a3846f878036d9c1f63fbe4c871f9f56990bf77fd95c013e3c1b
+          command: [/busybox/sh, /program/resolve-template-image.sh]
+          env:
+            - {name: WORKSPACE_IMAGE_SOURCE, value: 'origin-registry:5000/000000000000/us-east-1/src/infra/definitions/workspaces/templates/dev:v1'}
+            - {name: WORKSPACE_IMAGE_REPOSITORY, value: 'localhost:15100/000000000000/us-east-1/src/infra/definitions/workspaces/templates/dev'}
+            - {name: WORKSPACE_IMAGE_SOURCE_INSECURE, value: "true"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          volumeMounts:
+            - {name: program, mountPath: /program, readOnly: true}
+            - {name: source, mountPath: /source, readOnly: true}
+            - {name: state, mountPath: /state}
+        - name: bootstrap-publisher
+          image: docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              if [ -s "/var/run/coder/template-publication/publisher-token" ]; then
+                python /program/reconcile_snapshot_oauth.py
+                export CODER_TEMPLATE_PUBLISHER_TOKEN_SOURCE=/var/run/coder/template-publication/publisher-token
+                exec /program/stage-template-publisher-token.sh
+              fi
+              cat /etc/ssl/certs/ca-certificates.crt /etc/local-ca/ca.crt > /state/ca-bundle.crt 2>/dev/null || cat /etc/ssl/certs/ca-certificates.crt > /state/ca-bundle.crt
+              exec python /program/bootstrap_template_publisher.py
+          env:
+            - {name: CODER_URL, value: 'http://coder.coder.svc.cluster.local'}
+            - name: CODER_BOOTSTRAP_URL
+              valueFrom: {secretKeyRef: {name: coder-oidc, key: CODER_ACCESS_URL}}
+            - name: CODER_BOOTSTRAP_OIDC_ISSUER
+              valueFrom: {secretKeyRef: {name: coder-oidc, key: CODER_OIDC_ISSUER_URL}}
+            - name: CODER_BOOTSTRAP_OIDC_USERNAME
+              valueFrom: {secretKeyRef: {name: coder-oidc, key: CODER_BOOTSTRAP_OIDC_USERNAME}}
+            - name: CODER_BOOTSTRAP_OIDC_PASSWORD
+              valueFrom: {secretKeyRef: {name: coder-oidc, key: CODER_BOOTSTRAP_OIDC_PASSWORD}}
+            - {name: CODER_SESSION_TOKEN_FILE, value: /state/coder-session-token}
+            - {name: CODER_SNAPSHOT_CALLBACK_URL, value: 'https://coder-snapshots.example.invalid/oauth/callback'}
+            - {name: SSL_CERT_FILE, value: /state/ca-bundle.crt}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: oauth-bootstrap, mountPath: /var/run/coder/oauth-bootstrap, readOnly: true}
+            - {name: local-ca, mountPath: /etc/local-ca, readOnly: true}
+            - {name: program, mountPath: /program, readOnly: true}
+            - {name: state, mountPath: /state}
+            - {name: template-publication-credentials, mountPath: /var/run/coder/template-publication, readOnly: true}
+      containers:
+        - name: reconcile
+          image: ghcr.io/coder/coder:v2.37.3@sha256:a48f82c2c437e032ce3f6970b4e937a7900cad3c76956956955099465b45e542
+          command: [bash, /program/template-reconciler.sh]
+          env:
+            - {name: CODER_URL, value: 'http://coder.coder.svc.cluster.local'}
+            - {name: CODER_SESSION_TOKEN_FILE, value: /state/coder-session-token}
+            - {name: CODER_TEMPLATE_ACCESS_ALIAS_DOMAIN, value: configured-by-applicationset.invalid}
+            - {name: CODER_TEMPLATE_DEPLOYMENT_DOMAIN, value: configured-by-applicationset.invalid}
+            - {name: CODER_TEMPLATE_HEADSCALE_URL, value: 'https://headscale.configured-by-applicationset.invalid'}
+            - {name: CODER_TEMPLATE_ARCH, value: arm64}
+            - {name: CODER_TEMPLATE_CA_CONFIG_MAP, value: cluster-local-ca}
+            - {name: CODER_TEMPLATE_CELL, value: cell-eaws-lh1}
+            - {name: CODER_TEMPLATE_REPOSITORY_URL, value: 'git://172.19.255.21:9418/openplex.git'}
+            - {name: CODER_TEMPLATE_CONTROL_PLANE_CA_FILE, value: /etc/local-ca/ca.crt}
+            - {name: CODER_TEMPLATE_SERVICE_ACCOUNT, value: coder-workspace}
+            - {name: CODER_TEMPLATE_STORAGE_CLASS, value: general-expandable}
+            - {name: CODER_TEMPLATE_TEAM, value: examples}
+            - {name: CODER_TEMPLATE_WORKLOAD_REGISTRY, value: 'origin-registry:5000/000000000000/us-east-1'}
+            - {name: CODER_TEMPLATE_WORKLOAD_REGISTRY_INSECURE, value: "false"}
+            - {name: CODER_TEMPLATE_WORKLOAD_ORIGIN_AUTH_MODE, value: floci}
+            - {name: CODER_TEMPLATE_WORKLOAD_ORIGIN_PROVIDER, value: floci}
+            - {name: CODER_TEMPLATE_WORKLOAD_ORIGIN_REGION, value: us-east-1}
+            - {name: CODER_TEMPLATE_WORKLOAD_ORIGIN_ROLE_ARN, value: ''}
+            - {name: CODER_TEMPLATE_WORKLOAD_ORIGIN_TOKEN_AUDIENCE, value: ''}
+            - {name: CODER_TEMPLATE_WORKLOAD_ORIGIN_TOKEN_FILE, value: ''}
+            - {name: CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY, value: '{"cell-eaws-lh1":"0123456789ab"}'}
+            - {name: CODER_TEMPLATE_WORKSPACE_NAMESPACE, value: team-examples-workspaces}
+            # LINT.IfChange(local-workspace-storage-budget)
+            - {name: CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY, value: '{"cell-eaws-lh1":{"cpu":{"default":1,"max":3,"min":1},"gpu_offers":{},"memory_gib":{"default":2,"max":8,"min":1},"storage_gib":{"default":8,"max":48,"min":8},"tmp_storage_gib":64}}'}
+            # LINT.ThenChange(//src/infra/argocd/components/rawfile_localpv/helm/values.yaml:local-workspace-storage-budget)
+            - {name: CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY, value: '{"cell-eaws-lh1":"eaws-lh1"}'}
+            - {name: CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE, value: 'localhost:15100/000000000000/us-east-1/src/infra/tools/workspace_backup_proxy@sha256:c06cd3abfae1a6b6b7c6e2517e35db5586d47b5c6cf9616c4d4f47126de2a70a'}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: local-ca, mountPath: /etc/local-ca, readOnly: true}
+            - {name: program, mountPath: /program, readOnly: true}
+            - {name: source, mountPath: /source, readOnly: true}
+            - {name: state, mountPath: /state}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: oauth-bootstrap
+          projected:
+            defaultMode: 288
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items: [{key: ca.crt, path: ca.crt}]
+        - name: program
+          configMap: {name: coder-template-reconciler, defaultMode: 365}
+        - name: source
+          emptyDir: {sizeLimit: 512Mi}
+        - name: state
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: tmp
+          emptyDir: {sizeLimit: 128Mi}
+        - name: local-ca
+          configMap:
+            name: cluster-local-ca
+            optional: true
+            items:
+              - {key: ca.crt, path: ca.crt}
+        - name: template-publication-credentials
+          secret:
+            secretName: coder-template-publication
+            optional: true
+            defaultMode: 256

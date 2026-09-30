@@ -1,0 +1,152 @@
+# Base Helm values for Headlamp, applied on every supported control registration; the Kustomize companion owns the namespace, OIDC ExternalSecret, and ingress policy.
+
+fullnameOverride: headlamp
+podAnnotations:
+  ignore-check.kube-linter.io/read-secret-from-env-var: >-
+    Headlamp loads OIDC configuration from Secret via environment.
+# Headlamp 0.45.0 keeps OIDC state in process memory. Multiple replicas can
+# route the callback away from the process that minted its state and reject a
+# valid login, so scaling requires a future proven sticky/shared-state design.
+replicaCount: 1
+image:
+  registry: ghcr.io
+  repository: headlamp-k8s/headlamp
+  tag: v0.45.0@sha256:db3f0e0fc58d358d41daa3fe7fc852437552c7ee873c3645470f7b86a8e0db49
+config:
+  oidc:
+    secret: {create: false}
+    externalSecret:
+      enabled: true
+      name: headlamp-oidc
+      hasScopes: true
+    # The callback value itself comes from the required Secret. This nonempty
+    # marker makes chart 0.45.0 emit the corresponding command-line argument.
+    callbackURL: from-external-secret
+    # Headlamp rejects external OIDC flags when it is not using an in-cluster
+    # Kubernetes identity unless its server-side cookie flow is enabled.
+    useCookie: true
+  pluginsDir: /headlamp/plugins
+  inCluster: false
+  # Every cluster request carries the operator's Dex token. Never substitute
+  # the Headlamp ServiceAccount for an authenticated browser identity.
+  unsafeUseServiceAccountToken: false
+  # Keep Headlamp's bundled metrics UI enabled. It queries the SigNoz-backed
+  # prometheus-api-bridge; this does not install or require a Prometheus server.
+  staticPlugins:
+    enabled: true
+initContainers:
+  - name: install-headlamp-plugins
+    image: >-
+      docker.io/curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+    command: [/bin/sh, /embedded-plugins/plugin-installer.sh]
+    resources:
+      requests: {cpu: 10m, memory: 16Mi}
+      limits: {cpu: 100m, memory: 64Mi}
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 101
+      runAsGroup: 102
+    volumeMounts:
+      - {name: signoz-link-plugin, mountPath: /plugins/signoz}
+      - {name: parca-link-plugin, mountPath: /plugins/parca}
+      - {name: headlamp-catalog-plugins, mountPath: /plugins/catalog}
+      - {name: kueue-plugin-archive, mountPath: /embedded-plugins, readOnly: true}
+      - {name: link-plugin-config, mountPath: /plugin-config, readOnly: true}
+# Headlamp loads one credential-free remote context per enabled Argo
+# registration. The Secret also carries the OIDC client configuration, but no
+# Kubernetes bearer token, client certificate, or client key.
+env:
+  # The hardened container has a read-only root filesystem and its image user
+  # otherwise resolves HOME to /. Keep Headlamp's per-user config under the
+  # chart's writable, disposable /tmp volume.
+  - name: HOME
+    value: /tmp
+  - name: HEADLAMP_CONFIG_KUBECONFIG
+    value: /etc/headlamp/clusters/config
+  - name: SSL_CERT_FILE
+    value: /etc/ssl/local-ca/ca.crt
+volumeMounts:
+  - name: headlamp-clusters
+    mountPath: /etc/ssl/local-ca
+    readOnly: true
+  # Mount only individual plugin subdirectories so Headlamp's bundled metrics
+  # plugin remains available through prometheus-api-bridge.
+  - name: signoz-link-plugin
+    mountPath: /headlamp/static-plugins/signoz-observability-links
+    readOnly: true
+  - name: parca-link-plugin
+    mountPath: /headlamp/static-plugins/parca-profile-links
+    readOnly: true
+  - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/cert-manager, subPath: cert-manager, readOnly: true}
+  - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/karpenter, subPath: karpenter, readOnly: true}
+  - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/keda, subPath: keda, readOnly: true}
+  - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/kueue, subPath: kueue, readOnly: true}
+  - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/kubescape, subPath: kubescape, readOnly: true}
+  - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/kyverno, subPath: kyverno, readOnly: true}
+  - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/opencost, subPath: opencost, readOnly: true}
+  - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/trivy, subPath: trivy, readOnly: true}
+  - name: headlamp-clusters
+    mountPath: /etc/headlamp/clusters
+    readOnly: true
+volumes:
+  - {name: signoz-link-plugin, emptyDir: {sizeLimit: 64Mi}}
+  - {name: parca-link-plugin, emptyDir: {sizeLimit: 64Mi}}
+  - {name: headlamp-catalog-plugins, emptyDir: {sizeLimit: 64Mi}}
+  - name: kueue-plugin-archive
+    configMap:
+      name: headlamp-kueue-plugin-archive
+  - name: link-plugin-config
+    configMap:
+      name: headlamp-link-plugin-config
+  - name: headlamp-clusters
+    # Replacing either source also replaces the watched kubeconfig file, so
+    # Headlamp rebuilds its cluster transports when the CA bundle changes.
+    projected:
+      sources:
+        - secret:
+            name: headlamp-oidc
+            items:
+              - {key: config, path: config}
+        - configMap:
+            name: headlamp-cluster-ca
+            items:
+              - {key: ca.crt, path: ca.crt}
+service:
+  type: ClusterIP
+automountServiceAccountToken: false
+serviceAccount:
+  create: true
+  name: headlamp
+clusterRoleBinding:
+  # The chart default binds its ServiceAccount to cluster-admin. Headlamp uses
+  # the browser user's Dex token instead, so its ServiceAccount needs no API
+  # permissions at all.
+  create: false
+priorityClassName: cluster-operators
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: null
+topologySpreadConstraints:
+  - labelSelector:
+      matchLabels:
+        app.kubernetes.io/instance: headlamp
+        app.kubernetes.io/name: headlamp
+    maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+resources:
+  requests: {cpu: 25m, memory: 64Mi}
+  limits: {cpu: 1000m, memory: 512Mi}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities: {drop: [ALL]}
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+podSecurityContext:
+  fsGroup: 1000
+  seccompProfile: {type: RuntimeDefault}

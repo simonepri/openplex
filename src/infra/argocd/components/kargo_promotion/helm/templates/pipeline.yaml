@@ -1,0 +1,118 @@
+# Renders team-owned project Warehouses or project-and-cell Stages for Kargo promotion.
+
+{{- include "kargo-promotion.validate" . -}}
+{{- $project := include "kargo-promotion.projectName" . -}}
+{{- if eq .Values.mode "warehouse" }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $project }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+    cost-center: shared-infrastructure
+    environment: production
+    kargo.akuity.io/project: "true"
+{{ include "kargo-promotion.labels" (dict "name" $project "team" .Values.teamSlug) | nindent 4 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $project }}-isolation
+  namespace: {{ $project }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+{{ include "kargo-promotion.labels" (dict "name" $project "team" .Values.teamSlug) | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Project
+metadata:
+  name: {{ $project }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+{{ include "kargo-promotion.labels" (dict "name" $project "team" .Values.teamSlug) | nindent 4 }}
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: ProjectConfig
+metadata:
+  name: {{ $project }}
+  namespace: {{ $project }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+{{ include "kargo-promotion.labels" (dict "name" $project "team" .Values.teamSlug) | nindent 4 }}
+spec:
+  promotionPolicies:
+    - stageSelector:
+        matchLabels:
+          app.kubernetes.io/component: automatic-promotion
+      autoPromotionEnabled: true
+{{- range $warehouse := .Values.warehouses }}
+---
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: {{ $warehouse.name }}
+  namespace: {{ $project }}
+  labels:
+{{ include "kargo-promotion.labels" (dict "name" $warehouse.name "team" $.Values.teamSlug) | nindent 4 }}
+spec:
+  freightCreationPolicy: Automatic
+  interval: 5m0s
+  subscriptions:
+{{- range $image := $warehouse.images }}
+    - image:
+        repoURL: {{ index $.Values.originRepositories $image.package | quote }}
+        imageSelectionStrategy: Lexical
+        discoveryLimit: 20
+        allowTagsRegexes:
+          - '^ci-[0-9]{8}T[0-9]{6}Z_[0-9a-f]{12}(-[a-z0-9_-]+)?$'
+        cacheByTag: true
+        strictSemvers: false
+{{- end }}
+{{- end }}
+{{- else if eq .Values.mode "stage" }}
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: {{ .Values.stage.name }}
+  namespace: {{ $project }}
+  labels:
+    app.kubernetes.io/component: {{ ternary "automatic-promotion" "manual-promotion" .Values.stage.automatic }}
+{{ include "kargo-promotion.labels" (dict "name" .Values.stage.name "team" .Values.teamSlug) | nindent 4 }}
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: {{ .Values.stage.warehouseName }}
+      sources:
+{{- if eq .Values.stage.source.kind "warehouse" }}
+        direct: true
+{{- else }}
+        direct: false
+        stages:
+          - {{ .Values.stage.source.name }}
+{{- end }}
+  promotionTemplate:
+    spec:
+      steps:
+        - uses: argocd-update
+          config:
+            apps:
+              - name: {{ .Values.stage.applicationName }}
+                namespace: argocd
+                sources:
+                  - repoURL: {{ .Values.repositoryURL | quote }}
+                    kustomize:
+                      images:
+{{- range $image := .Values.images }}
+                        - repoURL: {{ $image.manifestRepository | quote }}
+                          newName: {{ index $.Values.stage.deploymentRepositories $image.package | quote }}
+                          digest: {{ printf "${{ imageFrom(%q).Digest }}" (index $.Values.originRepositories $image.package) | quote }}
+{{- end }}
+{{- end }}
