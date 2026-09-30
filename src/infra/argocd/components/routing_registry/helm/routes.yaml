@@ -1,0 +1,273 @@
+# Declares canonical service exposure registry consumed by the routing-registry chart; teams request entries here and never author Gateway API resources directly.
+
+routes:
+  # keep-sorted start block=yes
+  - name: argocd
+    phase: bootstrap
+    auth: oidc-native
+    exposure: private
+    canonicalHostOnly: false
+    oidc: {mode: native, contract: argocd}
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: argocd, service: argocd-server, port: 80}
+  - name: atlantis
+    phase: application
+    auth: oidc-proxy
+    exposure: private
+    canonicalHostOnly: false
+    oidc:
+      mode: proxy
+      clientIDProperty: atlantis_client_id
+      clientSecretProperty: atlantis_client_secret
+      cookieSecretProperty: atlantis_cookie_secret
+      externalURLProperty: atlantis_external_url
+      secretName: atlantis-oidc
+      upstream:
+        podSelector: {app.kubernetes.io/name: atlantis}
+        port: 4141
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: atlantis, service: atlantis, port: 80}
+  - name: atlantis-webhook
+    phase: application
+    auth: webhook-secret
+    catchAll: false
+    exposure: public
+    hostnameLabel: hooks
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: atlantis, service: atlantis, port: 80}
+    entrypoints:
+      - path: /github/atlantis
+        rewrite: /events
+        backend: {namespace: atlantis, service: atlantis, port: 80}
+    # GitHub webhook CIDR ranges:
+    # https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-githubs-ip-addresses
+    # Sourced from https://api.github.com/meta (.hooks)
+    allowedClientCIDRs:
+      # keep-sorted start
+      - 140.82.112.0/20
+      - 143.55.64.0/20
+      - 185.199.108.0/22
+      - 192.30.252.0/22
+      - 2606:50c0::/32
+      - 2a0a:a440::/29
+      # keep-sorted end
+  - name: buildbuddy
+    phase: application
+    requiredCapabilities: [buildbuddy]
+    auth: oidc-gateway
+    exposure: private
+    oidc:
+      mode: gateway
+      contract: buildbuddy
+      clientIDProperty: buildbuddy_client_id
+      clientSecretProperty: buildbuddy_client_secret
+      secretName: buildbuddy-oidc
+      secretStore: runtime-secrets
+      record: application-oidc
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: buildbuddy, service: buildbuddy, port: 8080}
+  - name: buildbuddy-cache
+    phase: application
+    protocol: grpc
+    requiredCapabilities: [buildbuddy]
+    auth: cluster
+    exposure: direct
+    grpcServices:
+      # keep-sorted start
+      - build.bazel.remote.execution.v2.ActionCache
+      - build.bazel.remote.execution.v2.Capabilities
+      - build.bazel.remote.execution.v2.ContentAddressableStorage
+      - google.bytestream.ByteStream
+      # keep-sorted end
+    loadBalancing: single
+    target: {roles: [cell]}
+    backend: {namespace: buildbuddy, service: buildbuddy-cache, port: 1985}
+  - name: buildbuddy-events
+    phase: application
+    protocol: grpc
+    requiredCapabilities: [buildbuddy]
+    auth: api-key
+    exposure: private
+    apiKey:
+      header: x-buildbuddy-api-key
+      properties: [{clientID: buildbuddy-events, property: bes_api_key}]
+      record: buildbuddy-auth
+      sanitize: true
+      secretStore: local-secret-records
+      targetScoped: true
+    grpcServices: [google.devtools.build.v1.PublishBuildEvent]
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: buildbuddy, service: buildbuddy, port: 1985}
+  - name: coder
+    phase: bootstrap
+    auth: oidc-native
+    exposure: private
+    canonicalHostOnly: true
+    oidc: {mode: native, contract: coder}
+    protocolUpgrades: [DERP, websocket]
+    # LINT.IfChange(coder-wildcard-hostname-label)
+    wildcardHostnameLabel: coder
+    # LINT.ThenChange(//src/infra/argocd/components/coder/kustomize/external-secrets.yaml:coder-wildcard-hostname-label)
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: coder, service: coder, port: 80}
+    entrypoints:
+      - path: /
+        backend: {namespace: coder, service: coder-oidc-entrypoint, port: 8080}
+    redirects:
+      - {from: /setup, to: /api/v2/users/oidc/callback, statusCode: 302}
+  - name: dex
+    phase: identity
+    auth: tailnet
+    exposure: private
+    loadBalancing: single
+    target: {roles: [ctrl], providers: [floci]}
+    backend: {namespace: dex, service: dex, port: 5556}
+  - name: headlamp
+    phase: application
+    auth: oidc-native
+    exposure: private
+    canonicalHostOnly: true
+    oidc: {mode: native, contract: headlamp}
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: headlamp, service: headlamp, port: 80}
+  - name: home
+    phase: application
+    auth: tailnet
+    exposure: private
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: homer, service: homer, port: 8080}
+  - name: kargo
+    phase: application
+    auth: oidc-native
+    exposure: private
+    canonicalHostOnly: true
+    oidc: {mode: native, contract: kargo}
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: kargo, service: kargo-api, port: 80}
+  - name: kuberhealthy
+    phase: application
+    auth: oidc-gateway
+    exposure: private
+    oidc:
+      mode: gateway
+      contract: kuberhealthy
+      clientIDProperty: kuberhealthy_client_id
+      clientSecretProperty: kuberhealthy_client_secret
+      secretName: kuberhealthy-oidc
+      secretStore: runtime-secrets
+      record: application-oidc
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: kuberhealthy, service: kuberhealthy, port: 8080}
+  - name: observability
+    phase: telemetry
+    auth: api-key
+    apiKey:
+      header: signoz-api-key
+      sanitize: true
+      record: application-oidc
+      properties:
+        - clientID: query
+          property: prometheus_query_token
+      secretStore: runtime-secrets
+    exposure: private
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: signoz, service: signoz, port: 8080}
+  - name: observability-otlp
+    phase: telemetry
+    auth: api-key
+    apiKey:
+      header: Authorization
+      properties: [{clientID: collectors, property: otlp_token}]
+      record: application-oidc
+      sanitize: true
+      secretStore: runtime-secrets
+    catchAll: false
+    exposure: private
+    hostnameLabel: observability
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: signoz, service: signoz-otel-collector, port: 4318}
+    entrypoints:
+      # keep-sorted start
+      - path: /v1/logs
+        backend: {namespace: signoz, service: signoz-otel-collector, port: 4318}
+      - path: /v1/metrics
+        backend: {namespace: signoz, service: signoz-otel-collector, port: 4318}
+      - path: /v1/traces
+        backend: {namespace: signoz, service: signoz-otel-collector, port: 4318}
+        # keep-sorted end
+  - name: opencost
+    phase: application
+    auth: oidc-proxy
+    exposure: private
+    canonicalHostOnly: false
+    oidc:
+      mode: proxy
+      clientIDProperty: opencost_client_id
+      clientSecretProperty: opencost_client_secret
+      cookieSecretProperty: opencost_cookie_secret
+      secretName: opencost-oidc
+      upstream:
+        podSelector: {app.kubernetes.io/name: opencost}
+        port: 9090
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: opencost, service: opencost, port: 9090}
+    timeouts: {request: 120s, backendRequest: 120s}
+  - name: parca
+    phase: application
+    auth: oidc-gateway
+    exposure: private
+    oidc:
+      mode: gateway
+      contract: parca
+      clientIDProperty: parca_client_id
+      clientSecretProperty: parca_client_secret
+      secretName: parca-oidc
+      secretStore: runtime-secrets
+      record: application-oidc
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: parca, service: parca-server, port: 7070}
+    unauthenticatedPaths: [/manifest.json]
+  - name: signoz
+    phase: application
+    auth: oidc-gateway
+    exposure: private
+    oidc:
+      mode: gateway
+      contract: signoz
+      clientIDProperty: signoz_client_id
+      clientSecretProperty: signoz_client_secret
+      secretName: signoz-oidc
+      secretStore: runtime-secrets
+      record: application-oidc
+    loadBalancing: single
+    target: {roles: [ctrl]}
+    backend: {namespace: signoz, service: signoz, port: 8080}
+  - name: svelte-web
+    phase: application
+    auth: tailnet
+    exposure: private
+    scale: zero
+    loadBalancing: single
+    target:
+      roles: [cell]
+      names: [cell-eaws-lh1]
+    backend:
+      namespace: team-examples-workloads
+      service: svelte-web-prod
+      port: 80
+      podSelector: {app.kubernetes.io/name: svelte-web, stage: prod}
+# keep-sorted end

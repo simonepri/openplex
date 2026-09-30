@@ -1,0 +1,9 @@
+# Lint fixture for GCP private host DNS DaemonSet and iptables configuration.
+
+provider: gcp
+serviceCIDR: 172.17.16.0/20
+rewrites:
+  buildbuddy-events.ctrl-aws-usw2.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  coder.ctrl-aws-usw2.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  dex.ctrl-aws-usw2.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local
+  observability.ctrl-aws-usw2.c.corp.local.internal: active-ctrl-private-access.tailscale-system.svc.cluster.local

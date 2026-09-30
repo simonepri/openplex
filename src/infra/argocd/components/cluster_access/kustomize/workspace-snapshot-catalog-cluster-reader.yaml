@@ -1,0 +1,42 @@
+# Role and binding allowing the snapshot catalog to read Argo CD cluster connection secrets.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace-snapshot-catalog-cluster-reader
+  namespace: argocd
+  labels:
+    app.kubernetes.io/component: workspace-snapshot-catalog
+    app.kubernetes.io/managed-by: argocd
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames:
+      # keep-sorted start
+      - cluster-cell-aws-usw2
+      - cluster-cell-eaws-lh1
+      - cluster-cell-gcp-euw4
+      - cluster-ctrl-aws-usw2
+      - cluster-ctrl-eaws-lh1
+      # keep-sorted end
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workspace-snapshot-catalog-cluster-reader
+  namespace: argocd
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      The workspace snapshot catalog requires get-only read access to named cluster connection secrets to aggregate snapshot metadata across cells.
+  labels:
+    app.kubernetes.io/component: workspace-snapshot-catalog
+    app.kubernetes.io/managed-by: argocd
+subjects:
+  - kind: ServiceAccount
+    name: workspace-snapshot-catalog
+    namespace: coder-workspace-backup-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: workspace-snapshot-catalog-cluster-reader

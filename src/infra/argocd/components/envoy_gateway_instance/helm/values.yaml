@@ -1,0 +1,140 @@
+# Defines fail-closed defaults for Envoy Gateway instances. Fleet cluster applications layer provider and instance-specific values onto these defaults.
+
+foundation:
+  enabled: true
+  manageNamespace: true
+  namespaceLabels: {}
+gateway:
+  enabled: false
+  canonicalScheme: ""
+  name: public
+  namespace: envoy-gateway-system
+  aliasDomain: ""
+  className: envoy-gateway
+  baseDomain: ""
+  allowedNamespaces:
+    # keep-sorted start
+    - argo
+    - argocd
+    - buildbuddy
+    - coder
+    - dex
+    - dragonfly-system
+    - envoy-gateway-system
+    - headlamp
+    - headscale
+    - homer
+    - kargo
+    - opencost
+    - parca
+    - s3-system
+    - signoz
+    # keep-sorted end
+  listeners:
+    atlantisWebhookHttps:
+      enabled: false
+      hostname: ""
+      certificateSecret: ""
+    coderApps:
+      enabled: false
+      hostname: ""
+      certificateSecret: ""
+    dragonflyManagerTls:
+      enabled: false
+      hostname: ""
+    http:
+      enabled: false
+      redirectToHTTPS: false
+    s3Http:
+      enabled: false
+      hostname: s3-gateway.s3-system.svc
+    s3Https:
+      enabled: false
+      hostname: ""
+      certificateSecret: ""
+    https:
+      enabled: false
+      certificateSecret: ""
+      aliasCertificateSecret: ""
+      hostname: ""
+    kubeOidcTls:
+      enabled: false
+      hostname: ""
+    headscaleBootstrapTls:
+      enabled: false
+      hostname: ""
+    tls:
+      enabled: false
+      hostname: ""
+certificate:
+  enabled: false
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: ""
+  caIssuer:
+    enabled: false
+    secretName: ""
+proxy:
+  namespace: envoy-gateway-system
+  telemetry:
+    accessLog:
+      enabled: true
+  # Entries narrow their namespace to exact backend pods and ports. Route-owning
+  # namespaces without an entry retain general backend access.
+  backendEgress: []
+  allowGeneralBackendEgress: true
+  autoscaling:
+    enabled: true
+    pollingInterval: 30
+    cooldownPeriod: 300
+    minReplicas: 2
+    maxReplicas: 8
+    fallback: {failureThreshold: 3, replicas: 4}
+    prometheus:
+      serverAddress: http://prometheus-api-bridge.signoz.svc.cluster.local:9090
+      cluster: ""
+      activeRequestsPerReplica: "100"
+      activeConnectionsPerReplica: "250"
+      bytesPerSecondPerReplica: "52428800"
+      p95RequestSeconds: "1"
+  deployment:
+    name: gateway
+    # Envoy Gateway normalizes the controller-wide tagged reference to a tag
+    # when it generates the data-plane Deployment. The per-Gateway override
+    # therefore uses the same immutable manifest digest without a tag.
+    # LINT.IfChange(envoy-proxy-runtime-image)
+    image: >-
+      docker.io/envoyproxy/envoy@sha256:7877ad87afd7459e1bd2a077ff601fec7c93aeecd62e71664560d96328c62cf4
+    # LINT.ThenChange(//src/infra/argocd/components/envoy_gateway/helm/values.yaml:envoy-proxy-runtime-image)
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {cpu: "4", memory: 2Gi}
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  gateway.envoyproxy.io/owning-gateway-name: public
+                  gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+    topologySpreadConstraints: []
+  disruptionBudget: {enabled: true, minAvailable: 1}
+  service:
+    name: gateway
+    type: LoadBalancer
+    clusterIPv4: ""
+    loadBalancerClass: ""
+    annotations: {}
+    externalTrafficPolicy: Local
+    ipFamilyPolicy: PreferDualStack
+    ipFamilies: [IPv6, IPv4]
+    loadBalancerSourceRanges: []
+    # A non-zero value applies an EnvoyProxy strategic merge patch to the
+    # generated Service. Cloud profiles leave both ports at zero; local bindings
+    # pin the listeners exposed through their host adapters.
+    nodePorts:
+      http: 0
+      tls: 0

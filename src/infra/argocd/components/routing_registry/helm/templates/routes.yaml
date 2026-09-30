@@ -1,0 +1,583 @@
+{{- /* Renders canonical route entries as same-namespace Gateway attachments with explicit cross-namespace backend grants. HTTPRoute hostnames are DNS sources. */ -}}
+
+{{- if and .Values.phase .Values.exposure .Values.gateway.baseDomain .Values.gateway.canonicalScheme -}}
+{{- $root := . -}}
+{{- $gatewayOIDC := .Values.gatewayOIDC -}}
+{{- $localIDP := eq .Values.target.role "ctrl" -}}
+{{- if and (or (eq .Values.phase "application") (eq .Values.phase "all")) $gatewayOIDC $localIDP -}}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
+metadata:
+  name: routing-registry-gateway-oidc-dex
+  namespace: dex
+  annotations: {argocd.argoproj.io/sync-wave: "-1"}
+  labels:
+{{ include "routing-registry.labels" . | nindent 4 }}
+spec:
+  from:
+    - {group: gateway.envoyproxy.io, kind: SecurityPolicy, namespace: {{ .Values.gateway.namespace }}}
+  to:
+    - {group: "", kind: Service, name: dex}
+{{- end -}}
+{{- range $route := .Values.routes -}}
+{{- if eq (include "routing-registry.selected" (list $root $route)) "true" -}}
+{{- if eq (default "http" $route.protocol) "grpc" -}}
+{{ include "routing-registry.grpc-route" (dict "root" $root "route" $route) }}
+{{- else -}}
+{{ include "routing-registry.route" (dict "root" $root "route" $route "name" $route.name "backend" $route.backend "localIDP" $localIDP) }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "routing-registry.route" -}}
+{{- $root := .root -}}
+{{- $localIDP := .localIDP -}}
+{{- $route := .route -}}
+{{- $name := .name -}}
+{{- $hostnameLabel := default $name $route.hostnameLabel -}}
+{{- $hostname := printf "%s.%s" $hostnameLabel $root.Values.gateway.baseDomain -}}
+{{- $hostnames := list $hostname -}}
+{{- $section := default $root.Values.gateway.canonicalScheme (get $root.Values.gateway.routeSections $name) -}}
+{{- $routeBindings := list (dict "name" $name "hostname" $hostname "section" $section) -}}
+{{- $wildcardRouteBindings := list -}}
+{{- with $route.wildcardHostnameLabel -}}
+{{- $wildcardRouteBindings = append $wildcardRouteBindings (dict "name" (printf "%s-wildcard" $name) "hostname" (printf "*.%s.%s" . $root.Values.gateway.baseDomain) "section" "coder-apps-https") -}}
+{{- end -}}
+{{- if $root.Values.gateway.aliasDomain -}}
+{{- $aliasHostname := printf "%s.%s" $hostnameLabel $root.Values.gateway.aliasDomain -}}
+{{- $hostnames = append $hostnames $aliasHostname -}}
+{{- $aliasName := printf "%s-alias" $name | trunc 63 | trimSuffix "-" -}}
+{{- $routeBindings = append $routeBindings (dict "canonicalRedirect" (default false $route.canonicalHostOnly) "name" $aliasName "hostname" $aliasHostname "section" (printf "%s-alias" $root.Values.gateway.canonicalScheme)) -}}
+{{- end -}}
+{{- $applicationBackend := .backend -}}
+{{- $backend := .backend -}}
+{{- if eq $route.auth "oidc-proxy" -}}
+{{- $backend = dict "namespace" $backend.namespace "service" (printf "%s-auth-proxy" $name | trunc 63 | trimSuffix "-") "port" 4180 -}}
+{{- end -}}
+{{- if eq (default "warm" $route.scale) "zero" -}}
+{{- $backend = dict "namespace" "keda-system" "service" "keda-add-ons-http-interceptor-proxy" "port" 8080 -}}
+{{- end -}}
+{{- if $root.Values.gateway.httpRedirect }}
+{{- range $binding := $routeBindings }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ printf "%s-http-redirect" $binding.name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $root.Values.gateway.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  parentRefs:
+    - {group: gateway.networking.k8s.io, kind: Gateway, name: {{ $root.Values.gateway.name }}, sectionName: {{ $binding.section | replace "https" "http" }}}
+  hostnames: {{ list $binding.hostname | toJson }}
+  rules:
+    - matches: [{path: {type: PathPrefix, value: /}}]
+      filters:
+        - type: RequestRedirect
+          requestRedirect: {scheme: https, statusCode: 308}
+{{- end }}
+{{- end }}
+{{- range $binding := $routeBindings }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $binding.name }}
+  namespace: {{ $root.Values.gateway.namespace }}
+{{- if eq $route.auth "oidc-gateway" }}
+  annotations: {argocd.argoproj.io/sync-wave: "0"}
+{{- end }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ $root.Values.gateway.name }}
+      sectionName: {{ $binding.section }}
+  hostnames: {{ list $binding.hostname | toJson }}
+  rules:
+{{- if $binding.canonicalRedirect }}
+    - matches: [{path: {type: PathPrefix, value: /}}]
+      filters:
+        - type: RequestRedirect
+          requestRedirect: {hostname: {{ $hostname | quote }}, statusCode: 308}
+{{- else }}
+{{- range $index, $path := default (list) $route.unauthenticatedPaths }}
+    - name: {{ printf "unauthenticated-%d" $index }}
+      matches: [{path: {type: Exact, value: {{ $path | quote }}}}]
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $backend.service }}
+          namespace: {{ $backend.namespace }}
+          port: {{ $backend.port }}
+          weight: 1
+{{- end }}
+{{- range $entrypoint := default (list) $route.entrypoints }}
+    - matches: [{path: {type: Exact, value: {{ $entrypoint.path | quote }}}}]
+{{- if $entrypoint.rewrite }}
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path: {type: ReplaceFullPath, replaceFullPath: {{ $entrypoint.rewrite | quote }}}
+{{- end }}
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $entrypoint.backend.service }}
+          namespace: {{ $entrypoint.backend.namespace }}
+          port: {{ $entrypoint.backend.port }}
+          weight: 1
+{{- end }}
+{{- range $redirect := default (list) $route.redirects }}
+    - matches: [{path: {type: Exact, value: {{ $redirect.from | quote }}}}]
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path: {type: ReplaceFullPath, replaceFullPath: {{ $redirect.to | quote }}}
+            statusCode: {{ $redirect.statusCode }}
+{{- end }}
+{{- $catchAll := true -}}
+{{- if hasKey $route "catchAll" -}}
+{{- $catchAll = $route.catchAll -}}
+{{- end -}}
+{{- if $catchAll }}
+    -{{ if eq $route.auth "oidc-gateway" }} name: authenticated{{ end }}
+      matches: [{path: {type: PathPrefix, value: /}}]
+{{- if or $route.timeouts (eq (default "warm" $route.scale) "zero") }}
+      timeouts: {{ default (dict "request" "120s" "backendRequest" "120s") $route.timeouts | toJson }}
+{{- end }}
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $backend.service }}
+          namespace: {{ $backend.namespace }}
+          port: {{ $backend.port }}
+          weight: 1
+{{- end }}
+{{- end }}
+{{- if eq $binding.name $name }}
+{{- with $route.protocolUpgrades }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: {{ $name }}-protocol-upgrades
+  namespace: {{ $root.Values.gateway.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  targetRefs:
+    - {group: gateway.networking.k8s.io, kind: HTTPRoute, name: {{ $name }}}
+  httpUpgrade:
+{{- range . }}
+    - type: {{ . | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if $root.Values.gateway.httpRedirect }}
+{{- range $binding := $wildcardRouteBindings }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ printf "%s-http-redirect" $binding.name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $root.Values.gateway.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  parentRefs:
+    - {group: gateway.networking.k8s.io, kind: Gateway, name: {{ $root.Values.gateway.name }}, sectionName: {{ $binding.section | replace "https" "http" }}}
+  hostnames: {{ list $binding.hostname | toJson }}
+  rules:
+    - matches: [{path: {type: PathPrefix, value: /}}]
+      filters:
+        - type: RequestRedirect
+          requestRedirect: {scheme: https, statusCode: 308}
+{{- end }}
+{{- end }}
+{{- range $binding := $wildcardRouteBindings }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $binding.name }}
+  namespace: {{ $root.Values.gateway.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ $root.Values.gateway.name }}
+      sectionName: {{ $binding.section }}
+  hostnames: {{ list $binding.hostname | toJson }}
+  rules:
+    - matches: [{path: {type: PathPrefix, value: /}}]
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $backend.service }}
+          namespace: {{ $backend.namespace }}
+          port: {{ $backend.port }}
+          weight: 1
+{{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ printf "routing-registry-%s" $name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $backend.namespace }}
+{{- if eq $route.auth "oidc-gateway" }}
+  annotations: {argocd.argoproj.io/sync-wave: "-1"}
+{{- end }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ $root.Values.gateway.namespace }}
+  to:
+    - group: ""
+      kind: Service
+      name: {{ $backend.service }}
+{{- $grantedBackends := dict (printf "%s/%s" $backend.namespace $backend.service) true }}
+{{ range $entrypoint := default (list) $route.entrypoints }}
+{{- $backendKey := printf "%s/%s" $entrypoint.backend.namespace $entrypoint.backend.service }}
+{{- if not (hasKey $grantedBackends $backendKey) }}
+{{- $_ := set $grantedBackends $backendKey true }}
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ printf "routing-registry-%s-%s" $name $entrypoint.backend.service | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $entrypoint.backend.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ $root.Values.gateway.namespace }}
+  to:
+    - group: ""
+      kind: Service
+      name: {{ $entrypoint.backend.service }}
+{{- end }}
+{{- end }}
+{{- if eq $route.auth "api-key" }}
+{{- $targetNames := list -}}
+{{- range $binding := $routeBindings -}}
+{{- $targetNames = append $targetNames $binding.name -}}
+{{- end -}}
+{{ include "routing-registry.api-key" (dict "root" $root "route" $route "name" $name "routeKind" "HTTPRoute" "targetNames" $targetNames) }}
+{{- end }}
+{{- if $route.allowedClientCIDRs }}
+{{- $targetNames := list -}}
+{{- range $binding := $routeBindings -}}
+{{- $targetNames = append $targetNames $binding.name -}}
+{{- end -}}
+{{ include "routing-registry.client-cidrs" (dict "root" $root "route" $route "name" $name "routeKind" "HTTPRoute" "targetNames" $targetNames) }}
+{{- end }}
+{{ if eq $route.auth "oidc-gateway" }}
+{{- $gatewayOIDC := required (printf "route %s requires gatewayOIDC" $route.name) $root.Values.gatewayOIDC -}}
+{{- $client := required (printf "gateway OIDC contract has no client %s" $route.oidc.contract) (index $gatewayOIDC.clients $route.oidc.contract) -}}
+{{- $expectedCallback := printf "https://%s.%s/oauth2/callback" $route.name $root.Values.gateway.baseDomain -}}
+{{- if ne $client.callbackUri $expectedCallback -}}
+{{- fail (printf "route %s canonical callback must be %s, got %s" $route.name $expectedCallback $client.callbackUri) -}}
+{{- end -}}
+{{- if $root.Values.gateway.aliasDomain -}}
+{{- $expectedAliasCallback := printf "https://%s.%s/oauth2/callback" $route.name $root.Values.gateway.aliasDomain -}}
+{{- if ne $client.aliasCallbackUri $expectedAliasCallback -}}
+{{- fail (printf "route %s alias callback must be %s, got %s" $route.name $expectedAliasCallback $client.aliasCallbackUri) -}}
+{{- end -}}
+{{- end -}}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $route.oidc.secretName }}
+  namespace: {{ $root.Values.gateway.namespace }}
+  annotations: {argocd.argoproj.io/sync-wave: "-1"}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: {{ $route.oidc.secretStore }}}
+  target:
+    name: {{ $route.oidc.secretName }}
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: client-id
+      remoteRef: {key: {{ $route.oidc.record | quote }}, property: {{ $route.oidc.clientIDProperty | quote }}}
+    - secretKey: client-secret
+      remoteRef: {key: {{ $route.oidc.record | quote }}, property: {{ $route.oidc.clientSecretProperty | quote }}}
+{{- range $binding := $routeBindings }}
+{{- $redirectURL := ternary $client.aliasCallbackUri $client.callbackUri (hasSuffix "-alias" $binding.name) }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: {{ printf "%s-oidc" $binding.name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $root.Values.gateway.namespace }}
+  annotations: {argocd.argoproj.io/sync-wave: "0"}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  targetRef: {group: gateway.networking.k8s.io, kind: HTTPRoute, name: {{ $binding.name }}, sectionName: authenticated}
+  oidc:
+    provider:
+      issuer: {{ $gatewayOIDC.issuer | quote }}
+{{- if $localIDP }}
+      authorizationEndpoint: {{ printf "%s/auth" (trimSuffix "/" $gatewayOIDC.issuer) | quote }}
+      tokenEndpoint: "http://dex.dex.svc.cluster.local:5556/token"
+      backendRefs:
+        - {group: "", kind: Service, name: dex, namespace: dex, port: 5556, weight: 1}
+{{- end }}
+    clientIDRef: {group: "", kind: Secret, name: {{ $route.oidc.secretName }} }
+    clientSecret: {group: "", kind: Secret, name: {{ $route.oidc.secretName }} }
+    cookieNames:
+      accessToken: {{ printf "AccessToken-%s" $route.name | quote }}
+      idToken: {{ printf "IdToken-%s" $route.name | quote }}
+    disableTokenEncryption: true
+    forwardAccessToken: false
+    passThroughAuthHeader: false
+    refreshToken: true
+    redirectURL: {{ $redirectURL | quote }}
+    scopes: {{ $gatewayOIDC.scopes | toJson }}
+  jwt:
+    providers:
+      - name: {{ $route.name }}
+        issuer: {{ $gatewayOIDC.issuer | quote }}
+        audiences: [{{ $client.clientId | quote }}]
+        remoteJWKS:
+          cacheDuration: 300s
+{{- if $localIDP }}
+          uri: "http://dex.dex.svc.cluster.local:5556/keys"
+          backendRefs:
+            - {group: "", kind: Service, name: dex, namespace: dex, port: 5556, weight: 1}
+{{- else }}
+          uri: {{ $gatewayOIDC.jwksUri | quote }}
+{{- end }}
+        extractFrom:
+          cookies: [{{ printf "IdToken-%s" $route.name | quote }}]
+  authorization:
+    defaultAction: Deny
+    rules:
+      - name: oidc-callback
+        action: Allow
+        cel: request.url_path == '/oauth2/callback'
+      - name: operator-group
+        action: Allow
+        principal:
+          jwt:
+            provider: {{ $route.name }}
+            claims:
+              - name: {{ $gatewayOIDC.groupsClaim | quote }}
+                valueType: StringArray
+                values: ["operators"]
+{{- end }}
+{{ end }}
+{{- if eq (default "warm" $route.scale) "zero" }}
+---
+apiVersion: http.keda.sh/v1beta1
+kind: InterceptorRoute
+metadata:
+  name: {{ $name }}
+  namespace: {{ $applicationBackend.namespace }}
+  annotations: {argocd.argoproj.io/sync-wave: "0"}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  target: {service: {{ $applicationBackend.service }}, port: {{ $applicationBackend.port }}}
+  rules:
+    - hosts: {{ $hostnames | toJson }}
+  scalingMetric:
+    concurrency: {targetValue: 1}
+  timeouts: {readiness: 120s, request: 120s, responseHeader: 120s}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-keda-http" $name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $applicationBackend.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  podSelector:
+    matchLabels: {{ required (printf "scale-zero route %s requires backend.podSelector" $name) $applicationBackend.podSelector | toJson }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: keda-system}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: interceptor
+              app.kubernetes.io/instance: keda-http
+              app.kubernetes.io/name: http-add-on
+{{- end }}
+{{- end -}}
+
+{{- define "routing-registry.grpc-route" -}}
+{{- $root := .root -}}
+{{- $route := .route -}}
+{{- $name := $route.name -}}
+{{- $hostname := default (printf "%s.%s" $name $root.Values.gateway.baseDomain) $route.hostname -}}
+{{- $section := default (default $root.Values.gateway.canonicalScheme (get $root.Values.gateway.routeSections $name)) $route.listener -}}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Values.gateway.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ $root.Values.gateway.name }}
+      sectionName: {{ $section }}
+  hostnames: {{ list $hostname | toJson }}
+  rules:
+    - matches:
+{{- range $service := $route.grpcServices }}
+        - method: {type: Exact, service: {{ $service | quote }}}
+{{- end }}
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: {{ $route.backend.service }}
+          namespace: {{ $route.backend.namespace }}
+          port: {{ $route.backend.port }}
+          weight: 1
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ printf "routing-registry-%s" $name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $route.backend.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      namespace: {{ $root.Values.gateway.namespace }}
+  to:
+    - group: ""
+      kind: Service
+      name: {{ $route.backend.service }}
+{{ include "routing-registry.api-key" (dict "root" $root "route" $route "name" $name "routeKind" "GRPCRoute" "targetNames" (list $name)) }}
+{{- if $route.allowedClientCIDRs }}
+{{ include "routing-registry.client-cidrs" (dict "root" $root "route" $route "name" $name "routeKind" "GRPCRoute" "targetNames" (list $name)) }}
+{{- end }}
+{{- end -}}
+
+{{- define "routing-registry.api-key" -}}
+{{- $root := .root -}}
+{{- $route := .route -}}
+{{- $name := .name -}}
+{{- $secretName := printf "%s-api-keys" $name | trunc 63 | trimSuffix "-" -}}
+{{- $record := $route.apiKey.record -}}
+{{- if default false $route.apiKey.targetScoped -}}
+{{- $record = printf "%s-%s" $record $root.Values.target.name -}}
+{{- end -}}
+{{- $secretStore := default $route.apiKey.secretStore $root.Values.apiKeySecretStore -}}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ $root.Values.gateway.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: {{ $secretStore }}}
+  target:
+    name: {{ $secretName }}
+    creationPolicy: Owner
+    deletionPolicy: Retain
+{{- with $route.apiKey.properties }}
+  data:
+{{- range . }}
+    - secretKey: {{ .clientID }}
+      remoteRef: {key: {{ $record | quote }}, property: {{ .property | quote }}}
+{{- end }}
+{{- else }}
+  dataFrom:
+    - extract: {key: {{ $record | quote }}}
+{{- end }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: {{ printf "%s-api-key" $name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $root.Values.gateway.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+spec:
+  targetRefs:
+{{- range $targetName := .targetNames }}
+    - {group: gateway.networking.k8s.io, kind: {{ $.routeKind }}, name: {{ $targetName }}}
+{{- end }}
+  apiKeyAuth:
+    credentialRefs:
+      - {group: "", kind: Secret, name: {{ $secretName }}}
+    extractFrom:
+      - headers: [{{ $route.apiKey.header | quote }}]
+    sanitize: {{ $route.apiKey.sanitize }}
+{{- end -}}
+
+
+{{- define "routing-registry.client-cidrs" -}}
+{{- $root := .root -}}
+{{- $route := .route -}}
+{{- $name := .name -}}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: {{ printf "%s-allowlist" $name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $root.Values.gateway.namespace }}
+  labels:
+{{ include "routing-registry.labels" $root | nindent 4 }}
+    app.kubernetes.io/instance: {{ $route.name | quote }}
+spec:
+  targetRefs:
+{{- range $targetName := .targetNames }}
+    - {group: gateway.networking.k8s.io, kind: {{ $.routeKind }}, name: {{ $targetName }}}
+{{- end }}
+  authorization:
+    defaultAction: Deny
+    rules:
+      - name: allow-client-cidrs
+        action: Allow
+        principal:
+          clientCIDRs:
+{{- range $cidr := $route.allowedClientCIDRs }}
+            - {{ $cidr | quote }}
+{{- end }}
+{{- end -}}

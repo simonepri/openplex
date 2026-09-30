@@ -1,0 +1,14 @@
+{{- /* Creates and labels dedicated namespace for foundation-managed gateway instances. */ -}}
+
+{{- if and .Values.foundation.enabled .Values.foundation.manageNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.gateway.namespace }}
+  labels:
+    {{- include "envoy-gateway-instance.labels" . | nindent 4 }}
+    app.kubernetes.io/part-of: cluster-runtime
+    {{- with .Values.foundation.namespaceLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
