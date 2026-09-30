@@ -1,0 +1,81 @@
+# Proves virtual local and global S3 endpoints resolve via cell gateways and defends S3 data plane operations.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: read-and-write-s3-objects-via-gateway
+  labels:
+    cadence: commit
+    capability: storage
+    mutates: scratch
+spec:
+  namespace: team-examples-workloads
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    apply: 30s
+    assert: 30s
+    cleanup: 30s
+    exec: 2m
+  steps:
+    - try:
+        - command:
+            cluster: cell-eaws-lh1
+            entrypoint: sh
+            args:
+              - -ceu
+              - date -u +chainsaw-%Y%m%dT%H%M%SZ
+            outputs:
+              - name: objectSuffix
+                value: (trim_space($stdout))
+        - apply:
+            cluster: cell-eaws-lh1
+            file: fixtures/storage/gateway-name-resolution-probe.test.k8s.yaml
+            bindings:
+              - name: objectSuffix
+                value: ($objectSuffix)
+        - command:
+            cluster: cell-eaws-lh1
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                attempt=0
+                while [ "${attempt}" -lt 120 ]; do
+                  phase="$(kubectl get pod/gateway-name-resolution --namespace=team-examples-workloads --output=jsonpath='{.status.phase}' 2>/dev/null || true)"
+                  if [ "${phase}" = "Succeeded" ]; then
+                    exit 0
+                  fi
+                  if [ "${phase}" = "Failed" ]; then
+                    printf 'Pod gateway-name-resolution failed\n' >&2
+                    exit 1
+                  fi
+                  attempt=$((attempt + 1))
+                  sleep 1
+                done
+                printf 'Pod gateway-name-resolution timed out\n' >&2
+                exit 1
+      finally:
+        - command:
+            cluster: cell-eaws-lh1
+            entrypoint: kubectl
+            args:
+              - logs
+              - pod/gateway-name-resolution
+              - --namespace=team-examples-workloads
+        - command:
+            cluster: cell-eaws-lh1
+            entrypoint: kubectl
+            args:
+              - describe
+              - pod/gateway-name-resolution
+              - --namespace=team-examples-workloads
+        - command:
+            cluster: cell-eaws-lh1
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod/gateway-name-resolution
+              - --namespace=team-examples-workloads
+              - --ignore-not-found=true
+              - --wait=false

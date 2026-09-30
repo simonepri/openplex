@@ -1,0 +1,14 @@
+# Builds the identity conformance ConfigMap from source Python scripts to defend Dex login and session test execution against unversioned test harnesses.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: dex
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/component: local-login-conformance
+    app.kubernetes.io/managed-by: chainsaw
+configMapGenerator:
+  - name: dex-local-login-conformance
+    files:
+      - login.py

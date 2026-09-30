@@ -1,0 +1,139 @@
+# Proves non-critical pods schedule onto Karpenter capacity rather than tainted system nodes.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: karpenter-non-critical-pods
+  labels:
+    cadence: commit
+    capability: scheduling
+    mutates: scratch
+spec:
+  namespace: conformance-workloads
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    apply: 1m
+    assert: 2m
+    cleanup: 1m
+    delete: 1m
+    exec: 3m
+  steps:
+    - try:
+        - command:
+            entrypoint: /bin/sh
+            env:
+              - name: BUSYBOX_IMAGE
+                value: ($values.busyboxImage)
+            args:
+              - -ceu
+              - |-
+                pod_name="karpenter-non-critical-test-$$"
+                cleanup() {
+                  kubectl delete pod "${pod_name}" --namespace=conformance-workloads --ignore-not-found=true --wait=false >/dev/null 2>&1 || true
+                }
+                trap cleanup EXIT
+
+                kubectl apply --filename=- <<'EOF'
+                apiVersion: scheduling.k8s.io/v1
+                kind: PriorityClass
+                metadata:
+                  name: non-critical
+                value: 1000
+                globalDefault: false
+                description: Non-critical workload priority class.
+                EOF
+
+                kubectl create namespace conformance-workloads --dry-run=client --output=yaml | kubectl apply --filename=-
+
+                cat <<EOF | kubectl apply --filename=-
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  name: ${pod_name}
+                  namespace: conformance-workloads
+                  labels:
+                    app.kubernetes.io/name: karpenter-non-critical-test
+                    app.kubernetes.io/managed-by: chainsaw
+                spec:
+                  priorityClassName: non-critical
+                  restartPolicy: Never
+                  automountServiceAccountToken: false
+                  securityContext:
+                    runAsNonRoot: true
+                    runAsUser: 65532
+                    runAsGroup: 65532
+                    seccompProfile:
+                      type: RuntimeDefault
+                  containers:
+                    - name: probe
+                      image: ${BUSYBOX_IMAGE}
+                      command: ["sh", "-c", "sleep 300"]
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        readOnlyRootFilesystem: true
+                        runAsNonRoot: true
+                        runAsUser: 65532
+                        capabilities:
+                          drop: ["ALL"]
+                        seccompProfile:
+                          type: RuntimeDefault
+                      resources:
+                        requests:
+                          cpu: 10m
+                          memory: 16Mi
+                        limits:
+                          cpu: 100m
+                          memory: 64Mi
+                EOF
+
+                kubectl wait pod "${pod_name}" \
+                  --namespace=conformance-workloads \
+                  --for=condition=PodScheduled \
+                  --timeout=120s
+
+                node_name="$(kubectl get pod "${pod_name}" \
+                  --namespace=conformance-workloads \
+                  --output=jsonpath='{.spec.nodeName}')"
+                test -n "${node_name}"
+
+                node_json="$(kubectl get node "${node_name}" --output=json)"
+
+                has_critical_taint="$(printf '%s' "${node_json}" | jq -r '
+                  [.spec.taints[]? | select(.key == "CriticalAddonsOnly")] | length
+                ')"
+                if [ "${has_critical_taint}" -ne 0 ]; then
+                  printf 'ERROR: Pod scheduled onto system node with CriticalAddonsOnly taint: %s\n' "${node_name}" >&2
+                  exit 1
+                fi
+
+                is_karpenter="$(printf '%s' "${node_json}" | jq -r '
+                  if (.metadata.labels["karpenter.sh/nodepool"] != null or
+                      .metadata.labels["karpenter.sh/capacity-type"] != null or
+                      .metadata.labels["karpenter.sh/initialized"] == "true" or
+                      .metadata.annotations["karpenter.sh/nodeclaim"] != null or
+                      .metadata.labels["karpenter.k8s.aws/instance-family"] != null)
+                  then "true" else "false" end
+                ')"
+                if [ "${is_karpenter}" != "true" ]; then
+                  printf 'ERROR: Node %s does not carry Karpenter capacity labels\n' "${node_name}" >&2
+                  exit 1
+                fi
+
+                printf 'SUCCESS: Non-critical pod scheduled onto Karpenter capacity node: %s\n' "${node_name}"
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod
+              - --namespace=conformance-workloads
+              - --selector=app.kubernetes.io/name=karpenter-non-critical-test
+              - --ignore-not-found=true
+              - --wait=false
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - priorityclass/non-critical
+              - --ignore-not-found=true

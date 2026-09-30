@@ -1,0 +1,258 @@
+# Proves Dex single sign-on, Headlamp cluster authorization, gateway cookie validation, and Coder snapshot OAuth state and PKCE binding.
+
+# LINT.IfChange(authenticate-catalog-tools-via-dex)
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: authenticate-catalog-tools-via-dex
+  labels:
+    cadence: commit
+    capability: identity
+    mutates: none
+spec:
+  namespace: dex
+  cluster: ctrl-eaws-lh1
+  concurrent: false
+  timeouts:
+    apply: 30s
+    cleanup: 1m
+    exec: 2m
+  steps:
+    - try:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - job/dex-local-login-conformance
+              - configmap/dex-local-ca-conformance
+              - configmap/dex-local-login-conformance
+              - secret/dex-local-login-conformance-inputs
+              - --namespace=dex
+              - --ignore-not-found=true
+              - --wait=true
+        - command:
+            entrypoint: kubectl
+            args:
+              - get
+              - configmap/cluster-local-ca
+              - --namespace=cert-manager-system
+              - --output=json
+            outputs:
+              - name: clusterLocalCa
+                value: (json_parse($stdout).data)
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: dex-local-ca-conformance
+                namespace: dex
+                labels:
+                  app.kubernetes.io/component: local-login-conformance
+                  app.kubernetes.io/managed-by: chainsaw
+              data: ($clusterLocalCa)
+        - command:
+            entrypoint: kubectl
+            args:
+              - apply
+              - --kustomize=fixtures/identity
+        - apply:
+            file: fixtures/identity/local-login.test.k8s.yaml
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                attempt=0
+                while [ "${attempt}" -lt 100 ]; do
+                  phase="$(kubectl get pods --namespace=dex --selector=job-name=dex-local-login-conformance --output=jsonpath='{.items[0].status.phase}' 2>/dev/null || true)"
+                  if [ "${phase}" = "Succeeded" ]; then
+                    exit 0
+                  fi
+                  if [ "${phase}" = "Failed" ]; then
+                    printf 'Pod for dex-local-login-conformance failed\n' >&2
+                    exit 1
+                  fi
+                  attempt=$((attempt + 1))
+                  sleep 1
+                done
+                printf 'Pod for dex-local-login-conformance timed out\n' >&2
+                exit 1
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - logs
+              - --selector=job-name=dex-local-login-conformance
+              - --namespace=dex
+              - --tail=-1
+        - command:
+            entrypoint: kubectl
+            args:
+              - describe
+              - pod
+              - --selector=job-name=dex-local-login-conformance
+              - --namespace=dex
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - job/dex-local-login-conformance
+              - configmap/dex-local-ca-conformance
+              - configmap/dex-local-login-conformance
+              - secret/dex-local-login-conformance-inputs
+              - --namespace=dex
+              - --ignore-not-found=true
+              - --wait=true
+# LINT.ThenChange(//src/infra/argocd/components/kuberhealthy/kustomize/tests/identity/chainsaw-test.yaml:authenticate-catalog-tools-via-dex)
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: portal-oidc-entrypoints
+  labels:
+    cadence: commit
+    capability: identity
+    mutates: none
+spec:
+  namespace: dex
+  cluster: ctrl-eaws-lh1
+  concurrent: false
+  timeouts:
+    exec: 3m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            env:
+              - {name: INSTALLATION_PUBLIC_DOMAIN, value: ($values.publicDomain)}
+            args:
+              - -ceu
+              - |-
+                pretty_domain="${INSTALLATION_PUBLIC_DOMAIN:?}"
+                cluster_domain="ctrl-eaws-lh1.c.${INSTALLATION_PUBLIC_DOMAIN:?}"
+                ca_certificate="$(mktemp)"
+                trap 'rm -f "${ca_certificate}"' EXIT
+                kubectl get configmap/cluster-local-ca --namespace=cert-manager-system \
+                  --output='jsonpath={.data.ca\.crt}' >"${ca_certificate}"
+
+                read_redirect() {
+                  response="$(curl --cacert "${ca_certificate}" --noproxy '*' \
+                    --silent --show-error --max-redirs 0 --output /dev/null \
+                    --write-out '%{http_code}\n%{redirect_url}' "$1")"
+                  status="$(printf '%s\n' "${response}" | sed -n '1p')"
+                  location="$(printf '%s\n' "${response}" | sed -n '2p')"
+                }
+
+                assert_dex_redirect() {
+                  source_url="$1"
+                  expected_status="$2"
+                  expected_client="$3"
+                  expected_callback="$4"
+                  read_redirect "${source_url}"
+                  test "${status}" = "${expected_status}"
+                  python3 - "${location}" "${expected_client}" "${expected_callback}" "${cluster_domain}" <<'PY'
+                import sys
+                import urllib.parse
+
+                location, expected_client, expected_callback, cluster_domain = sys.argv[1:]
+                parsed = urllib.parse.urlsplit(location)
+                query = urllib.parse.parse_qs(parsed.query)
+                assert parsed.scheme == "https"
+                assert parsed.netloc == f"dex.{cluster_domain}"
+                assert parsed.path == "/auth"
+                assert query.get("client_id") == [expected_client]
+                assert query.get("redirect_uri") == [expected_callback]
+                assert query.get("response_type") == ["code"]
+                PY
+                }
+
+                read_redirect "https://coder.${pretty_domain}/"
+                test "${status}" = 302
+                test "${location}" = "https://coder.${pretty_domain}/api/v2/users/oidc/callback?redirect=/templates"
+                read_redirect "https://coder.${pretty_domain}/setup"
+                test "${status}" = 302
+                test "${location}" = "https://coder.${pretty_domain}/api/v2/users/oidc/callback"
+                assert_dex_redirect \
+                  "https://coder.${cluster_domain}/api/v2/users/oidc/callback" \
+                  307 coder \
+                  "https://coder.${cluster_domain}/api/v2/users/oidc/callback"
+                assert_dex_redirect \
+                  "https://argocd.${cluster_domain}/auth/login?return_url=https%3A%2F%2Fargocd.${cluster_domain}%2F" \
+                  303 argocd \
+                  "https://argocd.${cluster_domain}/auth/callback"
+
+                while read -r source_url client_id callback_url; do
+                  assert_dex_redirect "${source_url}" 302 "${client_id}" "${callback_url}"
+                done <<EOF
+                https://buildbuddy.${pretty_domain}/ buildbuddy https://buildbuddy.${pretty_domain}/oauth2/callback
+                https://dragonfly.${cluster_domain}/ dragonfly https://dragonfly.${cluster_domain}/oauth2/callback
+                https://headlamp.${pretty_domain}/oidc?cluster=ctrl-eaws-lh1 headlamp https://headlamp.${cluster_domain}/oidc-callback
+                https://parca.${pretty_domain}/ parca https://parca.${pretty_domain}/oauth2/callback
+                https://signoz.${pretty_domain}/ signoz https://signoz.${pretty_domain}/oauth2/callback
+                EOF
+---
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: argocd-recovery-access
+  labels:
+    cadence: commit
+    capability: identity
+    mutates: none
+spec:
+  namespace: argocd
+  cluster: ctrl-eaws-lh1
+  concurrent: false
+  steps:
+    - try:
+        - command:
+            entrypoint: kubectl
+            args:
+              - auth
+              - can-i
+              - patch
+              - configmap/argocd-cm
+              - --namespace=argocd
+              - --as=conformance-user
+              - --as-group=cluster:group:recovery
+            check:
+              (trim_space($stdout)): "yes"
+        - command:
+            entrypoint: kubectl
+            args:
+              - auth
+              - can-i
+              - patch
+              - secret/argocd-secret
+              - --namespace=argocd
+              - --as=conformance-user
+              - --as-group=cluster:group:recovery
+            check:
+              (trim_space($stdout)): "yes"
+        - command:
+            entrypoint: kubectl
+            args:
+              - auth
+              - can-i
+              - get
+              - secret/argocd-secret
+              - --namespace=argocd
+              - --as=conformance-user
+              - --as-group=cluster:group:recovery
+            check:
+              ($error != null): true
+              (trim_space($stdout)): "no"
+        - command:
+            entrypoint: kubectl
+            args:
+              - auth
+              - can-i
+              - patch
+              - secret/unrelated
+              - --namespace=argocd
+              - --as=conformance-user
+              - --as-group=cluster:group:recovery
+            check:
+              ($error != null): true
+              (trim_space($stdout)): "no"

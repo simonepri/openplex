@@ -1,0 +1,208 @@
+# Defends admission policies and scheduling safeguards against security warning regressions using dry-run verification of rejected pod configurations.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: warning-remediation-conformance
+  labels:
+    cadence: commit
+    capability: observability
+    mutates: none
+spec:
+  namespace: team-examples
+  cluster: ctrl-eaws-lh1
+  concurrent: false
+  timeouts:
+    exec: 3m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            env:
+              - name: BUSYBOX_IMAGE
+                value: ($values.busyboxImage)
+            args:
+              - -ceu
+              - |-
+                create_dry_run() {
+                  kubectl create --dry-run=server --filename=- >/dev/null
+                }
+
+                denial_output="$(mktemp)"
+                collector_cronjob="$(mktemp)"
+                collector_job_request="$(mktemp)"
+                collector_job="$(mktemp)"
+                deadline_case_request="$(mktemp)"
+                nonmatching_job_request="$(mktemp)"
+                trap 'rm -f "${denial_output}" "${collector_cronjob}" "${collector_job_request}" "${collector_job}" "${deadline_case_request}" "${nonmatching_job_request}"' EXIT
+
+                # The Trivy scanner's token header is deliberately a ConfigMap
+                # reference, and is admitted only for the fully identified
+                # scanner Pod template.
+                create_dry_run <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  generateName: trivy-scanner-conformance-
+                  namespace: trivy-system
+                  labels:
+                    app.kubernetes.io/component: security-report-scanner
+                    app.kubernetes.io/managed-by: trivy-operator
+                spec:
+                  serviceAccountName: trivy-operator
+                  automountServiceAccountToken: false
+                  restartPolicy: Never
+                  securityContext:
+                    runAsNonRoot: true
+                    seccompProfile: {type: RuntimeDefault}
+                  containers:
+                    - name: scanner
+                      image: ${BUSYBOX_IMAGE}
+                      command: ["true"]
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        capabilities: {drop: [ALL]}
+                        readOnlyRootFilesystem: true
+                      env:
+                        - name: TRIVY_TOKEN_HEADER
+                          valueFrom:
+                            configMapKeyRef:
+                              name: trivy-operator-trivy-config
+                              key: trivy.serverTokenHeader
+                EOF
+
+                # A look-alike Pod must not inherit the exact ConfigMap
+                # exception when its scanner identity does not match.
+                if create_dry_run 2>"${denial_output}" <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  generateName: trivy-spoof-conformance-
+                  namespace: trivy-system
+                  labels:
+                    app.kubernetes.io/component: security-report-lookalike
+                    app.kubernetes.io/managed-by: trivy-operator
+                spec:
+                  serviceAccountName: trivy-operator
+                  automountServiceAccountToken: false
+                  restartPolicy: Never
+                  securityContext:
+                    runAsNonRoot: true
+                    seccompProfile: {type: RuntimeDefault}
+                  containers:
+                    - name: scanner
+                      image: ${BUSYBOX_IMAGE}
+                      command: ["true"]
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        capabilities: {drop: [ALL]}
+                        readOnlyRootFilesystem: true
+                      env:
+                        - name: TRIVY_TOKEN_HEADER
+                          valueFrom:
+                            configMapKeyRef:
+                              name: trivy-operator-trivy-config
+                              key: trivy.serverTokenHeader
+                EOF
+                then
+                  echo 'Trivy look-alike Pod was admitted.' >&2
+                  exit 1
+                fi
+                grep --fixed-strings --quiet ban-plaintext-env-secrets "${denial_output}"
+
+                # Bootstrap credentials are always projected from a Secret.
+                if create_dry_run 2>"${denial_output}" <<EOF
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  generateName: coder-password-conformance-
+                  namespace: team-examples
+                spec:
+                  automountServiceAccountToken: false
+                  restartPolicy: Never
+                  securityContext:
+                    runAsNonRoot: true
+                    seccompProfile: {type: RuntimeDefault}
+                  containers:
+                    - name: probe
+                      image: ${BUSYBOX_IMAGE}
+                      command: ["true"]
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        capabilities: {drop: [ALL]}
+                        readOnlyRootFilesystem: true
+                      env:
+                        - name: CODER_BOOTSTRAP_OIDC_PASSWORD
+                          value: fixture-password
+                EOF
+                then
+                  echo 'Literal CODER_BOOTSTRAP_OIDC_PASSWORD was admitted.' >&2
+                  exit 1
+                fi
+                grep --fixed-strings --quiet ban-plaintext-env-secrets "${denial_output}"
+
+                # The Kargo hourly collector must opt in to its API token. The
+                # chart's CronJob creates Jobs, so the deadline is enforced by
+                # the companion admission mutation policy on those Jobs.
+                kubectl get cronjob kargo-garbage-collector \
+                  --namespace=kargo --output=json >"${collector_cronjob}"
+                jq --exit-status '
+                  .spec.schedule == "0 * * * *" and
+                  .spec.concurrencyPolicy == "Forbid" and
+                  (.spec.suspend // false) == false and
+                  .spec.jobTemplate.metadata.labels["app.kubernetes.io/component"] == "garbage-collector" and
+                  .spec.jobTemplate.metadata.labels["app.kubernetes.io/instance"] == "kargo" and
+                  .spec.jobTemplate.spec.template.metadata.annotations["automount-service-account-token"] == "true"
+                ' "${collector_cronjob}"
+                kubectl get clusterpolicy kargo-garbage-collector-deadline \
+                  --output=json | jq --exit-status '
+                    .spec.rules | any(.[];
+                      .name == "set-garbage-collector-deadline" and
+                      .mutate.patchStrategicMerge.spec.activeDeadlineSeconds == 3300)
+                  '
+                # Exercise admission against the exact Job template emitted by
+                # the reconciled CronJob. Server-side dry-run returns the
+                # mutated Job without persisting it.
+                jq '
+                  {
+                    apiVersion: "batch/v1",
+                    kind: "Job",
+                    metadata: ((.spec.jobTemplate.metadata // {}) + {
+                      generateName: "kargo-garbage-collector-conformance-",
+                      namespace: .metadata.namespace
+                    }),
+                    spec: .spec.jobTemplate.spec
+                  }
+                ' "${collector_cronjob}" >"${collector_job_request}"
+                jq --exit-status \
+                  '(.spec | has("activeDeadlineSeconds")) == false' \
+                  "${collector_job_request}"
+                kubectl create --dry-run=server --output=json \
+                  --filename="${collector_job_request}" >"${collector_job}"
+                jq --exit-status '.spec.activeDeadlineSeconds == 3300' "${collector_job}"
+
+                # Zero and oversized deadlines are capped, while exact and
+                # tighter deadlines are preserved.
+                for deadline_case in '0 3300' '7200 3300' '3300 3300' '1200 1200'; do
+                  set -- ${deadline_case}
+                  jq --argjson deadline "$1" \
+                    '.spec.activeDeadlineSeconds = $deadline' \
+                    "${collector_job_request}" >"${deadline_case_request}"
+                  kubectl create --dry-run=server --output=json \
+                    --filename="${deadline_case_request}" >"${collector_job}"
+                  jq --argjson expected "$2" --exit-status \
+                    '.spec.activeDeadlineSeconds == $expected' \
+                    "${collector_job}"
+                done
+
+                # The mutation is scoped to the Kargo garbage collector only.
+                jq '
+                  .metadata.generateName = "unrelated-kargo-job-conformance-" |
+                  .metadata.labels["app.kubernetes.io/component"] = "unrelated-job"
+                ' "${collector_job_request}" >"${nonmatching_job_request}"
+                kubectl create --dry-run=server --output=json \
+                  --filename="${nonmatching_job_request}" >"${collector_job}"
+                jq --exit-status '(.spec | has("activeDeadlineSeconds")) == false' "${collector_job}"
+
+                # Local clusters must not contain a placeholder public issuer.
+                test "$(kubectl get clusterissuer public-acme --ignore-not-found --output=name)" = ""

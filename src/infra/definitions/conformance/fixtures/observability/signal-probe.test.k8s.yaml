@@ -1,0 +1,98 @@
+# Generates verifiable log events and CPU workload signals to defend end-to-end telemetry ingestion, attribution, and queryability across clusters.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: observability-signal-probe
+  namespace: ($probeNamespace)
+  labels:
+    app.kubernetes.io/component: telemetry-signal
+    app.kubernetes.io/managed-by: chainsaw
+    app.kubernetes.io/name: observability-signal-probe
+    availability-class: be
+    latency-class: ls
+spec:
+  activeDeadlineSeconds: 900
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: signal
+      image: ($values.busyboxImage)
+      command: [sh, -ceu]
+      args:
+        - |-
+          while :; do
+            printf '{"level":"info","message":"observability-signal %s","probe_uid":"%s"}\n' \
+              "${PROBE_UID}" "${PROBE_UID}"
+            for level in Information SUCCESS DEBUG+3 Warning; do
+              printf '{"level":"%s","message":"observability-severity %s %s"}\n' \
+                "${level}" "${level}" "${PROBE_UID}"
+            done
+            event_time="$(date +%s).123456"
+            printf '{"level":"Information","date_time":"%s","message":"observability-time %s","event_time":"%s"}\n' \
+              "${event_time}" "${PROBE_UID}" "${event_time}"
+            rfc3339_time="$(date -u +%Y-%m-%dT%H:%M:%S).123456Z"
+            space_time="$(date -u '+%Y-%m-%d %H:%M:%S').123456"
+            slash_time="$(date -u '+%Y/%m/%d %H:%M:%S')"
+            klog_time="$(date -u '+%m%d %H:%M:%S').123456"
+            printf '%s\tINFO\tprobe.go:42\tobservability-console %s\t{"probe_context":"%s"}\n' \
+              "${rfc3339_time}" "${PROBE_UID}" "${PROBE_UID}"
+            printf '%s INFO grpclog/grpclog.go:141 [core][Channel #3075] Channel created for target "probe-%s:4000"\n' \
+              "${rfc3339_time}" "${PROBE_UID}"
+            printf '%s INFO grpclog/grpclog.go:141 [core][Channel #3075 SubChannel #3076] Subchannel created for probe %s\n' \
+              "${rfc3339_time}" "${PROBE_UID}"
+            printf '%s INF observability-inf %s\n' "${rfc3339_time}" "${PROBE_UID}"
+            printf '%s [debu] observability-coder %s\n' "${space_time}" "${PROBE_UID}"
+            printf '%s observability-slash %s\n' "${slash_time}" "${PROBE_UID}"
+            printf 'I%s       1 probe.go:43] observability-klog %s\n' \
+              "${klog_time}" "${PROBE_UID}"
+            printf 'I%s probe.go:45 observability-klog-no-pid %s\n' \
+              "${klog_time}" "${PROBE_UID}"
+            printf 'E%s       1 probe.go:46] observability-klog-error %s\n' \
+              "${klog_time}" "${PROBE_UID}"
+            printf '[%s][1][warning][probe] [probe.cc:44] observability-envoy %s\n' \
+              "${space_time}" "${PROBE_UID}"
+            printf '%s observability-embedded [warning] %s\n' \
+              "${slash_time}" "${PROBE_UID}"
+            printf 'time=%s level=INFO msg="Event occurred" action=Synced note="Successfully synced Bundle %s" probe_uid=%s\n' \
+              "${rfc3339_time}" "${PROBE_UID}" "${PROBE_UID}"
+            printf '{"level":"error","message":"Failed to process request","error":"forbidden for probe %s","probe_uid":"%s"}\n' \
+              "${PROBE_UID}" "${PROBE_UID}"
+            printf "{\"level\":\"ERROR\",\"message\":\"GRPC Server Exception\",\"exception\":\"(type=<class 'probe.ProbeError'>, value=ProbeError(actionable %s), traceback=<traceback object at 0x1>)\",\"probe_uid\":\"%s\"}\n" \
+              "${PROBE_UID}" "${PROBE_UID}"
+            printf '{"record":{"error_severity":"WARNING","message":"observability-record %s"},"probe_uid":"%s"}\n' \
+              "${PROBE_UID}" "${PROBE_UID}"
+            printf '{"level":"info","msg":"request","method":"GET","path":"/probe/%s","status":200,"probe_uid":"%s"}\n' \
+              "${PROBE_UID}" "${PROBE_UID}"
+            printf '{"level":"info","msg":"::RECEIVED-REQUEST::","http.route":"/query/%s","http.response.status_code":200,"probe_uid":"%s"}\n' \
+              "${PROBE_UID}" "${PROBE_UID}"
+            printf '{"method":"GET","path":"/envoy/%s","response_code":200,"probe_uid":"%s"}\n' \
+              "${PROBE_UID}" "${PROBE_UID}"
+            printf '{"level":"Level(-3)","message":"observability-trace %s"}\n' "${PROBE_UID}"
+            printf 'panic: observability-stack %s\n' "${PROBE_UID}"
+            printf '{"level":"Warning","message":"observability-stderr %s"}\n' "${PROBE_UID}" >&2
+            printf 'observability-unlevelled-stderr %s\n' "${PROBE_UID}" >&2
+            printf 'main.worker()\n\t/go/src/main.go:42\n'
+            iteration=0
+            while test "${iteration}" -lt 250000; do
+              iteration="$(( iteration + 1 ))"
+            done
+            sleep 1
+          done
+      env:
+        - name: PROBE_UID
+          valueFrom:
+            fieldRef: {fieldPath: metadata.uid}
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true

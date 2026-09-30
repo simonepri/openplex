@@ -1,0 +1,21 @@
+# Proves k8s-cleaner corrupt image cross-node anomaly detection policy flags defective nodes in dry-run mode without mutating live workloads.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cleaner-corrupt-image-detection
+  labels:
+    cadence: commit
+    capability: resilience
+    mutates: scratch
+spec:
+  namespace: conformance-workloads
+  concurrent: false
+  timeouts:
+    exec: 2m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            args:
+              - scripts/check_cleaner_corrupt_image.sh

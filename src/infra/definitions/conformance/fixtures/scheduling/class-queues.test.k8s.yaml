@@ -1,0 +1,19 @@
+# Binds team LocalQueues to platform ClusterQueues to defend Kueue availability class routing and workload priority enforcement.
+
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: {name: ha, namespace: availability-classes-e2e}
+spec:
+  clusterQueue: team-examples-ha
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: {name: wa, namespace: availability-classes-e2e}
+spec:
+  clusterQueue: team-examples-wa
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: {name: be, namespace: availability-classes-e2e}
+spec:
+  clusterQueue: team-examples-be

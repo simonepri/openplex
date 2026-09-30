@@ -1,0 +1,28 @@
+# Probes Rclone CSI volume mounting with an unauthorized foreign alias to defend team admission rejection of cross-team storage access.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rclone-csi-foreign-alias-probe
+  namespace: team-examples-workspaces
+  labels:
+    app.kubernetes.io/name: coder-workspace
+    availability-class: be
+    cost-center: examples
+    environment: production
+    latency-class: ls
+    team: examples
+spec:
+  containers:
+    - name: probe
+      image: ($values.busyboxImage)
+      command: [sleep]
+      args: [1]
+      volumeMounts: [{mountPath: /s3/eaws-lh1/home, name: home}]
+  serviceAccountName: coder-workspace
+  volumes:
+    - name: home
+      csi:
+        driver: rclone.csi.veloxpack.io
+        nodePublishSecretRef: {name: team-s3}
+        volumeAttributes: {gid: "1000", remote: another-team, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
