@@ -1,0 +1,7 @@
+# Exercises local and cross-region gateway routes with two registered cells.
+
+crossRegionListener: https
+flociS3Endpoint: http://floci.example.invalid:4566
+targetCell: cell-eaws-lh1
+registeredCells: [cell-aws-usw2, cell-eaws-lh1]
+writerCell: cell-eaws-lh1

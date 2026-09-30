@@ -1,0 +1,18 @@
+# Defines namespace for cell S3 gateway backends and endpoints, enforcing the restricted Pod Security Standard.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: s3-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-system
+    app.kubernetes.io/part-of: data-plane
+    cost-center: shared-infrastructure
+    environment: production
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest

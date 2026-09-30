@@ -1,0 +1,8 @@
+# Packages non-secret S3 gateway routing and backend configuration rendered from the fleet registration topology.
+
+apiVersion: v2
+name: s3-gateway
+description: Non-secret configuration for the platform S3 gateway.
+type: application
+version: 0.1.0
+appVersion: 1.0.0

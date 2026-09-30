@@ -1,0 +1,233 @@
+# Defines s3 URI resolver service translating virtual S3 coordinates into direct physical store locations.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: s3-resolver
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: s3-resolver
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: s3-resolver-token-reviewer
+  labels:
+    app.kubernetes.io/component: s3-resolver
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+rules:
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: s3-resolver-token-reviewer
+  labels:
+    app.kubernetes.io/component: s3-resolver
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+subjects:
+  - kind: ServiceAccount
+    name: s3-resolver
+    namespace: s3-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: s3-resolver-token-reviewer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3-resolver
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: s3-resolver
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+spec:
+  selector:
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/component: s3-resolver
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s3-resolver
+  namespace: s3-system
+  annotations:
+    ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+      S3 resolver operates as a singleton proxy and uses Recreate strategy during updates.
+  labels:
+    app.kubernetes.io/component: s3-resolver
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: s3-gateway
+      app.kubernetes.io/component: s3-resolver
+  template:
+    metadata:
+      annotations:
+        ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+          S3 resolver operates as a singleton proxy and uses Recreate strategy during updates.
+      labels:
+        app.kubernetes.io/name: s3-gateway
+        app.kubernetes.io/component: s3-resolver
+        app.kubernetes.io/part-of: data-plane
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      priorityClassName: node-agents
+      serviceAccountName: s3-resolver
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: resolver
+          image: docker.io/cluster/s3-resolver@sha256:3e471daeeb9bc10d25649e42778b54ddea0289bdb52b111bbae7c543e69b5196
+          imagePullPolicy: IfNotPresent
+          command: [/ko-app/s3-resolver]
+          env:
+            - name: TOPOLOGY_CONFIG
+              value: /etc/s3-resolver/topology.json
+            - name: PORT
+              value: "8080"
+            - name: KUBERNETES_TOKEN_AUDIENCE
+              value: s3-resolver
+            - name: KUBERNETES_TOKEN_PATH
+              value: /var/run/secrets/tokens/token
+            - name: KUBERNETES_CA_PATH
+              value: /var/run/secrets/tokens/ca.crt
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          startupProbe:
+            failureThreshold: 30
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+          volumeMounts:
+            - mountPath: /etc/s3-resolver
+              name: topology
+              readOnly: true
+            - mountPath: /var/run/secrets/tokens
+              name: serviceaccount-token
+              readOnly: true
+      volumes:
+        - name: topology
+          configMap:
+            name: s3-resolver-topology
+        - name: serviceaccount-token
+          projected:
+            defaultMode: 256
+            sources:
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - {key: ca.crt, path: ca.crt}
+              - serviceAccountToken:
+                  expirationSeconds: 3600
+                  path: token
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: s3-resolver
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: s3-resolver
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: s3-gateway
+      app.kubernetes.io/component: s3-resolver
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+              gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
+      ports:
+        - {port: http, protocol: TCP}
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: [coder-workspace-backup-system, kube-system, s3-system]
+      ports:
+        - {port: http, protocol: TCP}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/component: storage-projection
+      ports:
+        - {port: http, protocol: TCP}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # Kubernetes API server
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}

@@ -1,0 +1,44 @@
+# Helm values for CloudNativePG Barman Cloud plugin handling PostgreSQL cloud backups and recovery.
+
+image:
+  registry: ghcr.io
+  repository: cloudnative-pg/plugin-barman-cloud
+  tag: v0.15.0@sha256:563c680fe7fda3466ca2b1f55a1397ed2ddc9e760360107dd7724f1959c1a536
+sidecarImage:
+  registry: ghcr.io
+  repository: cloudnative-pg/plugin-barman-cloud-sidecar
+  tag: v0.15.0@sha256:06c78deca670525daa35fb1e5323159092785d11cf87b86217bdd5c679a41a84
+crds:
+  create: true
+updateStrategy:
+  type: Recreate
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile: {type: RuntimeDefault}
+  capabilities: {drop: [ALL]}
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile: {type: RuntimeDefault}
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: 250m, memory: 256Mi}
+certificate:
+  createClientCertificate: true
+  createServerCertificate: true
+  createIssuer: true
+replicaCount: 2
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: barman-cloud
+              app.kubernetes.io/name: plugin-barman-cloud
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+topologySpreadConstraints: []
+

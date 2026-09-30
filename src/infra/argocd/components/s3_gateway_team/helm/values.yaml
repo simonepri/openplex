@@ -1,0 +1,8 @@
+# Configures default values for the s3-gateway-team Helm chart.
+
+team: ""
+provider: ""
+authAdapter: ""
+targetCell: ""
+topology: {}
+identity: {}

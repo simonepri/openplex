@@ -1,0 +1,90 @@
+# Configures provider-neutral base Helm values and metrics settings for Velero backup services.
+
+backupsEnabled: true
+# Argo CD owns and reconciles the 13 rendered Velero CRDs directly. The
+# chart's Helm-only pre-upgrade Job duplicates that ownership and serializes
+# four hook resources before every sync, which can deadlock on a stale remote
+# discovery cache while an aggregated API is starting.
+upgradeCRDs: false
+configuration:
+  backupStorageLocation: []
+  defaultBackupStorageLocation: default
+  extraEnvVars:
+    - {name: HOME, value: /scratch}
+credentials:
+  useSecret: false
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities: {drop: [ALL]}
+  readOnlyRootFilesystem: true
+deployNodeAgent: true
+nodeAgent:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+extraVolumes:
+  - name: repository-config
+    emptyDir: {sizeLimit: 16Mi}
+extraVolumeMounts:
+  - name: repository-config
+    mountPath: /udmrepo
+image:
+  repository: docker.io/velero/velero
+  tag: v1.18.4@sha256:c89fb5b6d1fd6afd368e0f483e6f5555fd62851a1eada8ac5c72482e674ca17b
+initContainers:
+  - name: velero-plugin-for-aws
+    image: >-
+      docker.io/velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      readOnlyRootFilesystem: true
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+  - name: velero-plugin-for-gcp
+    image: >-
+      docker.io/velero/velero-plugin-for-gcp:v1.14.4@sha256:9ff587ba5815f07c2cd1d7e446f12c46aba0218bdc583d19f272b2879232ad9d
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities: {drop: [ALL]}
+      readOnlyRootFilesystem: true
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+podSecurityContext:
+  fsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile: {type: RuntimeDefault}
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+schedules:
+  cluster-daily:
+    disabled: false
+    schedule: "17 2 * * *"
+    template:
+      excludedResources: [events, events.events.k8s.io, leases.coordination.k8s.io, nodes]
+      includeClusterResources: true
+      includedResources: ["*"]
+      snapshotVolumes: false
+      storageLocation: default
+      ttl: 720h0m0s
+serviceAccount:
+  server:
+    create: true
+    name: velero-server
+snapshotsEnabled: false
