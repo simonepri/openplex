@@ -1,0 +1,8 @@
+# Declares the Envoy Gateway instance chart providing cluster Gateway API, EnvoyProxy, and listener resources.
+
+apiVersion: v2
+name: envoy-gateway-instance
+description: Provider-neutral Envoy Gateway instance contract.
+type: application
+version: 0.1.0
+appVersion: 1.0.0

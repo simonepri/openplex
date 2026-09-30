@@ -1,0 +1,55 @@
+{{- /* Configures KEDA ScaledObject for Envoy Gateway proxies when autoscaling is enabled. */ -}}
+
+{{- if and .Values.foundation.enabled .Values.proxy.autoscaling.enabled .Values.gateway.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ .Values.proxy.deployment.name }}
+  namespace: {{ .Values.proxy.namespace }}
+  labels:
+    {{- include "envoy-gateway-instance.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ .Values.proxy.deployment.name }}}
+  pollingInterval: {{ .Values.proxy.autoscaling.pollingInterval }}
+  cooldownPeriod: {{ .Values.proxy.autoscaling.cooldownPeriod }}
+  minReplicaCount: {{ .Values.proxy.autoscaling.minReplicas }}
+  maxReplicaCount: {{ .Values.proxy.autoscaling.maxReplicas }}
+  fallback:
+    failureThreshold: {{ .Values.proxy.autoscaling.fallback.failureThreshold }}
+    replicas: {{ .Values.proxy.autoscaling.fallback.replicas }}
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies: [{type: Percent, value: 100, periodSeconds: 30}]
+        scaleDown:
+          stabilizationWindowSeconds: 600
+          policies: [{type: Pods, value: 1, periodSeconds: 300}]
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.proxy.autoscaling.prometheus.serverAddress | quote }}
+        metricName: envoy_shared_active_requests
+        query: sum(envoy_http_downstream_rq_active{cluster={{ .Values.proxy.autoscaling.prometheus.cluster | quote }}})
+        threshold: {{ .Values.proxy.autoscaling.prometheus.activeRequestsPerReplica | quote }}
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.proxy.autoscaling.prometheus.serverAddress | quote }}
+        metricName: envoy_shared_active_connections
+        query: sum(envoy_http_downstream_cx_active{cluster={{ .Values.proxy.autoscaling.prometheus.cluster | quote }}})
+        threshold: {{ .Values.proxy.autoscaling.prometheus.activeConnectionsPerReplica | quote }}
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.proxy.autoscaling.prometheus.serverAddress | quote }}
+        metricName: envoy_shared_bytes_per_second
+        query: sum(rate(envoy_http_downstream_cx_rx_bytes_total{cluster={{ .Values.proxy.autoscaling.prometheus.cluster | quote }}}[2m]) + rate(envoy_http_downstream_cx_tx_bytes_total{cluster={{ .Values.proxy.autoscaling.prometheus.cluster | quote }}}[2m]))
+        threshold: {{ .Values.proxy.autoscaling.prometheus.bytesPerSecondPerReplica | quote }}
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.proxy.autoscaling.prometheus.serverAddress | quote }}
+        metricName: envoy_shared_p95_request_seconds
+        query: histogram_quantile(0.95, sum by (le) (rate(envoy_http_downstream_rq_time_bucket{cluster={{ .Values.proxy.autoscaling.prometheus.cluster | quote }}}[2m]))) / 1000
+        threshold: {{ .Values.proxy.autoscaling.prometheus.p95RequestSeconds | quote }}
+{{- end }}

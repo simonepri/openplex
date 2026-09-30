@@ -1,0 +1,3 @@
+{{- /* Defines reject incomplete runtime joins before rendering any route objects. */ -}}
+
+{{- include "routing-registry.validate" . -}}

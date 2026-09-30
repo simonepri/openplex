@@ -1,0 +1,234 @@
+{{- /* Renders Gateway API listener and address resources for the gateway instance. */ -}}
+
+{{- if .Values.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gateway.name }}
+  namespace: {{ .Values.gateway.namespace }}
+  annotations: {argocd.argoproj.io/sync-wave: "0"}
+  labels:
+    {{- include "envoy-gateway-instance.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.gateway.className }}
+  listeners:
+    {{- if .Values.gateway.listeners.atlantisWebhookHttps.enabled }}
+    - name: atlantis-webhook-https
+      hostname: {{ required "Atlantis webhook HTTPS requires an exact hostname" .Values.gateway.listeners.atlantisWebhookHttps.hostname | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: {{ required "Atlantis webhook HTTPS requires a certificate Secret" .Values.gateway.listeners.atlantisWebhookHttps.certificateSecret }}
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+    {{- end }}
+    {{- if and .Values.gateway.listeners.coderApps.enabled .Values.gateway.listeners.http.enabled }}
+    - name: coder-apps-http
+      hostname: {{ required "Coder applications require a wildcard hostname" .Values.gateway.listeners.coderApps.hostname | quote }}
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.gateway.allowedNamespaces | nindent 18 }}
+    {{- end }}
+    {{- if .Values.gateway.listeners.coderApps.enabled }}
+    - name: coder-apps-https
+      hostname: {{ required "Coder applications require a wildcard hostname" .Values.gateway.listeners.coderApps.hostname | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: {{ required "Coder applications require a certificate Secret" .Values.gateway.listeners.coderApps.certificateSecret }}
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.gateway.allowedNamespaces | nindent 18 }}
+    {{- end }}
+    {{- if .Values.gateway.listeners.http.enabled }}
+    - name: http
+      hostname: {{ printf "*.%s" .Values.gateway.baseDomain | quote }}
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.gateway.allowedNamespaces | nindent 18 }}
+    {{- end }}
+    {{- if and .Values.gateway.listeners.http.enabled .Values.gateway.aliasDomain }}
+    - name: http-alias
+      hostname: {{ printf "*.%s" .Values.gateway.aliasDomain | quote }}
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.gateway.allowedNamespaces | nindent 18 }}
+    {{- end }}
+    {{- if .Values.gateway.listeners.s3Http.enabled }}
+    - name: s3-http
+      hostname: {{ .Values.gateway.listeners.s3Http.hostname | quote }}
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: s3-system
+    {{- end }}
+    {{- if .Values.gateway.listeners.s3Https.enabled }}
+    - name: s3-https
+      hostname: {{ required "S3 HTTPS requires an exact hostname" .Values.gateway.listeners.s3Https.hostname | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: {{ required "S3 HTTPS requires a certificate Secret" .Values.gateway.listeners.s3Https.certificateSecret }}
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: s3-system
+    {{- end }}
+    {{- if .Values.gateway.listeners.https.enabled }}
+    - name: https
+      hostname: {{ default (printf "*.%s" .Values.gateway.baseDomain) .Values.gateway.listeners.https.hostname | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: {{ required "HTTPS requires a certificate Secret" .Values.gateway.listeners.https.certificateSecret }}
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.gateway.allowedNamespaces | nindent 18 }}
+    {{- end }}
+    {{- if and .Values.gateway.listeners.https.enabled .Values.gateway.aliasDomain }}
+    - name: https-alias
+      hostname: {{ printf "*.%s" .Values.gateway.aliasDomain | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: {{ required "HTTPS aliases require a certificate Secret" .Values.gateway.listeners.https.aliasCertificateSecret }}
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.gateway.allowedNamespaces | nindent 18 }}
+    {{- end }}
+    {{- if .Values.gateway.listeners.kubeOidcTls.enabled }}
+    - name: kube-oidc-tls
+      hostname: {{ required "Kubernetes OIDC proxy TLS passthrough requires a hostname" .Values.gateway.listeners.kubeOidcTls.hostname | quote }}
+      port: 443
+      protocol: TLS
+      tls: {mode: Passthrough}
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.gateway.allowedNamespaces | nindent 18 }}
+    {{- end }}
+    {{- if .Values.gateway.listeners.tls.enabled }}
+    - name: tls
+      hostname: {{ required "TLS passthrough requires a hostname" .Values.gateway.listeners.tls.hostname | quote }}
+      port: 443
+      protocol: TLS
+      tls:
+        mode: Passthrough
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.gateway.allowedNamespaces | nindent 18 }}
+    {{- end }}
+    {{- if .Values.gateway.listeners.dragonflyManagerTls.enabled }}
+    - name: dragonfly-manager-tls
+      hostname: {{ required "Dragonfly Manager TLS passthrough requires a hostname" .Values.gateway.listeners.dragonflyManagerTls.hostname | quote }}
+      port: 443
+      protocol: TLS
+      tls:
+        mode: Passthrough
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml .Values.gateway.allowedNamespaces | nindent 18 }}
+    {{- end }}
+    {{- if .Values.gateway.listeners.headscaleBootstrapTls.enabled }}
+    - name: headscale-bootstrap-tls
+      hostname: {{ required "Headscale bootstrap TLS passthrough requires a hostname" .Values.gateway.listeners.headscaleBootstrapTls.hostname | quote }}
+      port: 443
+      protocol: TLS
+      tls: {mode: Passthrough}
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: headscale
+    {{- end }}
+{{- end }}

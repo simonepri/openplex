@@ -1,0 +1,20 @@
+# Exercises the authenticated public Atlantis webhook. Private routes and direct cluster services must not appear in this render.
+
+phase: application
+exposure: public
+capabilities: {buildbuddy: true}
+atlantisEnabled: true
+gatewayOIDC: {}
+target:
+  name: ctrl-cloud
+  provider: aws
+  role: ctrl
+gateway:
+  aliasDomain: ""
+  baseDomain: ctrl-cloud.c.corp.local.internal
+  canonicalScheme: https
+  httpRedirect: false
+  name: public
+  namespace: envoy-gateway-system
+  routeSections:
+    atlantis-webhook: atlantis-webhook-https

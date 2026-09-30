@@ -1,0 +1,284 @@
+{{- /* Configures HTTPRoute and authentication filters for private Ray dashboard access. */ -}}
+
+{{- if and (or (eq .Values.phase "application") (eq .Values.phase "all")) (eq (default "cell" .Values.target.role) "cell") (eq .Values.exposure "private") (eq (default "private-access" .Values.gateway.name) "private-access") }}
+{{- $rayHostname := printf "ray-dashboard.%s" .Values.gateway.baseDomain -}}
+{{- $dexIssuer := required "cell Ray dashboard requires gatewayOIDC.issuer" .Values.gatewayOIDC.issuer -}}
+{{- $dexHost := regexReplaceAll "^https?://([^/]+).*" $dexIssuer "${1}" -}}
+{{- $dexJwks := required "cell Ray dashboard requires gatewayOIDC.jwksUri" .Values.gatewayOIDC.jwksUri -}}
+# Gateway integration and OIDC authorization for cell Ray dashboards.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ray-dashboard
+  namespace: {{ .Values.gateway.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberay
+    app.kubernetes.io/part-of: kuberay
+data:
+  hostname: {{ $rayHostname }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ray-dashboard-oidc
+  namespace: {{ .Values.gateway.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberay
+    app.kubernetes.io/part-of: kuberay
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: runtime-secrets
+  target:
+    name: ray-dashboard-oidc
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: client-id
+      remoteRef:
+        key: application-oidc
+        property: ray_dashboard_client_id
+    - secretKey: client-secret
+      remoteRef:
+        key: application-oidc
+        property: ray_dashboard_client_secret
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ray-dashboard-context-reader
+  namespace: {{ .Values.gateway.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberay
+    app.kubernetes.io/part-of: kuberay
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [ray-dashboard]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ray-dashboard-context-reader
+  namespace: {{ .Values.gateway.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberay
+    app.kubernetes.io/part-of: kuberay
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ray-dashboard-context-reader
+subjects:
+  - kind: ServiceAccount
+    name: kyverno-admission-controller
+    namespace: kyverno-system
+  - kind: ServiceAccount
+    name: kyverno-background-controller
+    namespace: kyverno-system
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: ray-dashboard-oidc
+  namespace: {{ .Values.gateway.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberay
+    app.kubernetes.io/part-of: kuberay
+spec:
+  endpoints:
+    - fqdn:
+        hostname: {{ $dexHost }}
+        port: 443
+  tls:
+    autoSNIFromEndpointHostname: true
+    caCertificateRefs:
+      - group: ""
+        kind: ConfigMap
+        name: cluster-local-ca
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: ray-dashboard-oidc
+  namespace: {{ .Values.gateway.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberay
+    app.kubernetes.io/part-of: kuberay
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: ray-dashboard-callback
+  oidc:
+    provider:
+      issuer: {{ $dexIssuer }}
+      authorizationEndpoint: {{ trimSuffix "/" $dexIssuer }}/auth
+      tokenEndpoint: {{ trimSuffix "/" $dexIssuer }}/token
+      endSessionEndpoint: {{ trimSuffix "/" $dexIssuer }}/logout
+      backendRefs:
+        - group: gateway.envoyproxy.io
+          kind: Backend
+          name: ray-dashboard-oidc
+          port: 443
+          weight: 1
+    clientIDRef:
+      group: ""
+      kind: Secret
+      name: ray-dashboard-oidc
+    clientSecret:
+      group: ""
+      kind: Secret
+      name: ray-dashboard-oidc
+    cookieNames:
+      accessToken: AccessToken-RayDashboard
+      idToken: IdToken-RayDashboard
+    disableTokenEncryption: true
+    forwardAccessToken: false
+    passThroughAuthHeader: false
+    refreshToken: true
+    redirectURL: https://{{ $rayHostname }}/oauth2/callback
+    scopes:
+      # keep-sorted start
+      - email
+      - groups
+      - openid
+      - profile
+      # keep-sorted end
+  jwt:
+    providers:
+      - name: ray-dashboard
+        issuer: {{ $dexIssuer }}
+        audiences: [ray-dashboard]
+        remoteJWKS:
+          uri: {{ $dexJwks }}
+          cacheDuration: 300s
+          backendRefs:
+            - group: gateway.envoyproxy.io
+              kind: Backend
+              name: ray-dashboard-oidc
+              port: 443
+              weight: 1
+        extractFrom:
+          cookies: [IdToken-RayDashboard]
+  authorization:
+    defaultAction: Deny
+    rules:
+      - name: oidc-protocol
+        action: Allow
+        cel: request.url_path == '/oauth2/callback' || request.url_path == '/logout'
+      - name: team-examples
+        action: Allow
+        operation:
+          path:
+            type: PathPrefix
+            value: /teams/examples/
+            invert: false
+        principal:
+          jwt:
+            provider: ray-dashboard
+            claims:
+              - name: groups
+                valueType: StringArray
+                values: ['team:examples']
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: ray-dashboard-oidc-recovery
+  namespace: {{ .Values.gateway.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberay
+    app.kubernetes.io/part-of: kuberay
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: ray-dashboard-callback
+  responseOverride:
+    - match:
+        statusCodes:
+          - type: Value
+            value: 401
+      redirect:
+        path:
+          type: ReplaceFullPath
+          replaceFullPath: /
+        statusCode: 302
+      source: Local
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ray-dashboard-callback
+  namespace: {{ .Values.gateway.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/component: ray-dashboard
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberay
+    app.kubernetes.io/part-of: kuberay
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: private-access
+      sectionName: https
+  hostnames: [{{ $rayHostname }}]
+  rules:
+    - matches:
+        - path: {type: Exact, value: /logout}
+        - path: {type: Exact, value: /oauth2/callback}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ray-dashboard-http-redirect
+  namespace: {{ .Values.gateway.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: ray-dashboard
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kuberay
+    app.kubernetes.io/part-of: kuberay
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: private-access
+      sectionName: http
+  hostnames: [{{ $rayHostname }}]
+  rules:
+    - matches:
+        - path: {type: PathPrefix, value: /}
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 308
+{{- end }}

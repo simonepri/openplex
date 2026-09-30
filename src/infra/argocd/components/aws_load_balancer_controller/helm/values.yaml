@@ -1,0 +1,52 @@
+# Helm values for AWS Load Balancer Controller on AWS clusters, configured via cluster annotations.
+
+fullnameOverride: aws-load-balancer-controller
+clusterName: configured-by-applicationset
+region: configured-by-applicationset
+vpcId: configured-by-applicationset
+image:
+  repository: public.ecr.aws/eks/aws-load-balancer-controller
+  tag: v3.5.0@sha256:298acdff5a571731276aaea3d5cc450a264e4ad710a5bddf3e518f68a3f9f6cb
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+  automountServiceAccountToken: true
+rbac: {create: true}
+enableCertManager: false
+enableServiceMutatorWebhook: false
+defaultTargetType: instance
+defaultLoadBalancerScheme: internal
+createIngressClassResource: false
+ingressClassParams: {create: false}
+enableShield: false
+enableWaf: false
+enableWafv2: false
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+configureDefaultAffinity: false
+podDisruptionBudget: {minAvailable: 1}
+replicaCount: 2
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: aws-load-balancer-controller
+              app.kubernetes.io/name: aws-load-balancer-controller
+          topologyKey: kubernetes.io/hostname
+        weight: 100
+topologySpreadConstraints: []
+podSecurityContext:
+  fsGroup: 65534
+  seccompProfile: {type: RuntimeDefault}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities: {drop: [ALL]}
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+

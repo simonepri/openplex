@@ -1,0 +1,4 @@
+# Exercises identity-phase routes in the local Floci topology.
+
+phase: identity
+gatewayOIDC: {}

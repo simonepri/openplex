@@ -1,0 +1,21 @@
+# Exercises private cell routes in the local Floci topology.
+
+phase: application
+exposure: private
+gatewayOIDC:
+  clients: {}
+  groupsClaim: groups
+  issuer: https://dex.c.corp.local.internal
+  jwksUri: https://dex.c.corp.local.internal/keys
+  scopes: [email, groups, openid, profile]
+  version: 1
+target:
+  name: cell-eaws-lh1
+  provider: floci
+  role: cell
+gateway:
+  baseDomain: cell-eaws-lh1.c.corp.local.internal
+  canonicalScheme: https
+  httpRedirect: true
+  name: private-access
+  namespace: envoy-gateway-system

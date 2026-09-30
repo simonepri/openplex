@@ -1,0 +1,32 @@
+# Exercises the canonical Coder application wildcard certificate and dedicated listeners alongside the local alias used by exact control-plane routes.
+
+gateway:
+  enabled: true
+  canonicalScheme: https
+  aliasDomain: corp.local.internal
+  baseDomain: ctrl-eaws-lh1.c.corp.local.internal
+  listeners:
+    coderApps:
+      enabled: true
+      hostname: "*.coder.ctrl-eaws-lh1.c.corp.local.internal"
+      certificateSecret: cluster-tls-coder-apps
+    http:
+      enabled: true
+      redirectToHTTPS: true
+    s3Https:
+      enabled: true
+      hostname: s3-gateway.cell-eaws-lh1.c.corp.local.internal
+      certificateSecret: cluster-tls-s3
+    https:
+      enabled: true
+      certificateSecret: cluster-tls
+      aliasCertificateSecret: cluster-tls-alias
+certificate:
+  enabled: true
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: cluster-local-ca
+  caIssuer:
+    enabled: true
+    secretName: cluster-local-ca

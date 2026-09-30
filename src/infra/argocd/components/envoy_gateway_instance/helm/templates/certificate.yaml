@@ -1,0 +1,63 @@
+{{- /* Renders TLS certificates for terminating HTTPS listeners on the Gateway instance. */ -}}
+
+{{- if .Values.certificate.enabled }}
+{{- $certificates := list -}}
+{{- if .Values.gateway.listeners.https.enabled -}}
+{{- $certificates = append $certificates (dict
+  "name" .Values.gateway.name
+  "secretName" .Values.gateway.listeners.https.certificateSecret
+  "dnsName" (default (printf "*.%s" .Values.gateway.baseDomain) .Values.gateway.listeners.https.hostname)
+) -}}
+{{- end -}}
+{{- if and .Values.gateway.listeners.https.enabled .Values.gateway.aliasDomain -}}
+{{- $certificates = append $certificates (dict
+  "name" (printf "%s-alias" .Values.gateway.name | trunc 63 | trimSuffix "-")
+  "secretName" .Values.gateway.listeners.https.aliasCertificateSecret
+  "dnsName" (printf "*.%s" .Values.gateway.aliasDomain)
+) -}}
+{{- end -}}
+{{- if .Values.gateway.listeners.atlantisWebhookHttps.enabled -}}
+{{- $certificates = append $certificates (dict
+  "name" (printf "%s-atlantis-webhook" .Values.gateway.name | trunc 63 | trimSuffix "-")
+  "secretName" .Values.gateway.listeners.atlantisWebhookHttps.certificateSecret
+  "dnsName" .Values.gateway.listeners.atlantisWebhookHttps.hostname
+) -}}
+{{- end -}}
+{{- if .Values.gateway.listeners.coderApps.enabled -}}
+{{- $certificates = append $certificates (dict
+  "name" (printf "%s-coder-apps" .Values.gateway.name | trunc 63 | trimSuffix "-")
+  "secretName" .Values.gateway.listeners.coderApps.certificateSecret
+  "dnsName" .Values.gateway.listeners.coderApps.hostname
+) -}}
+{{- end -}}
+{{- if .Values.gateway.listeners.s3Https.enabled -}}
+{{- $certificates = append $certificates (dict
+  "name" (printf "%s-s3" .Values.gateway.name | trunc 63 | trimSuffix "-")
+  "secretName" .Values.gateway.listeners.s3Https.certificateSecret
+  "dnsName" .Values.gateway.listeners.s3Https.hostname
+) -}}
+{{- end -}}
+{{- $secretNames := dict -}}
+{{- range $certificate := $certificates }}
+{{- $secretName := required "terminating TLS listeners require a certificate Secret" $certificate.secretName -}}
+{{- if hasKey $secretNames $secretName -}}
+{{- fail (printf "terminating TLS listeners require distinct certificate Secrets; %s is reused" $secretName) -}}
+{{- end -}}
+{{- $_ := set $secretNames $secretName true -}}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $certificate.name }}
+  namespace: {{ $.Values.gateway.namespace }}
+  labels:
+    {{- include "envoy-gateway-instance.labels" $ | nindent 4 }}
+spec:
+  secretName: {{ $secretName }}
+  dnsNames: [{{ required "terminating TLS listeners require a hostname" $certificate.dnsName | quote }}]
+  issuerRef:
+    group: {{ $.Values.certificate.issuerRef.group }}
+    kind: {{ $.Values.certificate.issuerRef.kind }}
+    name: {{ $.Values.certificate.issuerRef.name }}
+{{ end -}}
+{{- end }}
