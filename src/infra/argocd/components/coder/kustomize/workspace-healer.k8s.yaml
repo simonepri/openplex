@@ -1,0 +1,206 @@
+# ConfigMap storing persistent JSON state across workspace healer runs.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coder-workspace-healer-state
+  namespace: coder
+  labels:
+    app.kubernetes.io/component: workspace-healer
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder
+data:
+  state.json: "{}"
+---
+# Permissions for the healer to read and persist reconciliation state in its ConfigMap.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: coder-workspace-healer-state
+  namespace: coder
+  labels:
+    app.kubernetes.io/component: workspace-healer
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [coder-workspace-healer-state]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: coder-workspace-healer-state
+  namespace: coder
+  labels:
+    app.kubernetes.io/component: workspace-healer
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder
+subjects:
+  - kind: ServiceAccount
+    name: coder-oauth-bootstrap
+    namespace: coder
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: coder-workspace-healer-state
+---
+# Deployment continuously reconciling and auto-healing Coder workspaces.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coder-workspace-healer
+  namespace: coder
+  annotations:
+    ignore-check.kube-linter.io/no-readiness-probe: >-
+      Workspace healer is a background controller that does not serve network traffic.
+    ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+      Workspace healer operates as a singleton controller and uses Recreate strategy during updates.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Workspace healer bootstrap requires Coder OIDC credentials via environment.
+  labels:
+    app.kubernetes.io/component: workspace-healer
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: workspace-healer
+      app.kubernetes.io/part-of: coder
+  template:
+    metadata:
+      annotations:
+        ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+          Workspace healer operates as a singleton controller and uses Recreate strategy during updates.
+        ignore-check.kube-linter.io/read-secret-from-env-var: >-
+          Workspace healer bootstrap requires Coder OIDC credentials via environment.
+      labels:
+        app.kubernetes.io/component: workspace-healer
+        app.kubernetes.io/part-of: coder
+    spec:
+      serviceAccountName: coder-oauth-bootstrap
+      automountServiceAccountToken: false
+      securityContext:
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: bootstrap-healer-token
+          image: docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              if [ -s "/var/run/coder/session-token/coder-session-token" ]; then
+                cp /var/run/coder/session-token/coder-session-token /state/coder-session-token
+                exit 0
+              fi
+              cat /etc/ssl/certs/ca-certificates.crt /etc/local-ca/ca.crt > /state/ca-bundle.crt 2>/dev/null || cat /etc/ssl/certs/ca-certificates.crt > /state/ca-bundle.crt
+              exec python /program/bootstrap_healer_session.py
+          env:
+            - {name: CODER_URL, value: 'http://coder.coder.svc.cluster.local'}
+            - name: CODER_BOOTSTRAP_URL
+              valueFrom: {secretKeyRef: {name: coder-oidc, key: CODER_ACCESS_URL}}
+            - name: CODER_BOOTSTRAP_OIDC_ISSUER
+              valueFrom: {secretKeyRef: {name: coder-oidc, key: CODER_OIDC_ISSUER_URL}}
+            - name: CODER_BOOTSTRAP_OIDC_USERNAME
+              valueFrom: {secretKeyRef: {name: coder-oidc, key: CODER_BOOTSTRAP_OIDC_USERNAME}}
+            - name: CODER_BOOTSTRAP_OIDC_PASSWORD
+              valueFrom: {secretKeyRef: {name: coder-oidc, key: CODER_BOOTSTRAP_OIDC_PASSWORD}}
+            - {name: CODER_SESSION_TOKEN_FILE, value: /state/coder-session-token}
+            - {name: SSL_CERT_FILE, value: /state/ca-bundle.crt}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: program, mountPath: /program, readOnly: true}
+            - {name: session-token, mountPath: /var/run/coder/session-token, readOnly: true}
+            - {name: local-ca, mountPath: /etc/local-ca, readOnly: true}
+            - {name: oauth-bootstrap, mountPath: /var/run/coder/oauth-bootstrap, readOnly: true}
+            - {name: state, mountPath: /state}
+      containers:
+        - name: healer
+          image: docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df
+          command: [python3, -u, /program/workspace_healer.py]
+          args:
+            - --continuous
+            - --interval-seconds
+            - "120"
+            - --heartbeat-file
+            - /tmp/healer-healthy
+            - --coder-url
+            - http://coder.coder.svc.cluster.local
+            - --token-file
+            - /state/coder-session-token
+            - --state-file
+            - /tmp/state.json
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 50m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: {type: RuntimeDefault}
+          livenessProbe:
+            exec:
+              command:
+                - cat
+                - /tmp/healer-healthy
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          volumeMounts:
+            - {name: program, mountPath: /program, readOnly: true}
+            - {name: state, mountPath: /state, readOnly: true}
+            - {name: oauth-bootstrap, mountPath: /var/run/coder/oauth-bootstrap, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: program
+          configMap:
+            name: coder-workspace-healer
+            defaultMode: 365
+        - name: session-token
+          secret:
+            secretName: coder-template-publication
+            optional: true
+            defaultMode: 292
+            items:
+              - {key: publisher-token, path: coder-session-token}
+        - name: oauth-bootstrap
+          projected:
+            defaultMode: 288
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items: [{key: ca.crt, path: ca.crt}]
+        - name: local-ca
+          configMap:
+            name: cluster-local-ca
+            optional: true
+            items:
+              - {key: ca.crt, path: ca.crt}
+        - name: state
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}

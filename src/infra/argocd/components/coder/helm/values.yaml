@@ -1,0 +1,167 @@
+# Shared Helm values for Coder remote development control plane and workspace services.
+
+# NOTE(simonepri): Coder operates as a single replica because upstream chart
+# high-availability (replicaCount > 1) requires a Coder Enterprise license.
+coder:
+  replicaCount: 1
+  telemetry:
+    enable: false
+  apps:
+    enablePathBased: false
+  image:
+    repo: ghcr.io/coder/coder
+    tag: v2.37.3@sha256:a48f82c2c437e032ce3f6970b4e937a7900cad3c76956956955099465b45e542
+  initContainers:
+    - name: ca-bundle
+      image: ghcr.io/coder/coder:v2.37.2@sha256:a48f82c2c437e032ce3f6970b4e937a7900cad3c76956956955099465b45e542
+      command: [/bin/sh, -ec]
+      args:
+        - cat /etc/ssl/certs/ca-certificates.crt /etc/local-ca/ca.crt > /state/ca-bundle.crt
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 64Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      volumeMounts:
+        - name: cluster-local-ca
+          mountPath: /etc/local-ca
+          readOnly: true
+        - name: coder-tmp
+          mountPath: /state
+    - name: provisioner-auth
+      image: quay.io/argoproj/argocd:v3.5.3@sha256:dd3f47d5a5e4da563a7a398506e892481b358a7cec50abdf320c71aa55904bfa
+      command: [cp, /usr/local/bin/argocd-k8s-auth, /auth/argocd-k8s-auth]
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 64Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile: {type: RuntimeDefault}
+      volumeMounts:
+        - name: coder-provisioner-auth
+          mountPath: /auth
+  env:
+    - {name: CODER_AI_GATEWAY_ENABLED, value: "false"}
+    - {name: CODER_EXPERIMENTS, value: "oauth2"}
+    - {name: CODER_TELEMETRY_ENABLE, value: "false"}
+    - {name: CODER_DANGEROUS_DISABLE_PATH_APPS, value: "true"}
+    - {name: CODER_DISABLE_PASSWORD_AUTH, value: "true"}
+    - {name: CODER_OAUTH2_GITHUB_DEFAULT_PROVIDER_ENABLE, value: "false"}
+    - {name: CODER_PROMETHEUS_ENABLE, value: "true"}
+    - {name: CODER_PROMETHEUS_ADDRESS, value: '0.0.0.0:2112'}
+    - {name: CODER_REDIRECT_TO_ACCESS_URL, value: "false"}
+    - {name: CODER_PROXY_TRUSTED_ORIGINS, value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10"}
+    - {name: CODER_PROXY_TRUSTED_HEADERS, value: "X-Forwarded-Proto,X-Forwarded-For,X-Forwarded-Host"}
+    - {name: CODER_WORKSPACE_AGENT_REGISTRATION_TOKEN_FILE, value: /var/run/cluster/workspace-agent-registration/token}
+    - {name: CODER_WORKSPACE_AGENT_REGISTRATION_URL, value: 'https://headscale-workspace-registration.headscale.svc.cluster.local:8443/v1/workspace-agents/register'}
+    - {name: SSL_CERT_DIR, value: /etc/local-ca}
+    - {name: SSL_CERT_FILE, value: /tmp/ca-bundle.crt}
+    - {name: TF_REGISTRY_CLIENT_TIMEOUT, value: "60"}
+    - {name: TF_REGISTRY_DISCOVERY_RETRY, value: "5"}
+    - name: CODER_PG_CONNECTION_URL
+      valueFrom:
+        secretKeyRef:
+          name: coder-postgres-app
+          key: uri
+  envFrom:
+    - secretRef:
+        name: coder-oidc
+  # CODER_ACCESS_URL is part of the required OIDC input Secret.
+  envUseClusterAccessURL: false
+  podAnnotations:
+    automount-service-account-token: "true"
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Coder requires Postgres connection URL and OIDC configuration via environment.
+    prometheus.io/port: "2112"
+    prometheus.io/scrape: "true"
+  podLabels: {}
+  podSecurityContext:
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    runAsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile: {type: RuntimeDefault}
+  priorityClassName: coder-control-plane
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    readOnlyRootFilesystem: true
+    runAsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 1000
+  resources:
+    requests: {cpu: 50m, memory: 512Mi}
+    limits: {cpu: 500m, memory: 2Gi}
+  readinessProbe:
+    enabled: true
+    failureThreshold: 6
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+  livenessProbe:
+    enabled: true
+    failureThreshold: 12
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+  service:
+    enable: true
+    type: ClusterIP
+  serviceAccount:
+    disableCreate: true
+    name: coder
+    workspacePerms: false
+  volumes:
+    - name: coder-cache
+      emptyDir: {sizeLimit: 1Gi}
+    - name: coder-provisioner-auth
+      emptyDir: {sizeLimit: 256Mi}
+    - name: coder-tmp
+      emptyDir: {sizeLimit: 512Mi}
+    - name: cluster-local-ca
+      configMap:
+        name: cluster-local-ca
+        items:
+          - {key: ca.crt, path: ca.crt}
+    - name: workspace-agent-registration-token
+      projected:
+        defaultMode: 256
+        sources:
+          - serviceAccountToken:
+              audience: workspace-agent-registration
+              expirationSeconds: 600
+              path: token
+    - name: coder-cell-kubeconfig
+      secret:
+        secretName: coder-cell-kubeconfig
+  volumeMounts:
+    - name: coder-cache
+      mountPath: /home/coder/.cache
+    - name: coder-provisioner-auth
+      mountPath: /opt/coder-provisioner-auth
+      readOnly: true
+    - name: coder-tmp
+      mountPath: /tmp
+    - name: cluster-local-ca
+      mountPath: /etc/local-ca
+      readOnly: true
+    - name: workspace-agent-registration-token
+      mountPath: /var/run/cluster/workspace-agent-registration
+      readOnly: true
+    - name: coder-cell-kubeconfig
+      mountPath: /var/run/coder/cell
+      readOnly: true
+  prometheus:
+    enabled: false

@@ -1,0 +1,111 @@
+{{- /* Derives private dashboard routes from admitted RayJob workload definitions. */ -}}
+
+{{- include "team-namespace.validate" . -}}
+{{- if .Values.rayDashboard.enabled }}
+{{- $namespace := include "team-namespace.namespace" . -}}
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: {{ printf "ray-dashboard-routes-%s" $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  validationFailureAction: Enforce
+  webhookConfiguration:
+    failurePolicy: Fail
+    timeoutSeconds: 5
+  rules:
+    - name: stamp-ray-dashboard-contract
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [RayJob]
+              namespaces: [{{ $namespace }}]
+      context:
+        - name: namespaceTeam
+          apiCall:
+            method: GET
+            urlPath: /api/v1/namespaces/{{`{{ request.namespace }}`}}
+            jmesPath: metadata.labels.team
+        - name: rayDashboard
+          configMap:
+            name: ray-dashboard
+            namespace: envoy-gateway-system
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations:
+              dashboard-url: >-
+                https://{{`{{ rayDashboard.data.hostname }}`}}/teams/{{`{{ namespaceTeam }}`}}/namespaces/{{`{{ request.namespace }}`}}/jobs/{{`{{ request.object.metadata.name }}`}}/
+            labels:
+              team: {{`'{{ namespaceTeam }}'`}}
+    - name: generate-ray-dashboard-route
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [RayJob]
+              namespaces: [{{ $namespace }}]
+      context:
+        - name: namespaceTeam
+          apiCall:
+            method: GET
+            urlPath: /api/v1/namespaces/{{`{{ request.namespace }}`}}
+            jmesPath: metadata.labels.team
+        - name: rayDashboard
+          configMap:
+            name: ray-dashboard
+            namespace: envoy-gateway-system
+      generate:
+        apiVersion: gateway.networking.k8s.io/v1
+        kind: HTTPRoute
+        name: {{`'{{ request.object.metadata.name }}'`}}
+        namespace: {{ $namespace }}
+        generateExisting: false
+        synchronize: true
+        data:
+          metadata:
+            labels:
+              app.kubernetes.io/component: ray-dashboard
+              app.kubernetes.io/managed-by: kyverno
+              app.kubernetes.io/name: {{`'{{ request.object.metadata.name }}'`}}
+              team: {{`'{{ namespaceTeam }}'`}}
+          spec:
+            parentRefs:
+              - group: gateway.networking.k8s.io
+                kind: Gateway
+                name: private-access
+                namespace: envoy-gateway-system
+                sectionName: https
+            hostnames: [{{`'{{ rayDashboard.data.hostname }}'`}}]
+            rules:
+              - matches:
+                  - path:
+                      type: Exact
+                      value: /teams/{{`{{ namespaceTeam }}`}}/namespaces/{{`{{ request.namespace }}`}}/jobs/{{`{{ request.object.metadata.name }}`}}
+                filters:
+                  - type: RequestRedirect
+                    requestRedirect:
+                      path:
+                        type: ReplaceFullPath
+                        replaceFullPath: /teams/{{`{{ namespaceTeam }}`}}/namespaces/{{`{{ request.namespace }}`}}/jobs/{{`{{ request.object.metadata.name }}`}}/
+                      statusCode: 308
+              - matches:
+                  - path:
+                      type: PathPrefix
+                      value: /teams/{{`{{ namespaceTeam }}`}}/namespaces/{{`{{ request.namespace }}`}}/jobs/{{`{{ request.object.metadata.name }}`}}/
+                filters:
+                  - type: URLRewrite
+                    urlRewrite:
+                      path: {type: ReplacePrefixMatch, replacePrefixMatch: /}
+                backendRefs:
+                  - group: ""
+                    kind: Service
+                    name: {{`'{{ request.object.metadata.name }}-head-svc'`}}
+                    port: 8265
+                    weight: 1
+{{- end }}

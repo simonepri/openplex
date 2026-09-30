@@ -1,0 +1,14 @@
+# Browser-link plugin defaults keep remote links disabled until the fleet supplies canonical endpoints for a provider with browser-reachable services.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: headlamp-link-plugin-config
+  namespace: headlamp
+  labels:
+    app.kubernetes.io/managed-by: argocd
+data:
+  signoz-observability-links.json: |
+    {"schemaVersion": 1}
+  parca-profile-links.json: |
+    {"schemaVersion": 1}

@@ -1,0 +1,29 @@
+# ClusterRole granting minimal Kubernetes API discovery permissions required by Terraform providers.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: atlantis-api-discovery
+rules:
+  - nonResourceURLs:
+      - /api
+      - /api/*
+      - /apis
+      - /apis/*
+      - /openapi
+      - /openapi/*
+      - /version
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: atlantis-api-discovery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: atlantis-api-discovery
+subjects:
+  - kind: ServiceAccount
+    name: atlantis-apply
+    namespace: atlantis

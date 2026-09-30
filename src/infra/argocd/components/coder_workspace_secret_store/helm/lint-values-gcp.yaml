@@ -1,0 +1,11 @@
+# GCP Helm lint fixture validating workspace secret store rendering with Google Secret Manager.
+
+enabled: true
+namespace: team-examples-workspaces
+provider: gcp
+storeName: org-workspace-backups-team-examples-workspaces
+auth:
+  gcp:
+    clusterLocation: europe-west4
+    clusterName: cell-gcp-euw4
+    projectId: fixture-project

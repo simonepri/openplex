@@ -1,0 +1,145 @@
+{{- /* Generates one singular-source workload Application per promoted project deployment after its namespace foundation exists. Kargo owns image overrides and sync for promoted workloads; submitted workloads run on-demand. */ -}}
+
+{{- include "fleet-team.validate" . -}}
+{{- $project := include "fleet-team.projectName" . -}}
+{{- $cells := include "fleet-team.selectedCells" (dict "root" .) | fromJsonArray -}}
+{{- range $deployment := include "fleet-team.deployments" . | fromJsonArray }}
+{{- if eq $deployment.delivery "promoted" }}
+{{- $applicationSuffix := $deployment.applicationSuffix -}}
+{{- $namespace := printf "team-%s-workloads" $.Values.team.slug -}}
+{{- range $cell := $cells }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ printf "%s-%s" $cell.name $applicationSuffix }}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/compare-options: IncludeMutationWebhook=true
+    argocd.argoproj.io/sync-wave: "3"
+{{- if eq $deployment.delivery "promoted" }}
+    kargo.akuity.io/authorized-stage: {{ printf "%s:%s-%s" $project $cell.name $applicationSuffix | quote }}
+{{- if eq $deployment.promotion "manual" }}
+    argocd.argoproj.io/ignore-healthcheck: "true"
+{{- end }}
+{{- end }}
+  labels:
+    # keep-sorted start
+    cluster: {{ $cell.name | quote }}
+    role: cell
+    team: {{ $.Values.team.slug | quote }}
+    wave: "3"
+    # keep-sorted end
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ $project }}
+  ignoreDifferences:
+    - group: ""
+      kind: Service
+      jqPathExpressions:
+        - .metadata.annotations["argocd.argoproj.io/tracking-id"]
+    - group: ""
+      kind: ServiceAccount
+      jqPathExpressions:
+        - .metadata.annotations["argocd.argoproj.io/tracking-id"]
+    - group: apps
+      kind: Deployment
+      jqPathExpressions:
+        - .metadata.annotations["argocd.argoproj.io/tracking-id"]
+    - group: batch
+      kind: CronJob
+      jqPathExpressions:
+        - .metadata.annotations["argocd.argoproj.io/tracking-id"]
+    - group: keda.sh
+      kind: ScaledObject
+      jqPathExpressions:
+        - .metadata.annotations["argocd.argoproj.io/tracking-id"]
+    - group: postgresql.cnpg.io
+      kind: Cluster
+      jqPathExpressions:
+        - .metadata.annotations["argocd.argoproj.io/tracking-id"]
+    - group: ray.io
+      kind: RayJob
+      jqPathExpressions:
+        # keep-sorted start
+        - .metadata.annotations["argocd.argoproj.io/tracking-id"]
+        - .metadata.annotations["dashboard-url"]
+        - .metadata.labels["kueue.x-k8s.io/queue-name"]
+        - .spec.backoffLimit
+        - .spec.rayClusterSpec.headGroupSpec.template.metadata.annotations["kueue.x-k8s.io/workload"]
+        - .spec.rayClusterSpec.headGroupSpec.template.metadata.labels
+        - .spec.rayClusterSpec.headGroupSpec.template.spec.nodeSelector
+        - .spec.rayClusterSpec.headGroupSpec.template.spec.priorityClassName
+        - .spec.rayClusterSpec.headGroupSpec.template.spec.schedulingGates
+        - .spec.rayClusterSpec.workerGroupSpecs[]?.numOfHosts
+        - .spec.rayClusterSpec.workerGroupSpecs[]?.template.metadata.annotations["kueue.x-k8s.io/workload"]
+        - .spec.rayClusterSpec.workerGroupSpecs[]?.template.metadata.labels
+        - .spec.rayClusterSpec.workerGroupSpecs[]?.template.spec.nodeSelector
+        - .spec.rayClusterSpec.workerGroupSpecs[]?.template.spec.priorityClassName
+        - .spec.rayClusterSpec.workerGroupSpecs[]?.template.spec.schedulingGates
+        - .spec.submissionMode
+        - .spec.submitterPodTemplate.metadata.annotations["kueue.x-k8s.io/workload"]
+        - .spec.submitterPodTemplate.metadata.labels
+        - .spec.submitterPodTemplate.spec.nodeSelector
+        - .spec.submitterPodTemplate.spec.priorityClassName
+        - .spec.submitterPodTemplate.spec.schedulingGates
+        - .spec.suspend
+        # keep-sorted end
+    - group: ray.io
+      kind: RayService
+      jsonPointers:
+        # Server-side dry runs increment this API-owned counter without changing desired state.
+        - /metadata/generation
+      jqPathExpressions:
+        # keep-sorted start
+        - .metadata.annotations["argocd.argoproj.io/tracking-id"]
+        - .metadata.annotations["dashboard-url"]
+        - .metadata.labels["kueue.x-k8s.io/queue-name"]
+        - .spec.rayClusterConfig.headGroupSpec.template.metadata.annotations["kueue.x-k8s.io/workload"]
+        - .spec.rayClusterConfig.headGroupSpec.template.metadata.labels
+        - .spec.rayClusterConfig.headGroupSpec.template.spec.nodeSelector
+        - .spec.rayClusterConfig.headGroupSpec.template.spec.priorityClassName
+        - .spec.rayClusterConfig.headGroupSpec.template.spec.schedulingGates
+        - .spec.rayClusterConfig.suspend
+        - .spec.serveService
+        # keep-sorted end
+  destination:
+    name: {{ $cell.name | quote }}
+    namespace: {{ $namespace }}
+  source:
+    repoURL: {{ $.Values.repository.url | quote }}
+    targetRevision: {{ $.Values.repository.revision | quote }}
+    path: {{ $deployment.path | quote }}
+{{- $kustomizeConfigured := or $deployment.stage (hasKey $cell "workloadImagePull") }}
+{{- if $kustomizeConfigured }}
+    kustomize:
+{{- if $deployment.stage }}
+      nameSuffix: {{ printf "-%s" ($deployment.stage | replace "_" "-") | quote }}
+      commonLabels:
+        stage: {{ $deployment.stage | replace "_" "-" | quote }}
+{{- end }}
+{{- $patches := list }}
+{{- if hasKey $cell "workloadImagePull" }}
+{{- $patches = append $patches (dict "target" (dict "kind" "ServiceAccount" "labelSelector" (printf "app.kubernetes.io/managed-by=argocd,app.kubernetes.io/part-of=%s,team=%s" ($deployment.projectName | replace "_" "-") $.Values.team.slug)) "patch" "- op: add\n  path: /imagePullSecrets\n  value:\n    - name: ecr-pull") }}
+{{- end }}
+{{- if $deployment.stage }}
+{{- if eq $deployment.projectName "svelte_web" }}
+{{- $patches = append $patches (dict "target" (dict "group" "keda.sh" "kind" "ScaledObject") "patch" (printf "- op: replace\n  path: /spec/scaleTargetRef/name\n  value: %s-%s" ($deployment.projectName | replace "_" "-") ($deployment.stage | replace "_" "-"))) }}
+{{- $patches = append $patches (dict "target" (dict "group" "apps" "kind" "Deployment") "patch" (printf "- op: replace\n  path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name\n  value: svelte-web-postgres-%s-app" ($deployment.stage | replace "_" "-"))) }}
+{{- end }}
+{{- end }}
+{{- if $patches }}
+      patches:
+{{ toYaml $patches | nindent 8 }}
+{{- end }}
+{{- end }}
+  syncPolicy:
+{{- if eq $deployment.delivery "promoted" }}
+{{ include "fleet-team.promotedApplicationSyncPolicy" $ | nindent 4 }}
+{{- else }}
+{{ include "fleet-team.applicationSyncPolicy" $ | nindent 4 }}
+{{- end }}
+{{ end }}
+{{ end }}
+{{- end }}

@@ -1,0 +1,36 @@
+{{- /* Generates the fleet BuildBuddy .bazelrc configuration for Coder workspaces. */ -}}
+
+{{- if and (eq .Values.mode "cell") .Values.devWorkspaces.enabled }}
+{{- include "team-namespace.validate" . -}}
+{{- $namespace := include "team-namespace.namespace" . -}}
+{{- $bb := required "dev workspaces require BuildBuddy configuration" .Values.devWorkspaces.buildbuddy -}}
+{{- $mode := default "community" $bb.mode -}}
+{{- $enterpriseProxy := default false $bb.enterpriseProxy -}}
+{{- $executors := default "none" $bb.executors -}}
+{{- $accessDomain := required "BuildBuddy configuration requires accessAliasDomain" $bb.accessAliasDomain -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workspace-buildbuddy-config
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+data:
+  buildbuddy.bazelrc: |-
+    import /var/run/workspace/buildbuddy/credentials.bazelrc
+    build --disk_cache=
+    {{- if eq $mode "cloud" }}
+    common --config={{ ternary "bb-cloud-proxy" "bb-cloud" $enterpriseProxy }}
+    {{- if ne $executors "none" }}
+    common --config=bb-rbe-sh
+    {{- end }}
+    {{- else }}
+    # floci-divergence: Floci clusters configure workspace CA bundle for local cert trust.
+    {{- if eq .Values.devWorkspaces.origin.provider "floci" }}
+    build --tls_certificate=/tmp/workspace-ca-bundle.crt
+    {{- end }}
+    common --config=bb-community
+    common:bb-community --bes_backend=grpcs://buildbuddy-events.{{ $accessDomain }}:443
+    common:bb-community --bes_results_url=https://buildbuddy.{{ $accessDomain }}/invocation/
+    {{- end }}
+{{- end }}

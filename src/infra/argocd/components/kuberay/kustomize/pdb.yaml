@@ -1,0 +1,16 @@
+# PodDisruptionBudget for KubeRay operator.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kuberay
+  namespace: kuberay-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: kuberay
+      app.kubernetes.io/name: kuberay-operator

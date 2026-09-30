@@ -1,0 +1,142 @@
+# DEPRECATED: In-cluster TLS termination proxy shim mediating HTTPS traffic from Kargo Warehouses to Floci's HTTP-only origin registry. Awaiting Floci native TLS on 172.19.255.22:5000.
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: origin-registry-tls
+  namespace: kargo
+  labels:
+    app.kubernetes.io/component: origin-registry-alias
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: origin-registry-proxy
+    app.kubernetes.io/part-of: delivery
+spec:
+  dnsNames:
+    - origin-registry
+    - origin-registry.kargo
+    - origin-registry.kargo.svc
+    - origin-registry.kargo.svc.cluster.local
+  issuerRef:
+    kind: ClusterIssuer
+    name: cluster-local-ca
+  secretName: origin-registry-tls
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: origin-registry-proxy
+  namespace: kargo
+  labels:
+    app.kubernetes.io/component: origin-registry-alias
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: origin-registry-proxy
+    app.kubernetes.io/part-of: delivery
+data:
+  proxy.py: |
+    import asyncio, ssl
+
+    async def pipe(r, w):
+        try:
+            while data := await r.read(65536):
+                w.write(data)
+                await w.drain()
+        except Exception:
+            pass
+        finally:
+            w.close()
+
+    async def handle(cr, cw):
+        try:
+            ur, uw = await asyncio.open_connection("172.19.255.22", 5000)
+        except Exception:
+            cw.close()
+            return
+        asyncio.create_task(pipe(cr, uw))
+        asyncio.create_task(pipe(ur, cw))
+
+    async def main():
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain("/etc/tls/tls.crt", "/etc/tls/tls.key")
+        srv = await asyncio.start_server(handle, "0.0.0.0", 5000, ssl=ctx)
+        async with srv:
+            await srv.serve_forever()
+
+    asyncio.run(main())
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: origin-registry-tls-proxy
+  namespace: kargo
+  labels:
+    app.kubernetes.io/component: origin-registry-alias
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: origin-registry-proxy
+    app.kubernetes.io/part-of: delivery
+spec:
+  replicas: 1
+  strategy: {type: RollingUpdate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: origin-registry-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: origin-registry-alias
+        app.kubernetes.io/name: origin-registry-proxy
+        app.kubernetes.io/part-of: delivery
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: proxy
+          image: docker.io/library/python:3.14.7-alpine3.23@sha256:200baf0bf6b7904cf643358326e580ca0b8afec82416fd6d233746ceb215283c
+          imagePullPolicy: IfNotPresent
+          command:
+            - python3
+            - -u
+            - /etc/proxy/proxy.py
+          ports:
+            - containerPort: 5000
+              name: registry
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: registry
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            tcpSocket:
+              port: registry
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: /etc/proxy
+              name: proxy-script
+            - mountPath: /etc/tls
+              name: tls
+              readOnly: true
+      volumes:
+        - name: proxy-script
+          configMap:
+            name: origin-registry-proxy
+        - name: tls
+          secret:
+            secretName: origin-registry-tls

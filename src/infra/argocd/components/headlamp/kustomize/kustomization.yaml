@@ -1,0 +1,22 @@
+# Assembles Headlamp Kustomize resources including Kueue plugin archives, network policy, and OIDC secrets.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - cluster-ca-bundle.yaml
+  - external-secrets.yaml
+  - kueue-plugin-archive.k8s.yaml
+  - link-plugin-config.k8s.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - vpa.yaml
+  # keep-sorted end
+configMapGenerator:
+  - name: headlamp-kueue-plugin-archive
+    namespace: headlamp
+    behavior: merge
+    files:
+      - plugin-installer.sh
+generatorOptions:
+  disableNameSuffixHash: true
