@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiKeySecretStore",
+    "apiKeyRecordSources",
+    "atlantisEnabled",
+    "capabilities",
+    "exposure",
+    "gateway",
+    "gatewayOIDC",
+    "phase",
+    "routes",
+    "target"
+  ],
+  "properties": {
+    "phase": {
+      "enum": ["", "all", "application", "bootstrap", "identity", "telemetry"]
+    },
+    "exposure": {
+      "enum": ["", "private", "public"]
+    },
+    "apiKeySecretStore": {
+      "type": "string"
+    },
+    "apiKeyRecordSources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "store"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "store": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "atlantisEnabled": {
+      "type": "boolean"
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["buildbuddy"],
+      "properties": {
+        "buildbuddy": {
+          "type": "boolean"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "provider", "role"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "provider": {
+          "enum": ["", "aws", "floci", "gcp"]
+        },
+        "role": {
+          "enum": ["", "cell", "ctrl"]
+        }
+      }
+    },
+    "gatewayOIDC": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "issuer": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "jwksUri": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "groupsClaim": {
+          "const": "groups"
+        },
+        "operatorEmails": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "operatorGroups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "clients": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["aliasCallbackUri", "callbackUri", "clientId"],
+            "properties": {
+              "aliasCallbackUri": {
+                "type": "string",
+                "pattern": "^(?:$|https://)"
+              },
+              "callbackUri": {
+                "type": "string",
+                "pattern": "^https://"
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "maxProperties": 0
+        },
+        {
+          "required": ["clients", "groupsClaim", "issuer", "jwksUri", "scopes", "version"]
+        }
+      ]
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "aliasDomain",
+        "baseDomain",
+        "canonicalScheme",
+        "httpRedirect",
+        "name",
+        "namespace",
+        "routeSections"
+      ],
+      "properties": {
+        "aliasDomain": {
+          "type": "string"
+        },
+        "baseDomain": {
+          "type": "string"
+        },
+        "canonicalScheme": {
+          "enum": ["", "http", "https"]
+        },
+        "httpRedirect": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "routeSections": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+          }
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "allowedClientCIDRs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "catchAll": {
+            "type": "boolean"
+          },
+          "hostnameLabel": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+          },
+          "unauthenticatedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "wildcardHostnameLabel": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+          }
+        }
+      }
+    }
+  }
+}

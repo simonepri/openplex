@@ -1,0 +1,10 @@
+# Kustomize base assembling cluster-wide administrative and team RBAC policies.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - coder-provisioner-discovery.yaml
+  - operator-access.yaml
+  - team-access.yaml
+  # keep-sorted end

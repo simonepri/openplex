@@ -1,0 +1,147 @@
+{{- /* Renders EnvoyProxy configuration and GatewayClass for foundation gateway instances. */ -}}
+
+{{- if .Values.foundation.enabled }}
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: {{ .Values.gateway.name }}
+  namespace: {{ .Values.gateway.namespace }}
+  labels:
+    {{- include "envoy-gateway-instance.labels" . | nindent 4 }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        name: {{ .Values.proxy.deployment.name }}
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              # KEDA is the sole replica owner. Envoy Gateway applies this
+              # patch after constructing the Deployment, so SSA omits replicas.
+              replicas: null
+              template:
+                spec:
+                  automountServiceAccountToken: false
+                  containers:
+                    - name: shutdown-manager
+                      resources:
+                        requests:
+                          cpu: 10m
+                          memory: 32Mi
+                        limits:
+                          cpu: 250m
+                          memory: 128Mi
+        container:
+          image: {{ .Values.proxy.deployment.image | quote }}
+          resources:
+            {{- toYaml .Values.proxy.deployment.resources | nindent 12 }}
+        pod:
+          annotations:
+            signoz.io/path: /stats/prometheus
+            signoz.io/port: "19001"
+            signoz.io/scrape: "true"
+          {{- with .Values.proxy.deployment.affinity }}
+          affinity:
+            {{- tpl (toYaml .) $ | nindent 12 }}
+          {{- end }}
+          {{- with .Values.proxy.deployment.topologySpreadConstraints }}
+          topologySpreadConstraints:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- if .Values.proxy.disruptionBudget.enabled }}
+      envoyPDB:
+        minAvailable: {{ .Values.proxy.disruptionBudget.minAvailable }}
+      {{- end }}
+      envoyService:
+        name: {{ .Values.proxy.service.name }}
+        type: {{ .Values.proxy.service.type }}
+        {{- with .Values.proxy.service.loadBalancerClass }}
+        loadBalancerClass: {{ . | quote }}
+        {{- end }}
+        {{- if ne .Values.proxy.service.type "ClusterIP" }}
+        externalTrafficPolicy: {{ .Values.proxy.service.externalTrafficPolicy }}
+        {{- end }}
+        {{- with .Values.proxy.service.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.proxy.service.loadBalancerSourceRanges }}
+        loadBalancerSourceRanges:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if or .Values.proxy.service.clusterIPv4 (gt (int .Values.proxy.service.nodePorts.http) 0) (gt (int .Values.proxy.service.nodePorts.tls) 0) (eq .Values.proxy.service.ipFamilyPolicy "SingleStack") }}
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              {{- with .Values.proxy.service.clusterIPv4 }}
+              clusterIP: {{ . | quote }}
+              clusterIPs: [{{ . | quote }}]
+              {{- end }}
+              ipFamilyPolicy: {{ .Values.proxy.service.ipFamilyPolicy }}
+              {{- with .Values.proxy.service.ipFamilies }}
+              ipFamilies:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- if or (gt (int .Values.proxy.service.nodePorts.http) 0) (gt (int .Values.proxy.service.nodePorts.tls) 0) }}
+              ports:
+                {{- if gt (int .Values.proxy.service.nodePorts.http) 0 }}
+                - name: http-80
+                  nodePort: {{ .Values.proxy.service.nodePorts.http }}
+                  port: 80
+                  protocol: TCP
+                {{- end }}
+                {{- if gt (int .Values.proxy.service.nodePorts.tls) 0 }}
+                - name: tls-443
+                  nodePort: {{ .Values.proxy.service.nodePorts.tls }}
+                  port: 443
+                  protocol: TCP
+                {{- end }}
+              {{- end }}
+        {{- end }}
+  {{- if .Values.proxy.telemetry.accessLog.enabled }}
+  telemetry:
+    accessLog:
+      settings:
+        - format:
+            type: JSON
+            json:
+              authority: "%REQ(:AUTHORITY)%"
+              bytes_received: "%BYTES_RECEIVED%"
+              bytes_sent: "%BYTES_SENT%"
+              downstream_remote_address: "%DOWNSTREAM_REMOTE_ADDRESS%"
+              duration: "%DURATION%"
+              method: "%REQ(:METHOD)%"
+              path: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+              protocol: "%PROTOCOL%"
+              request_id: "%REQ(X-REQUEST-ID)%"
+              response_code: "%RESPONSE_CODE%"
+              response_flags: "%RESPONSE_FLAGS%"
+              start_time: "%START_TIME%"
+              traceparent: "%REQ(TRACEPARENT)%"
+              upstream_host: "%UPSTREAM_HOST%"
+              upstream_service_time: "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
+              user_agent: "%REQ(USER-AGENT)%"
+              x_forwarded_for: "%REQ(X-FORWARDED-FOR)%"
+          sinks:
+            - file:
+                path: /dev/stdout
+              type: File
+  {{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.gateway.className }}
+  labels:
+    {{- include "envoy-gateway-instance.labels" . | nindent 4 }}
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: {{ .Values.gateway.name }}
+    namespace: {{ .Values.gateway.namespace }}
+{{- end }}

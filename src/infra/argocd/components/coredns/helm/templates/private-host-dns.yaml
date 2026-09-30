@@ -1,0 +1,143 @@
+{{- /* DaemonSet configuring GCP private host DNS forwarding and iptables rules. */ -}}
+
+{{- $provider := .Values.provider -}}
+{{- $rewrites := .Values.rewrites -}}
+{{- if eq $provider "gcp" }}
+{{- $serviceCIDR := .Values.serviceCIDR -}}
+{{- if not (regexMatch "^(?:[0-9]{1,3}\\.){3}0/(?:1[2-9]|2[0-4])$" $serviceCIDR) -}}
+{{- fail (printf "the private host resolver requires a /12-/24 IPv4 Service CIDR with a zero final octet, got %q" $serviceCIDR) -}}
+{{- end -}}
+{{- $resolverIPv4 := regexReplaceAll "\\.0/[0-9]+$" $serviceCIDR ".12" -}}
+{{- $stubDomains := dict -}}
+{{- range $host := keys $rewrites | sortAlpha -}}
+{{- $_ := set $stubDomains $host (list $resolverIPv4) -}}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: private-host-dns
+  namespace: kube-system
+  annotations: {argocd.argoproj.io/sync-wave: "-1"}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: coredns
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health :8080
+        ready :8181
+        prometheus :9153
+        {{- range $host := keys $rewrites | sortAlpha }}
+        template IN ANY {{ $host }} {
+            match "^{{ replace "." "[.]" $host }}[.]?$"
+            answer "{{ printf "{{ .Name }}" }} 30 IN CNAME {{ index $rewrites $host }}."
+        }
+        {{- end }}
+        cache 30
+        reload
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: private-host-dns
+  namespace: kube-system
+  annotations: {argocd.argoproj.io/sync-wave: "-1"}
+  labels: {app.kubernetes.io/name: private-host-dns}
+spec:
+  clusterIP: {{ $resolverIPv4 }}
+  clusterIPs: [{{ $resolverIPv4 }}]
+  ipFamilies: [IPv4]
+  ipFamilyPolicy: SingleStack
+  selector: {app.kubernetes.io/name: private-host-dns}
+  ports:
+    - {name: dns-udp, port: 53, protocol: UDP, targetPort: dns-udp}
+    - {name: dns-tcp, port: 53, protocol: TCP, targetPort: dns-tcp}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: private-host-dns
+  namespace: kube-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    ignore-check.kube-linter.io/privileged-ports: >-
+      DNS server binds port 53.
+  labels: {app.kubernetes.io/name: private-host-dns}
+spec:
+  replicas: 2
+  strategy: {type: RollingUpdate}
+  selector: {matchLabels: {app.kubernetes.io/name: private-host-dns}}
+  template:
+    metadata:
+      annotations:
+        signoz.io/path: /metrics
+        signoz.io/port: "9153"
+        signoz.io/scrape: "true"
+      labels: {app.kubernetes.io/name: private-host-dns}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: {app.kubernetes.io/name: private-host-dns}
+      automountServiceAccountToken: false
+      priorityClassName: cluster-operators
+      containers:
+        - name: coredns
+          image: {{ printf "%s:%s@%s" .Values.image.repository .Values.image.tag .Values.image.digest }}
+          args: [-conf, /etc/coredns/Corefile]
+          ports:
+            - {containerPort: 53, name: dns-udp, protocol: UDP}
+            - {containerPort: 53, name: dns-tcp, protocol: TCP}
+            - {containerPort: 8080, name: health, protocol: TCP}
+            - {containerPort: 8181, name: ready, protocol: TCP}
+            - {containerPort: 9153, name: metrics, protocol: TCP}
+          readinessProbe: {httpGet: {path: /ready, port: ready}, initialDelaySeconds: 2, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /health, port: health}, initialDelaySeconds: 5, periodSeconds: 10}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {mountPath: /etc/coredns, name: config, readOnly: true}
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+      tolerations:
+        - {key: CriticalAddonsOnly, operator: Exists, effect: NoSchedule}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: {matchLabels: {app.kubernetes.io/name: private-host-dns}}
+      volumes:
+        - name: config
+          configMap: {name: private-host-dns}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: private-host-dns, namespace: kube-system}
+spec:
+  minAvailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector: {matchLabels: {app.kubernetes.io/name: private-host-dns}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-dns
+  namespace: kube-system
+  labels: {addonmanager.kubernetes.io/mode: EnsureExists}
+data:
+  stubDomains: {{ $stubDomains | toJson | quote }}
+{{- end }}

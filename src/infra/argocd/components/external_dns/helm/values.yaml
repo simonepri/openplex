@@ -1,0 +1,47 @@
+# Configures base Helm values for ExternalDNS across cloud clusters, managing public and private DNS records.
+
+fullnameOverride: external-dns
+image:
+  repository: registry.k8s.io/external-dns/external-dns
+  tag: v0.23.0@sha256:1854499e2b08cee47c40a08e356bff20dcb192dbcfde8378fc3f900f12cad5a3
+serviceAccount:
+  create: true
+  name: external-dns
+  automountServiceAccountToken: true
+podAnnotations:
+  signoz.io/path: /metrics
+  signoz.io/port: "7979"
+  signoz.io/scrape: "true"
+podSecurityContext:
+  runAsNonRoot: true
+  fsGroup: 65534
+  seccompProfile: {type: RuntimeDefault}
+securityContext:
+  privileged: false
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  capabilities: {drop: [ALL]}
+priorityClassName: cluster-operators
+resources:
+  requests: {cpu: 25m, memory: 64Mi}
+  limits: {cpu: 250m, memory: 256Mi}
+logFormat: json
+interval: 1m
+triggerLoopOnEvent: true
+sources:
+  # keep-sorted start
+  - gateway-grpcroute
+  - gateway-httproute
+  - service
+  # keep-sorted end
+gatewayNamespace: envoy-gateway-system
+labelFilter: app.kubernetes.io/component=external-dns-source
+policy: sync
+registry: txt
+domainFilters:
+  # keep-sorted start
+  - example.invalid
+  # keep-sorted end

@@ -1,0 +1,30 @@
+# Exercises the later cloud application-route phase after the Coder Application has claimed its bootstrap route family.
+
+phase: application
+exposure: private
+capabilities: {buildbuddy: true}
+apiKeySecretStore: runtime-secrets
+apiKeyRecordSources: {}
+atlantisEnabled: true
+gatewayOIDC:
+  version: 1
+  issuer: https://login.corp.local.internal
+  jwksUri: https://login.corp.local.internal/keys
+  scopes: [openid, profile, email, groups]
+  groupsClaim: groups
+  clients:
+    buildbuddy: {clientId: buildbuddy-cloud, callbackUri: 'https://buildbuddy.ctrl-cloud.c.corp.local.internal/oauth2/callback', aliasCallbackUri: ''}
+    kuberhealthy: {clientId: kuberhealthy-cloud, callbackUri: 'https://kuberhealthy.ctrl-cloud.c.corp.local.internal/oauth2/callback', aliasCallbackUri: ''}
+    parca: {clientId: parca-cloud, callbackUri: 'https://parca.ctrl-cloud.c.corp.local.internal/oauth2/callback', aliasCallbackUri: ''}
+    signoz: {clientId: signoz-cloud, callbackUri: 'https://signoz.ctrl-cloud.c.corp.local.internal/oauth2/callback', aliasCallbackUri: ''}
+target:
+  name: ctrl-cloud
+  provider: aws
+  role: ctrl
+gateway:
+  aliasDomain: ""
+  baseDomain: ctrl-cloud.c.corp.local.internal
+  canonicalScheme: https
+  httpRedirect: true
+  name: private-access
+  namespace: envoy-gateway-system

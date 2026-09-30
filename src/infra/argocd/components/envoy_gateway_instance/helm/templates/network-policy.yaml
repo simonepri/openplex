@@ -1,0 +1,112 @@
+{{- /* Restricts gateway ingress to client ports and egress to backend services and DNS. */ -}}
+
+{{- if and .Values.foundation.enabled .Values.gateway.enabled }}
+{{- $exactBackendNamespaces := list -}}
+{{- range $backend := .Values.proxy.backendEgress -}}
+{{- if not (has $backend.namespace $exactBackendNamespaces) -}}
+{{- $exactBackendNamespaces = append $exactBackendNamespaces $backend.namespace -}}
+{{- end -}}
+{{- end -}}
+{{- $generalBackendNamespaces := list -}}
+{{- range $namespace := .Values.gateway.allowedNamespaces -}}
+{{- if not (has $namespace $exactBackendNamespaces) -}}
+{{- $generalBackendNamespaces = append $generalBackendNamespaces $namespace -}}
+{{- end -}}
+{{- end -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.proxy.deployment.name }}
+  namespace: {{ .Values.proxy.namespace }}
+  labels:
+    {{- include "envoy-gateway-instance.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      gateway.envoyproxy.io/owning-gateway-name: {{ .Values.gateway.name }}
+      gateway.envoyproxy.io/owning-gateway-namespace: {{ .Values.gateway.namespace }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - {port: 10080, protocol: TCP}
+        - {port: 10443, protocol: TCP}
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: otel-system}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: signoz}
+      ports:
+        - {port: 19001, protocol: TCP}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: envoy-gateway
+              app.kubernetes.io/name: gateway-helm
+              control-plane: envoy-gateway
+      ports:
+        - {port: 18000, protocol: TCP}
+    {{- range $backend := .Values.proxy.backendEgress }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $backend.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $backend.podSelector | nindent 14 }}
+      ports:
+        {{- range $port := $backend.ports }}
+        - {port: {{ $port }}, protocol: TCP}
+        {{- end }}
+    {{- end }}
+    {{- if .Values.proxy.allowGeneralBackendEgress }}
+    {{- with $generalBackendNamespaces }}
+    - to:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- toYaml . | nindent 18 }}
+    {{- end }}
+    {{- end }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+      ports:
+        - {port: 443, protocol: TCP}
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {port: 53, protocol: TCP}
+        - {port: 53, protocol: UDP}
+{{- end }}
+{{- if and .Values.foundation.enabled .Values.foundation.manageNamespace }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: envoy-gateway-controller
+  namespace: {{ .Values.proxy.namespace }}
+  labels:
+    {{- include "envoy-gateway-instance.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      control-plane: envoy-gateway
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: otel-system}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: signoz}
+      ports:
+        - {port: 19001, protocol: TCP}
+{{- end }}
+

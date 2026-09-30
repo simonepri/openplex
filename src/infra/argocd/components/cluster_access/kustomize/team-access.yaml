@@ -1,0 +1,67 @@
+# ClusterRole and binding granting teams read-only observation of cluster resources.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: team-job-observer
+  labels:
+    app.kubernetes.io/component: human-access
+    app.kubernetes.io/managed-by: argocd
+rules:
+  - apiGroups: [""]
+    resources:
+      - events
+      - namespaces
+      - nodes
+      - pods
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources:
+      - cronjobs
+      - jobs
+    verbs: [get, list, watch]
+  - apiGroups: [ray.io]
+    resources:
+      - rayclusters
+      - rayjobs
+      - rayservices
+    verbs: [get, list, watch]
+  - apiGroups: [keda.sh]
+    resources:
+      - scaledjobs
+      - scaledobjects
+    verbs: [get, list, watch]
+  - apiGroups: [kueue.x-k8s.io]
+    resources:
+      - clusterqueues
+      - cohorts
+      - localqueues
+      - resourceflavors
+      - topologies
+      - workloads
+      - workloadpriorityclasses
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources:
+      - nodes
+      - pods
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: team-job-observers
+  labels:
+    app.kubernetes.io/component: human-access
+    app.kubernetes.io/managed-by: argocd
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: cluster:group:teams
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: cluster:group:team:examples
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: team-job-observer

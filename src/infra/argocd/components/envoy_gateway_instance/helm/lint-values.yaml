@@ -1,0 +1,52 @@
+# Provides synthetic lint values activating shared gateway and certificate templates for Bazel checks.
+
+gateway:
+  enabled: true
+  canonicalScheme: https
+  aliasDomain: lint.invalid
+  baseDomain: ctrl-lint.lint.invalid
+  listeners:
+    coderApps:
+      enabled: false
+      hostname: ""
+      certificateSecret: ""
+    http:
+      enabled: true
+      redirectToHTTPS: true
+    https:
+      enabled: true
+      certificateSecret: lint-tls
+      aliasCertificateSecret: lint-tls-alias
+      hostname: svelte-web.ctrl-lint.lint.invalid
+    s3Http:
+      enabled: true
+      hostname: s3-gateway.s3-system.svc
+    s3Https:
+      enabled: false
+      hostname: ""
+      certificateSecret: ""
+    headscaleBootstrapTls:
+      enabled: true
+      hostname: headscale.ctrl-lint.lint.invalid
+    tls:
+      enabled: true
+      hostname: "*.kube-oidc.lint.invalid"
+certificate:
+  enabled: true
+  issuerRef:
+    kind: Issuer
+    name: lint-ca
+  caIssuer:
+    enabled: true
+    secretName: lint-ca
+proxy:
+  service:
+    loadBalancerClass: lint.invalid/load-balancer
+    externalTrafficPolicy: Cluster
+    annotations:
+      lint.invalid/owner: manifest-checks
+    loadBalancerSourceRanges:
+      - 192.0.2.0/24
+    nodePorts:
+      http: 30080
+      tls: 30443

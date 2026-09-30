@@ -1,0 +1,16 @@
+# Default lint fixture for CoreDNS chart validation.
+
+provider: floci
+cluster: {name: cell-eaws-lh1, role: cell}
+accessAliasDomain: c.corp.local.internal
+control:
+  name: ctrl-eaws-lh1
+  gatewayIPv4: 172.31.0.11
+  headscaleIPv4: 172.19.255.23
+  originRegistryIPv4: 172.19.255.22
+internalDomain: c.corp.local.internal
+privateAccess:
+  baseDomain: cell-eaws-lh1.c.corp.local.internal
+  coderAppsWildcard: false
+  gatewayIPv4: 172.31.16.11
+  recordLabels: [coder-snapshots, kube-oidc-proxy, ray, snapshots, svelte-web, velero-ui]

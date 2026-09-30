@@ -1,0 +1,8 @@
+# Renders reviewed route records into Gateway API resources; consumed by per-cluster routing-registry Applications.
+
+apiVersion: v2
+name: routing-registry
+description: Cluster-owned HTTPRoute and DNS-source rendering.
+type: application
+version: 0.1.0
+appVersion: 1.0.0

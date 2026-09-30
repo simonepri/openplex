@@ -1,0 +1,10 @@
+# Exercises an unencrypted cell Gateway HTTP listener without TLS termination.
+
+gateway:
+  enabled: true
+  canonicalScheme: http
+  baseDomain: cell-cache-lint.c.corp.local.internal
+  listeners:
+    http:
+      enabled: true
+      redirectToHTTPS: false

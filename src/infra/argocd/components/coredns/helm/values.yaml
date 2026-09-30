@@ -1,0 +1,28 @@
+# Helm values configuring custom CoreDNS DNS rewrites, service CIDR, and upstream resolvers.
+
+provider: floci
+serviceCIDR: 192.0.2.0/24
+rewrites: {}
+image:
+  repository: registry.k8s.io/coredns/coredns
+  tag: v1.14.7
+  digest: sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286
+
+# Floci-specific topology:
+cluster:
+  name: ctrl-example
+  role: ctrl
+accessAliasDomain: k8s.example.invalid
+control:
+  name: ctrl-example
+  gatewayIPv4: 192.0.2.10
+  headscaleIPv4: ""
+  originRegistryIPv4: 192.0.2.12
+internalDomain: example.invalid
+cellDomains: {}
+cellIPv4s: {}
+privateAccess:
+  baseDomain: ctrl-example.k8s.example.invalid
+  coderAppsWildcard: true
+  gatewayIPv4: 192.0.2.11
+  recordLabels: [coder, observability]

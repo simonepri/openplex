@@ -1,0 +1,29 @@
+# Exercises the later Floci application-route phase after the local Coder Application has claimed its bootstrap-dependent route family.
+
+phase: application
+exposure: private
+capabilities: {buildbuddy: true}
+apiKeySecretStore: local-secret-records
+atlantisEnabled: true
+gatewayOIDC:
+  version: 1
+  issuer: https://dex.c.corp.local.internal
+  jwksUri: https://dex.c.corp.local.internal/keys
+  scopes: [openid, profile, email, groups]
+  groupsClaim: groups
+  clients:
+    buildbuddy: {clientId: buildbuddy, callbackUri: 'https://buildbuddy.ctrl-eaws-lh1.c.corp.local.internal/oauth2/callback', aliasCallbackUri: ''}
+    kuberhealthy: {clientId: kuberhealthy, callbackUri: 'https://kuberhealthy.ctrl-eaws-lh1.c.corp.local.internal/oauth2/callback', aliasCallbackUri: ''}
+    parca: {clientId: parca, callbackUri: 'https://parca.ctrl-eaws-lh1.c.corp.local.internal/oauth2/callback', aliasCallbackUri: ''}
+    signoz: {clientId: signoz, callbackUri: 'https://signoz.ctrl-eaws-lh1.c.corp.local.internal/oauth2/callback', aliasCallbackUri: ''}
+target:
+  name: ctrl-eaws-lh1
+  provider: floci
+  role: ctrl
+gateway:
+  aliasDomain: ""
+  baseDomain: ctrl-eaws-lh1.c.corp.local.internal
+  canonicalScheme: https
+  httpRedirect: true
+  name: private-access
+  namespace: envoy-gateway-system

@@ -1,0 +1,73 @@
+{{- /* ConfigMap deploying custom CoreDNS server blocks and plugins for local clusters. */ -}}
+
+{{- $provider := .Values.provider -}}
+{{- /* floci-divergence: Floci clusters configure custom CoreDNS server blocks for local inter-cluster routing. */ -}}
+{{- if eq $provider "floci" }}
+{{- $cluster := .Values.cluster -}}
+{{- $control := .Values.control -}}
+{{- $internalDomain := .Values.internalDomain -}}
+{{- $privateAccess := .Values.privateAccess -}}
+{{- if and (eq $cluster.role "ctrl") (ne $cluster.name $control.name) -}}
+{{- fail "the control local DNS release must target the registered control cluster" -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: coredns
+data:
+  private-access.server: |
+    {{ $privateAccess.baseDomain }}:53 {
+        errors
+        hosts {
+            {{- range $label := $privateAccess.recordLabels }}
+            {{ $privateAccess.gatewayIPv4 }} {{ $label }}.{{ $privateAccess.baseDomain }}
+            {{- end }}
+            fallthrough
+        }
+        {{- if $privateAccess.coderAppsWildcard }}
+        template IN A {
+            match "^[a-z0-9]([-a-z0-9]*[a-z0-9])?[.]coder[.]{{ replace "." "[.]" $privateAccess.baseDomain }}[.]?$"
+            answer "{{ printf "{{ .Name }}" }} 60 IN A {{ $privateAccess.gatewayIPv4 }}"
+            fallthrough
+        }
+        {{- end }}
+    }
+  {{- if and $control $control.headscaleIPv4 }}
+  headscale.server: |
+    headscale.{{ $control.name }}.{{ $internalDomain }}:53 headscale.{{ $internalDomain }}:53{{ if and .Values.accessAliasDomain (ne .Values.accessAliasDomain $internalDomain) (ne .Values.accessAliasDomain (printf "%s.%s" $control.name $internalDomain)) }} headscale.{{ .Values.accessAliasDomain }}:53{{ end }}{{ if and .Values.publicDomain (ne .Values.publicDomain $internalDomain) (ne .Values.publicDomain .Values.accessAliasDomain) }} headscale.{{ .Values.publicDomain }}:53{{ end }} {
+        errors
+        hosts {
+            {{ $control.headscaleIPv4 }} headscale.{{ $control.name }}.{{ $internalDomain }}
+            {{ $control.headscaleIPv4 }} headscale.{{ $internalDomain }}
+            {{- if and .Values.accessAliasDomain (ne .Values.accessAliasDomain $internalDomain) (ne .Values.accessAliasDomain (printf "%s.%s" $control.name $internalDomain)) }}
+            {{ $control.headscaleIPv4 }} headscale.{{ .Values.accessAliasDomain }}
+            {{- end }}
+            {{- if and .Values.publicDomain (ne .Values.publicDomain $internalDomain) (ne .Values.publicDomain .Values.accessAliasDomain) }}
+            {{ $control.headscaleIPv4 }} headscale.{{ .Values.publicDomain }}
+            {{- end }}
+        }
+    }
+  {{- end }}
+  origin-registry.server: |
+    origin-registry:53 {
+        errors
+        hosts {
+            {{ $control.originRegistryIPv4 }} origin-registry
+        }
+    }
+  {{- if ne $cluster.role "ctrl" }}
+  {{- if and $control $control.headscaleIPv4 (ne $internalDomain .Values.accessAliasDomain) }}
+  headscale-access.server: |
+    headscale.{{ $control.name }}.{{ .Values.accessAliasDomain }}:53 {
+        errors
+        hosts {
+            {{ $control.headscaleIPv4 }} headscale.{{ $control.name }}.{{ .Values.accessAliasDomain }}
+        }
+    }
+  {{- end }}
+  {{- end }}
+{{- end }}

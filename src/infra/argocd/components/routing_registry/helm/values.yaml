@@ -1,0 +1,20 @@
+# Configures empty-safe routing defaults where the fleet supplies target identity, gateway facts, inventory, phase, and the canonical registry value file.
+
+phase: ""
+exposure: ""
+apiKeySecretStore: ""
+# Per-record source overrides for API-key ExternalSecrets, keyed by apiKey.record: {store, key}.
+apiKeyRecordSources: {}
+capabilities: {buildbuddy: false}
+atlantisEnabled: false
+gatewayOIDC: {}
+target: {name: "", provider: "", role: ""}
+gateway:
+  aliasDomain: ""
+  baseDomain: ""
+  canonicalScheme: ""
+  httpRedirect: false
+  name: public
+  namespace: envoy-gateway-system
+  routeSections: {}
+routes: []

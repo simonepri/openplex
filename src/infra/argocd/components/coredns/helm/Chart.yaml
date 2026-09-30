@@ -1,0 +1,8 @@
+# Declarative CoreDNS custom configuration and private DNS resolvers across clusters.
+
+apiVersion: v2
+name: coredns
+description: CoreDNS custom rewrites and provider-specific private DNS resolvers
+type: application
+version: 0.1.0
+appVersion: 1.12.3
