@@ -1,0 +1,41 @@
+# Stages sample workload templates with scheduling labels to defend admission defaulting rules and rejection of invalid scheduling combinations.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: workload-class-agreement
+  namespace: team-examples-workloads
+  labels:
+    app.kubernetes.io/component: class-agreement
+    cost-center: examples
+    environment: production
+    availability-class: wa
+    latency-class: lt
+    team: examples
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: class-agreement
+        cost-center: examples
+        environment: production
+        team: examples
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      serviceAccountName: ray-runner
+      containers:
+        - name: probe
+          image: ($values.busyboxImage)
+          command: [sh, -c, "true"]
+          resources:
+            requests: {cpu: 10m, memory: 8Mi}
+            limits: {cpu: 50m, memory: 16Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}

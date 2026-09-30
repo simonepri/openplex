@@ -1,0 +1,228 @@
+# Stages team workload pods and HTTP probes to defend platform-managed NetworkPolicy isolation rules without test-authored policy overrides.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: team-networking-server
+  namespace: team-examples-workspaces
+  labels:
+    app.kubernetes.io/name: team-networking-server
+    app.kubernetes.io/part-of: chainsaw
+    cost-center: examples
+    environment: production
+    availability-class: be
+    latency-class: ls
+    team: examples
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: http
+      image: ($values.busyboxImage)
+      command: [sh, -ceu]
+      args:
+        - echo team-networking-ok >/www/index.html; exec httpd -f -p 8080 -h /www
+      ports: [{name: http, containerPort: 8080}]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      volumeMounts: [{name: content, mountPath: /www}]
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  volumes: [{name: content, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: team-networking-server
+  namespace: team-examples-workspaces
+  labels: {app.kubernetes.io/managed-by: chainsaw}
+spec:
+  selector: {app.kubernetes.io/name: team-networking-server}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: team-networking-client
+  namespace: team-examples-workspaces
+  labels:
+    app.kubernetes.io/name: coder-workspace
+    app.kubernetes.io/part-of: coder
+    com.coder.resource: "true"
+    cost-center: examples
+    environment: production
+    availability-class: be
+    latency-class: ls
+    team: examples
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    runAsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile: {type: RuntimeDefault}
+  serviceAccountName: coder-workspace
+  containers:
+    - name: client
+      image: ($values.busyboxImage)
+      args: [sleep, "600"]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      volumeMounts:
+        - {name: kubernetes-api, mountPath: /var/run/workspace/kubernetes, readOnly: true}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  volumes:
+    - name: kubernetes-api
+      projected:
+        defaultMode: 288
+        sources:
+          - configMap:
+              name: kube-root-ca.crt
+              items: [{key: ca.crt, path: ca.crt}]
+          - serviceAccountToken: {expirationSeconds: 3600, path: token}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: team-networking-compile-client
+  namespace: team-examples-workloads
+  labels:
+    app.kubernetes.io/component: ray-train-head
+    app.kubernetes.io/name: ray-train-example
+    cost-center: examples
+    environment: production
+    availability-class: be
+    latency-class: ls
+    team: examples
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: client
+      image: ($values.busyboxImage)
+      args: [sleep, "600"]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: team-networking-compile-wrong-label
+  namespace: team-examples-workloads
+  labels:
+    app.kubernetes.io/component: ray-train-untrusted
+    app.kubernetes.io/name: ray-train-example
+    cost-center: examples
+    environment: production
+    availability-class: be
+    latency-class: ls
+    team: examples
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: client
+      image: ($values.busyboxImage)
+      args: [sleep, "600"]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: team-networking-external-server
+  namespace: team-networking-e2e
+  labels: {app.kubernetes.io/name: team-networking-external-server}
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: http
+      image: ($values.busyboxImage)
+      command: [sh, -ceu]
+      args:
+        - echo external-control-ok >/www/index.html; exec httpd -f -p 8080 -h /www
+      ports: [{name: http, containerPort: 8080}]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      volumeMounts: [{name: content, mountPath: /www}]
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  volumes: [{name: content, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: team-networking-external-server
+  namespace: team-networking-e2e
+  labels: {app.kubernetes.io/managed-by: chainsaw}
+spec:
+  selector: {app.kubernetes.io/name: team-networking-external-server}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: team-networking-external-client
+  namespace: team-networking-e2e
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: client
+      image: ($values.busyboxImage)
+      args: [sleep, "600"]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0

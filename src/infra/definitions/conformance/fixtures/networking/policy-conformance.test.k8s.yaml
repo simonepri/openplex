@@ -1,0 +1,193 @@
+# Stages namespaces, default-deny NetworkPolicies, and client pods to defend cross-namespace traffic isolation and permitted flow conformance.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: networking-e2e
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: networking-denied
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: networking-e2e
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-enumerated-runtime-flows
+  namespace: networking-e2e
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allowed-server
+  namespace: networking-e2e
+  labels: {app: allowed-server}
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: http
+      image: ($values.busyboxImage)
+      command: [sh, -c]
+      args: ["echo network-conformance-ok > /www/index.html; exec httpd -f -p 8080 -h /www"]
+      ports: [{name: http, containerPort: 8080}]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      volumeMounts: [{name: content, mountPath: /www}]
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  volumes: [{name: content, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: allowed-server
+  namespace: networking-e2e
+spec:
+  selector: {app: allowed-server}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allowed-client
+  namespace: networking-e2e
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: client
+      image: ($values.awsCliImage)
+      command: [sleep, "600"]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: denied-client
+  namespace: networking-denied
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: client
+      image: ($values.awsCliImage)
+      command: [sleep, "600"]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: denied-server
+  namespace: networking-denied
+  labels: {app: denied-server}
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: http
+      image: ($values.busyboxImage)
+      command: [sh, -c]
+      args: ["echo denied > /www/index.html; exec httpd -f -p 8080 -h /www"]
+      ports: [{name: http, containerPort: 8080}]
+      resources:
+        requests: {cpu: 5m, memory: 8Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      volumeMounts: [{name: content, mountPath: /www}]
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  volumes: [{name: content, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: denied-server
+  namespace: networking-denied
+spec:
+  selector: {app: denied-server}
+  ports: [{name: http, port: 8080, targetPort: http}]

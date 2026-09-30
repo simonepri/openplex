@@ -1,0 +1,62 @@
+# Runs an unprivileged team Pod against local Rclone CSI mounts to defend storage read, write, and node restart recovery contracts.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rclone-csi-probe
+  namespace: team-examples-workspaces
+  labels:
+    app.kubernetes.io/name: coder-workspace
+    app.kubernetes.io/part-of: chainsaw
+    availability-class: be
+    cost-center: examples
+    environment: production
+    latency-class: ls
+    team: examples
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  serviceAccountName: coder-workspace
+  securityContext:
+    fsGroup: 1000
+    runAsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: probe
+      image: ($values.busyboxImage)
+      command: [sleep]
+      args: [7200]
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {cpu: 100m, memory: 128Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumeMounts:
+        - {mountPath: /s3/eaws-lh1/home, name: home}
+        - {mountPath: /s3/eaws-lh1/scratch, name: scratch}
+        - {mountPath: /s3/global/home, name: global}
+        - {mountPath: /tmp, name: temporary}
+  volumes:
+    - name: home
+      csi:
+        driver: rclone.csi.veloxpack.io
+        nodePublishSecretRef: {name: team-s3}
+        volumeAttributes: {gid: "1000", remote: home, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
+    - name: scratch
+      csi:
+        driver: rclone.csi.veloxpack.io
+        nodePublishSecretRef: {name: team-s3}
+        volumeAttributes: {gid: "1000", remote: scratch, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
+    - name: global
+      csi:
+        driver: rclone.csi.veloxpack.io
+        nodePublishSecretRef: {name: team-s3}
+        volumeAttributes: {gid: "1000", remote: global, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
+    - {name: temporary, emptyDir: {sizeLimit: 16Mi}}

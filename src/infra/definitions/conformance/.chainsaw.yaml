@@ -1,0 +1,16 @@
+# Configures Chainsaw cluster discovery and kubeconfig mappings for control and cell clusters to defend multi-cluster test execution against target drift.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Configuration
+metadata:
+  name: local-fleet
+spec:
+  failFast: false
+  parallel: 1
+  clusters:
+    ctrl-eaws-lh1:
+      kubeconfig: .tmp/kubeconfigs/ctrl-eaws-lh1.yaml
+      context: ctrl-eaws-lh1
+    cell-eaws-lh1:
+      kubeconfig: .tmp/kubeconfigs/cell-eaws-lh1.yaml
+      context: cell-eaws-lh1

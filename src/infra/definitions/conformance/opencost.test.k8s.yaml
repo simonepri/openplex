@@ -1,0 +1,48 @@
+# Proves OpenCost allocation APIs report nonzero resource requests and correct cluster attribution to defend cost accounting accuracy.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: opencost-known-workload-allocation
+  labels:
+    cadence: commit
+    capability: costs
+    mutates: none
+spec:
+  namespace: opencost
+  cluster: ctrl-eaws-lh1
+  concurrent: false
+  timeouts:
+    assert: 3m
+    exec: 4m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            args:
+              - -ec
+              - |-
+                api='/api/v1/namespaces/opencost/services/http:opencost:9003/proxy/allocation'
+                query='window=30m&resolution=1m&aggregate=namespace%2Ccontroller'
+                response="$(mktemp)"
+                trap 'rm -f "$response"' EXIT
+                deadline="$(( $(date +%s) + 180 ))"
+                while :; do
+                  if kubectl get --request-timeout=10s --raw "$api?$query" >"$response" &&
+                    jq --exit-status '
+                      .code == 200 and
+                      any(.data[]?;
+                        .["opencost/deployment:opencost"]? as $allocation |
+                        $allocation.properties.cluster == "ctrl-eaws-lh1" and
+                        $allocation.cpuCoreRequestAverage > 0 and
+                        $allocation.ramByteRequestAverage > 0 and
+                        $allocation.totalCost > 0)
+                    ' "$response" >/dev/null; then
+                    exit 0
+                  fi
+                  if test "$(date +%s)" -ge "${deadline}"; then
+                    cat "$response"
+                    exit 1
+                  fi
+                  sleep 5
+                done

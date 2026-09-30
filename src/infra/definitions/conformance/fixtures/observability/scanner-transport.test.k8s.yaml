@@ -1,0 +1,45 @@
+# Probes scanner result transport to defend diagnostic visibility while preventing uncontrolled telemetry data exfiltration from security scanners.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: observability-scanner-transport-probe
+  namespace: trivy-system
+  labels:
+    app.kubernetes.io/component: security-report-scanner
+    app.kubernetes.io/managed-by: chainsaw
+    app.kubernetes.io/name: observability-scanner-transport-probe
+spec:
+  activeDeadlineSeconds: 900
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  securityContext:
+    runAsGroup: 65532
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: scanner
+      image: ($values.busyboxImage)
+      command: [sh, -ceu]
+      args:
+        - |-
+          while :; do
+            printf 'vjic\n'
+            printf '%076d\n' 0
+            printf '{"level":"Warning","message":"observability-scanner-diagnostic %s"}\n' \
+              "${PROBE_UID}" >&2
+            sleep 1
+          done
+      env:
+        - name: PROBE_UID
+          valueFrom:
+            fieldRef: {fieldPath: metadata.uid}
+      resources:
+        requests: {cpu: 1m, memory: 4Mi}
+        limits: {cpu: 20m, memory: 16Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true

@@ -1,0 +1,24 @@
+# Proves a running Coder workspace exposes only its canonical tailnet SSH name and retains the restricted team Pod profile to prevent ingress leakage.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workspace-tailnet-access-boundary
+  labels:
+    cadence: commit
+    capability: access
+    mutates: none
+spec:
+  namespace: access-e2e
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    exec: 15m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            args: [scripts/check_workspace_access_boundary.sh]
+        - command:
+            entrypoint: sh
+            args: [scripts/check_workspace_key_lifecycle.sh]

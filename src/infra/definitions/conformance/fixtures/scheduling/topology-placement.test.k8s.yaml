@@ -1,0 +1,92 @@
+# Stages topology-aware ClusterQueues and test jobs to defend Kueue zone placement logic and rejection of unsatisfiable topology constraints.
+
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata: {name: topology-placement}
+spec:
+  namespaceSelector:
+    matchLabels: {kubernetes.io/metadata.name: scheduling-e2e}
+  resourceGroups:
+    - coveredResources: [cpu, memory]
+      flavors:
+        - name: linux
+          resources:
+            - {name: cpu, nominalQuota: "1"}
+            - {name: memory, nominalQuota: 8Gi}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata: {name: wa, namespace: scheduling-e2e}
+spec: {clusterQueue: topology-placement}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: topology-placement
+  namespace: scheduling-e2e
+  labels:
+    availability-class: wa
+    latency-class: lt
+spec:
+  parallelism: 2
+  completions: 2
+  completionMode: Indexed
+  template:
+    metadata:
+      annotations:
+        kueue.x-k8s.io/podset-required-topology: topology.kubernetes.io/zone
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: probe
+          image: ($values.busyboxImage)
+          command: [sh, -c, 'echo "TAS_PLACEMENT_OK node=${NODE_NAME}"; sleep 30']
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef: {fieldPath: spec.nodeName}
+          resources:
+            requests: {cpu: 100m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: topology-unsatisfiable
+  namespace: scheduling-e2e
+  labels:
+    availability-class: wa
+    latency-class: lt
+spec:
+  parallelism: 2
+  completions: 2
+  completionMode: Indexed
+  template:
+    metadata:
+      annotations:
+        kueue.x-k8s.io/podset-required-topology: topology.kubernetes.io/zone
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: impossible-gang-member
+          image: ($values.busyboxImage)
+          command: [sh, -c, "exit 1"]
+          resources:
+            requests: {cpu: "1000", memory: 32Mi}
+            limits: {cpu: "1000", memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            seccompProfile: {type: RuntimeDefault}

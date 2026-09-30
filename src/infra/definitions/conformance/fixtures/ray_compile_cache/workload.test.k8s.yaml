@@ -1,0 +1,64 @@
+# Runs Ray Train test jobs against namespace-local Valkey caches to defend remote FX graph caching and compilation reuse across container processes.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ray-train-compile-cache-conformance
+  namespace: team-examples-workloads
+  labels:
+    !!merge <<: &workload-labels
+      app.kubernetes.io/component: ray-train-head
+      app.kubernetes.io/name: ray-train-compile-cache-conformance
+      app.kubernetes.io/part-of: ray-train
+      cost-center: examples
+      environment: production
+      team: examples
+    availability-class: wa
+    latency-class: lt
+spec:
+  activeDeadlineSeconds: 600
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels: *workload-labels
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsGroup: 100
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: conformance
+          image: ($rayTrainImage)
+          command: [/bin/sh, /opt/conformance/run.sh]
+          env:
+            - {name: CACHE_TOKEN, value: ($cacheToken)}
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+            - {name: PYTHONUNBUFFERED, value: "1"}
+            - {name: TORCHINDUCTOR_FX_GRAPH_CACHE, value: "1"}
+            - {name: TORCHINDUCTOR_FX_GRAPH_REMOTE_CACHE, value: "1"}
+            - name: TORCHINDUCTOR_REDIS_URL
+              valueFrom:
+                secretKeyRef: {name: torch-compile-cache, key: redis-url}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "1", memory: 3Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: {type: RuntimeDefault}
+          volumeMounts:
+            - {name: conformance, mountPath: /opt/conformance, readOnly: true}
+            - {name: temporary, mountPath: /tmp}
+      volumes:
+        - name: conformance
+          configMap:
+            name: ray-train-compile-cache-conformance
+            defaultMode: 365
+        - {name: temporary, emptyDir: {sizeLimit: 2Gi}}

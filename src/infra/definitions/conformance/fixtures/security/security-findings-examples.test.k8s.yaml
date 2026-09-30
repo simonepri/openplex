@@ -1,0 +1,46 @@
+# Stages a deliberately vulnerable Deployment to verify vulnerability scanners detect privilege escalation, root execution, and unpinned images.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-findings-examples
+  namespace: default
+  # Intentionally unsafe scanner self-test input; the self-test runs a
+  # harmless sleep process and deletes it afterward.
+  labels:
+    app.kubernetes.io/component: security-findings-fixture
+    app.kubernetes.io/name: security-findings-examples
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: security-findings-examples
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: security-findings-fixture
+        app.kubernetes.io/name: security-findings-examples
+    spec:
+      automountServiceAccountToken: true
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: security-findings-examples
+          image: docker.io/library/nginx@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - sleep 600
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - NET_ADMIN
+                - SYS_ADMIN
+            privileged: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            seccompProfile:
+              type: Unconfined

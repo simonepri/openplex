@@ -1,0 +1,74 @@
+# Stages a team verification Job reading pipeline S3 outputs through gateway profiles to defend row count and checksum integrity against data corruption.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pipeline-output-verifier
+  namespace: team-examples-workloads
+  labels:
+    app.kubernetes.io/component: ray-data-verification
+    app.kubernetes.io/name: pipeline-output-verifier
+    cost-center: examples
+    environment: production
+    availability-class: wa
+    latency-class: lt
+    team: examples
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: ray-data-verification
+        app.kubernetes.io/name: pipeline-output-verifier
+        cost-center: examples
+        environment: production
+        team: examples
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsGroup: 100
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: verifier
+          image: ($rayImage)
+          command: [python, -c]
+          args:
+            - |-
+              import os
+
+              import pyarrow.dataset as pads
+              import pyarrow.fs as pafs
+
+              env = os.environ
+              filesystem = pafs.S3FileSystem(
+                  endpoint_override=env["AWS_ENDPOINT_URL_S3"].removeprefix("http://"),
+                  scheme="http",
+                  region="us-east-1",
+              )
+              table = pads.dataset(
+                  env["EXPECTED_PARQUET_PREFIX"],
+                  filesystem=filesystem,
+                  format="parquet",
+              ).to_table()
+              rows = table.num_rows
+              checksum = sum(table.column("result").to_pylist())
+              assert (rows, checksum) == (100, 10000), (rows, checksum)
+              print(
+                  f"PIPELINE_OUTPUT_VERIFIED rows={rows} checksum={checksum}",
+                  flush=True,
+              )
+          env:
+            - {name: AWS_PROFILE, value: team-s3}
+            - {name: AWS_SHARED_CREDENTIALS_FILE, value: /var/run/cluster/s3/credentials}
+            - name: EXPECTED_PARQUET_PREFIX
+              value: (join('', ['eaws-lh1/home/examples/output/ray-data/', $rayPartition, '/', $rayRunId, '/']))
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
