@@ -1,0 +1,46 @@
+# Specifies intentionally untracked patterns, local developer overrides, and transient build artifacts.
+
+.DS_Store
+.mise.toml
+.agents/
+.claude/
+.agy-acp/attachments/
+**/.$*.bkp
+
+# Bazel convenience symlinks point into repository-local generated state.
+/bazel-*
+.bazelrc.user
+
+# Repository-local generated state.
+.tmp/
+# Pre-rename location. Kept ignored so a stale tool writing here cannot feed
+# the repository's own caches to the formatters.
+.local/
+.plans/
+**/terraform.d/
+**/.coder/
+
+# Python generated state lives under .tmp/ via mise.
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.rumdl_cache/
+__pycache__/
+*.pyc
+node_modules/
+.svelte-kit/
+
+# Terraform working data and state. Keep .terraform.lock.hcl committed.
+**/.terraform/
+**/.terragrunt-cache/
+**/.terragrunt-stack/
+**/backend.tf.json
+.terraform.tfstate.lock.info
+*.planfile
+*.tfstate
+*.tfstate.*
+*terraform.tfvars.json
+crash.log
+crash.*.log
+.tool-versions.lock

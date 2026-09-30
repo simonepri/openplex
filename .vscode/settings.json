@@ -1,0 +1,83 @@
+{
+  "explorer.excludeGitIgnore": true,
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "*.yaml": "${capture}.lock.json",
+    "MODULE.bazel": "MODULE.bazel.lock, multitool.lock.json",
+    "main.tf": ".terraform.lock.hcl",
+    "package.json": "",
+    "pnpm-workspace.yaml": "pnpm-lock.yaml",
+    "pyproject.toml": "requirements_dev_lock.txt, requirements_lock.txt, uv.lock",
+    "versions.tf": ".terraform.lock.hcl"
+  },
+  "files.exclude": {
+    ".agents": true,
+    ".claude": true,
+    "**/.DS_Store": true,
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.rumdl_cache": true,
+    "**/.terraform": true,
+    "**/.terragrunt-cache": true,
+    "**/.tmp": true,
+    "**/*.gen.*": true,
+    "**/*.pyc": true,
+    "**/__pycache__": true,
+    "**/bazel-*": true,
+    "**/node_modules": true,
+    "AGENTS.md": true,
+    "CLAUDE.md": true
+  },
+  "search.exclude": {
+    ".agents": true,
+    ".claude": true,
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.rumdl_cache": true,
+    "**/.terraform": true,
+    "**/.terragrunt-cache": true,
+    "**/.tmp": true,
+    "**/*.gen.*": true,
+    "**/__pycache__": true,
+    "**/node_modules": true,
+    "AGENTS.md": true,
+    "CLAUDE.md": true
+  },
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/.terraform/**": true,
+    "**/.tmp/**": true,
+    "**/__pycache__/**": true,
+    "**/bazel-*/**": true,
+    "**/node_modules/**": true
+  },
+  "gopls": {
+    "build.directoryFilters": [
+      "-bazel-bin",
+      "-bazel-out",
+      "-bazel-openplex",
+      "-bazel-testlogs",
+      "-node_modules",
+      "-.tmp"
+    ]
+  },
+  "terraform.languageServer.indexing.ignorePaths": [
+    "**/bazel-*/**",
+    "**/.terraform/**",
+    "**/.tmp/**"
+  ],
+  "json.schemaDownload.trustedDomains": {
+    "https://github.com/": true,
+    "https://*.github.com/": true,
+    "https://*.githubusercontent.com/": true
+  },
+  "workbench.trustedDomains": [
+    "https://github.com",
+    "https://*.github.com",
+    "https://*.githubusercontent.com"
+  ]
+}
