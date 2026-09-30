@@ -1,0 +1,17 @@
+"""Defines OpenTofu module check targets for AWS Secrets Manager resources and KMS keys."""
+
+load("@rules_tf//tf:def.bzl", "tf_module")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+tf_module(
+    name = "aws",
+    providers = [
+        "aws",
+    ],
+    skip_validation = True,
+    deps = [
+        "//src/infra/terraform/components/secret_manager/_interface",
+    ],
+)
+
+package_sources()
