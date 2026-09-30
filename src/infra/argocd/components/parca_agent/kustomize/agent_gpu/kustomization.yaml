@@ -1,0 +1,25 @@
+# Derives the GPU-node Parca agent, which adds CUDA kernel-launch instrumentation only where NVIDIA GPUs are present.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../agent
+nameSuffix: -gpu
+patches:
+  - target: {group: apps, version: v1, kind: DaemonSet, name: parca-agent}
+    patch: |-
+      - op: add
+        path: /spec/selector/matchLabels/app.kubernetes.io~1variant
+        value: gpu
+      - op: add
+        path: /spec/template/metadata/labels/app.kubernetes.io~1variant
+        value: gpu
+      - op: test
+        path: /spec/template/spec/affinity/nodeAffinity/requiredDuringSchedulingIgnoredDuringExecution/nodeSelectorTerms/0/matchExpressions/1/key
+        value: nvidia.com/gpu.present
+      - op: replace
+        path: /spec/template/spec/affinity/nodeAffinity/requiredDuringSchedulingIgnoredDuringExecution/nodeSelectorTerms/0/matchExpressions/1/operator
+        value: In
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --instrument-cuda-launch=true

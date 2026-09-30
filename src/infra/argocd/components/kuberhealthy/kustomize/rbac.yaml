@@ -1,0 +1,754 @@
+# ServiceAccount and RBAC roles granting Kuberhealthy Chainsaw synthetic smoke and behavioral checks permissions to inspect cluster resources.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chainsaw-smoke-check
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-smoke-check
+  annotations:
+    automount-service-account-token: "true"
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chainsaw-smoke-check
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-smoke-check
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      - namespaces
+      - nodes
+      - pods
+      - services
+      # keep-sorted end
+    verbs: [get, list, watch]
+  - apiGroups: [apiregistration.k8s.io]
+    resources:
+      # keep-sorted start
+      - apiservices
+      # keep-sorted end
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources:
+      # keep-sorted start
+      - daemonsets
+      - deployments
+      - statefulsets
+      # keep-sorted end
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources:
+      # keep-sorted start
+      - nodes
+      - pods
+      # keep-sorted end
+    verbs: [get, list]
+  - nonResourceURLs:
+      # keep-sorted start
+      - /healthz
+      - /livez
+      - /readyz
+      - /version
+      # keep-sorted end
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chainsaw-smoke-check
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-smoke-check
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chainsaw-smoke-check
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-smoke-check
+    namespace: kuberhealthy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chainsaw-smoke-check
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-smoke-check
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      - pods
+      - services
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [apps]
+    resources:
+      # keep-sorted start
+      - deployments
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chainsaw-smoke-check
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-smoke-check
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chainsaw-smoke-check
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-smoke-check
+    namespace: kuberhealthy
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chainsaw-identity
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-identity
+  annotations:
+    automount-service-account-token: "true"
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chainsaw-identity
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-identity
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      Chainsaw identity check manages temporary test credentials in the dex namespace.
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      - namespaces
+      - pods
+      - pods/log
+      - secrets
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [batch]
+    resources:
+      # keep-sorted start
+      - jobs
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - nonResourceURLs:
+      # keep-sorted start
+      - /healthz
+      - /livez
+      - /readyz
+      - /version
+      # keep-sorted end
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chainsaw-identity
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-identity
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      Chainsaw identity check manages temporary test credentials in the dex namespace.
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chainsaw-identity
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-identity
+    namespace: kuberhealthy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chainsaw-identity
+  namespace: cert-manager-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-identity
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      # keep-sorted end
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chainsaw-identity
+  namespace: cert-manager-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-identity
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chainsaw-identity
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-identity
+    namespace: kuberhealthy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chainsaw-identity
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-identity
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      # keep-sorted end
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chainsaw-identity
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-identity
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chainsaw-identity
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-identity
+    namespace: kuberhealthy
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chainsaw-scheduling
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-scheduling
+  annotations:
+    automount-service-account-token: "true"
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chainsaw-scheduling
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-scheduling
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - namespaces
+      - pods
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [batch]
+    resources:
+      # keep-sorted start
+      - jobs
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [kueue.x-k8s.io]
+    resources:
+      # keep-sorted start
+      - clusterqueues
+      - localqueues
+      - workloads
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - nonResourceURLs:
+      # keep-sorted start
+      - /healthz
+      - /livez
+      - /readyz
+      - /version
+      # keep-sorted end
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chainsaw-scheduling
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-scheduling
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chainsaw-scheduling
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-scheduling
+    namespace: kuberhealthy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chainsaw-scheduling
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-scheduling
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      # keep-sorted end
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chainsaw-scheduling
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-scheduling
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chainsaw-scheduling
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-scheduling
+    namespace: kuberhealthy
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chainsaw-networking
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-networking
+  annotations:
+    automount-service-account-token: "true"
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chainsaw-networking
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-networking
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - namespaces
+      - pods
+      - pods/exec
+      - services
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [networking.k8s.io]
+    resources:
+      # keep-sorted start
+      - networkpolicies
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - nonResourceURLs:
+      # keep-sorted start
+      - /healthz
+      - /livez
+      - /readyz
+      - /version
+      # keep-sorted end
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chainsaw-networking
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-networking
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chainsaw-networking
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-networking
+    namespace: kuberhealthy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chainsaw-networking
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-networking
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      # keep-sorted end
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chainsaw-networking
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-networking
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chainsaw-networking
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-networking
+    namespace: kuberhealthy
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chainsaw-secrets
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-secrets
+  annotations:
+    automount-service-account-token: "true"
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chainsaw-secrets
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-secrets
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - namespaces
+      - pods
+      - secrets
+      - serviceaccounts
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [external-secrets.io]
+    resources:
+      # keep-sorted start
+      - externalsecrets
+      - secretstores
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - nonResourceURLs:
+      # keep-sorted start
+      - /healthz
+      - /livez
+      - /readyz
+      - /version
+      # keep-sorted end
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chainsaw-secrets
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-secrets
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      Chainsaw secrets check verifies synchronized secrets across dynamically created namespaces.
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chainsaw-secrets
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-secrets
+    namespace: kuberhealthy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chainsaw-secrets
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-secrets
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      # keep-sorted end
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chainsaw-secrets
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-secrets
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chainsaw-secrets
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-secrets
+    namespace: kuberhealthy
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chainsaw-storage
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-storage
+  annotations:
+    automount-service-account-token: "true"
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chainsaw-storage
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-storage
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - namespaces
+      - pods
+      - pods/log
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - nonResourceURLs:
+      # keep-sorted start
+      - /healthz
+      - /livez
+      - /readyz
+      - /version
+      # keep-sorted end
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chainsaw-storage
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chainsaw-storage
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-storage
+    namespace: kuberhealthy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chainsaw-storage
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-storage
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      # keep-sorted end
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chainsaw-storage
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chainsaw-storage
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-storage
+    namespace: kuberhealthy
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chainsaw-observability
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-observability
+  annotations:
+    automount-service-account-token: "true"
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chainsaw-observability
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-observability
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - namespaces
+      # keep-sorted end
+    resourceNames:
+      # keep-sorted start
+      - otel-system
+      # keep-sorted end
+    verbs: [get]
+  - nonResourceURLs:
+      # keep-sorted start
+      - /healthz
+      - /livez
+      - /readyz
+      - /version
+      # keep-sorted end
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chainsaw-observability
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chainsaw-observability
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-observability
+    namespace: kuberhealthy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chainsaw-observability
+  namespace: otel-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-observability
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - pods
+      - pods/log
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [batch]
+    resources:
+      # keep-sorted start
+      - jobs
+      # keep-sorted end
+    verbs: [create, delete, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chainsaw-observability
+  namespace: otel-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chainsaw-observability
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-observability
+    namespace: kuberhealthy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chainsaw-observability
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-observability
+rules:
+  - apiGroups: [""]
+    resources:
+      # keep-sorted start
+      - configmaps
+      # keep-sorted end
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chainsaw-observability
+  namespace: kuberhealthy
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: chainsaw-observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chainsaw-observability
+subjects:
+  - kind: ServiceAccount
+    name: chainsaw-observability
+    namespace: kuberhealthy

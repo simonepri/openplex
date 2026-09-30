@@ -1,0 +1,24 @@
+# Publishes ClusterIP Service for Parca's profile-store API at `parca-server.parca`, rendered by every `<cluster>-parca` registration; cell agents send profiles through the authenticated observability door.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: parca-server
+  namespace: parca
+  labels:
+    app.kubernetes.io/name: parca
+    app.kubernetes.io/instance: parca-server
+    app.kubernetes.io/component: profile-store
+    app.kubernetes.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: parca
+    app.kubernetes.io/instance: parca-server
+    app.kubernetes.io/component: profile-store
+  ports:
+    - name: http
+      appProtocol: kubernetes.io/h2c
+      port: 7070
+      targetPort: http
+      protocol: TCP

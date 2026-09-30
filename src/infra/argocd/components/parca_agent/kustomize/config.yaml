@@ -1,0 +1,39 @@
+# Configures relabeling rules and targets for parca-agent continuous eBPF profiling.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: parca-agent
+  namespace: parca
+  labels:
+    app.kubernetes.io/name: parca-agent
+    app.kubernetes.io/instance: parca-agent
+    app.kubernetes.io/component: profiler
+    app.kubernetes.io/managed-by: argocd
+data:
+  parca-agent.yaml: |
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        target_label: workload
+      - source_labels: [__meta_kubernetes_pod_label_ray_io_cluster]
+        target_label: ray_cluster
+      - source_labels: [__meta_kubernetes_pod_label_ray_io_node_type]
+        target_label: ray_node_type
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      - source_labels: [__meta_kubernetes_pod_container_image]
+        target_label: container_image
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: kubernetes_node
+      - source_labels: [__meta_process_executable_name]
+        target_label: executable
+      - source_labels: [__meta_process_executable_compiler]
+        target_label: compiler
+      - source_labels: [__meta_system_kernel_machine]
+        target_label: arch
+      - source_labels: [__meta_system_kernel_release]
+        target_label: kernel_version

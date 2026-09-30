@@ -1,0 +1,33 @@
+# Grants Prometheus collector read-only Pod discovery so its reviewed scrape job can find each CloudNativePG primary's backup exporter.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-api-bridge-backup-exporter-discovery
+  labels:
+    app.kubernetes.io/component: collector
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: prometheus-api-bridge
+    app.kubernetes.io/part-of: signoz
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-api-bridge-backup-exporter-discovery
+  labels:
+    app.kubernetes.io/component: collector
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: prometheus-api-bridge
+    app.kubernetes.io/part-of: signoz
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-api-bridge-backup-exporter-discovery
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-api-bridge-collector
+    namespace: signoz

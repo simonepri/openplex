@@ -1,0 +1,49 @@
+# Defines NetworkPolicy and recommendation-only VerticalPodAutoscaler for the fixed singleton Parca profile store. Availability components own its PDB.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: parca
+  namespace: parca
+  labels:
+    app.kubernetes.io/name: parca
+    app.kubernetes.io/instance: parca-server
+    app.kubernetes.io/component: profile-store
+    app.kubernetes.io/managed-by: argocd
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: parca
+      app.kubernetes.io/instance: parca-server
+      app.kubernetes.io/component: profile-store
+  policyTypes: [Ingress]
+  ingress:
+    # Profile ingest terminates at the observability door, whose load-balancer
+    # source identity is not selectable by Kubernetes NetworkPolicy. The
+    # authenticated door route remains the only published interface.
+    - ports:
+        - {port: 7070, protocol: TCP}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: parca
+  namespace: parca
+  labels:
+    app.kubernetes.io/name: parca
+    app.kubernetes.io/instance: parca-server
+    app.kubernetes.io/component: profile-store
+    app.kubernetes.io/managed-by: argocd
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: parca
+  updatePolicy:
+    updateMode: "InPlace"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: parca
+        controlledResources: [cpu, memory]
+        minAllowed: {cpu: 50m, memory: 128Mi}
+        maxAllowed: {cpu: "1", memory: 2Gi}

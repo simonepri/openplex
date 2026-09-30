@@ -1,0 +1,6 @@
+# Composes the Parca agent DaemonSet shared by the CPU-node and GPU-node variants.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - daemonset.yaml

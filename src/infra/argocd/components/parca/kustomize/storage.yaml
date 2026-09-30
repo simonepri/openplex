@@ -1,0 +1,23 @@
+# Defines the PersistentVolumeClaim backing Parca's on-disk profile store with expandable storage.
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: parca-data
+  namespace: parca
+  annotations:
+    resize.topolvm.io/enabled: "true"
+    resize.topolvm.io/increase: "20%"
+    resize.topolvm.io/storage_limit: 100Gi
+    resize.topolvm.io/threshold: "20%"
+  labels:
+    app.kubernetes.io/name: parca
+    app.kubernetes.io/instance: parca-server
+    app.kubernetes.io/component: profile-store
+    app.kubernetes.io/managed-by: argocd
+spec:
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 12Gi

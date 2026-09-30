@@ -1,0 +1,10 @@
+# Declares shared container image digests and test fixture parameters to defend Chainsaw test suites against unpinned dependencies and registry drift.
+
+# keep-sorted start
+clusterDomain: configured-by-applicationset.invalid
+headlampClusters: configured-by-applicationset
+intranetDomain: configured-by-applicationset.invalid
+publicDomain: configured-by-applicationset.invalid
+pythonImage: >-
+  docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df
+# keep-sorted end

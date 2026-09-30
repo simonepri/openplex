@@ -1,0 +1,106 @@
+# Deploys the singleton Parca profile store with PVC storage and restricted security context.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: parca
+  namespace: parca
+  annotations:
+    ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+      Parca server requires Recreate rollout strategy due to exclusive ReadWriteOnce PVC-backed WAL storage.
+  labels:
+    app.kubernetes.io/name: parca
+    app.kubernetes.io/instance: parca-server
+    app.kubernetes.io/component: profile-store
+    app.kubernetes.io/managed-by: argocd
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: parca
+      app.kubernetes.io/instance: parca-server
+      app.kubernetes.io/component: profile-store
+  template:
+    metadata:
+      annotations:
+        ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+          Parca server requires Recreate rollout strategy due to exclusive ReadWriteOnce PVC-backed WAL storage.
+        # yamllint disable-line rule:line-length
+        checksum/config: 772aa8545de40af151f37fc90bded2721e2ecffd7c2ef939aed3eb90ba5a0a13
+        signoz.io/path: /metrics
+        signoz.io/port: "7070"
+        signoz.io/scrape: "true"
+      labels:
+        app.kubernetes.io/name: parca
+        app.kubernetes.io/instance: parca-server
+        app.kubernetes.io/component: profile-store
+        app.kubernetes.io/managed-by: argocd
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: parca
+      priorityClassName: cluster-operators
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: parca
+          # yamllint disable-line rule:line-length
+          image: ghcr.io/parca-dev/parca:v0.29.1@sha256:484df2de11fe3493b8b8b52f064daf50b71437778ae61a9fdf4b6fc321c397ac
+          imagePullPolicy: IfNotPresent
+          command: [/parca]
+          args:
+            - --config-path=/etc/parca/parca.yaml
+            - --debuginfo-cache-dir=/var/lib/parca/debuginfo-cache
+            - --enable-persistence
+            - --http-read-timeout=15m
+            - --http-write-timeout=15m
+            - --log-format=json
+            - --log-level=info
+            - --storage-active-memory=268435456
+            - --storage-enable-wal
+            - --storage-index-on-disk
+            - --storage-path=/var/lib/parca
+            - --storage-snapshot-trigger-size=67108864
+          ports:
+            - {name: http, containerPort: 7070, protocol: TCP}
+          startupProbe:
+            tcpSocket: {port: http}
+            failureThreshold: 30
+            periodSeconds: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+          volumeMounts:
+            - {name: config, mountPath: /etc/parca, readOnly: true}
+            - {name: data, mountPath: /var/lib/parca}
+      volumes:
+        - name: config
+          configMap:
+            name: parca
+        - name: data
+          persistentVolumeClaim:
+            claimName: parca-data

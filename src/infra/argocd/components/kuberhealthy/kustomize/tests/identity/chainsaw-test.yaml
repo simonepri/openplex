@@ -1,0 +1,106 @@
+# Proves Dex single sign-on, Headlamp cluster authorization, gateway cookie validation, and Coder snapshot OAuth state and PKCE binding.
+
+# LINT.IfChange(authenticate-catalog-tools-via-dex)
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: authenticate-catalog-tools-via-dex
+  labels:
+    cadence: commit
+    capability: identity
+    mutates: none
+spec:
+  namespace: dex
+  concurrent: false
+  timeouts:
+    apply: 30s
+    cleanup: 1m
+    exec: 2m
+  steps:
+    - try:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - job/dex-local-login-conformance
+              - configmap/dex-local-ca-conformance
+              - configmap/dex-local-login-conformance
+              - secret/dex-local-login-conformance-inputs
+              - --namespace=dex
+              - --ignore-not-found=true
+              - --wait=true
+        - command:
+            entrypoint: kubectl
+            args:
+              - get
+              - configmap/cluster-local-ca
+              - --namespace=cert-manager-system
+              - --output=json
+            outputs:
+              - name: clusterLocalCa
+                value: (json_parse($stdout).data)
+        - apply:
+            resource:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: dex-local-ca-conformance
+                namespace: dex
+                labels:
+                  app.kubernetes.io/component: local-login-conformance
+                  app.kubernetes.io/managed-by: chainsaw
+              data: ($clusterLocalCa)
+        - command:
+            entrypoint: kubectl
+            args:
+              - apply
+              - --kustomize=fixtures/identity
+        - apply:
+            file: fixtures/identity/local-login.test.k8s.yaml
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                attempt=0
+                while [ "${attempt}" -lt 100 ]; do
+                  phase="$(kubectl get pods --namespace=dex --selector=job-name=dex-local-login-conformance --output=jsonpath='{.items[0].status.phase}' 2>/dev/null || true)"
+                  if [ "${phase}" = "Succeeded" ]; then
+                    exit 0
+                  fi
+                  if [ "${phase}" = "Failed" ]; then
+                    printf 'Pod for dex-local-login-conformance failed\n' >&2
+                    exit 1
+                  fi
+                  attempt=$((attempt + 1))
+                  sleep 1
+                done
+                printf 'Pod for dex-local-login-conformance timed out\n' >&2
+                exit 1
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - logs
+              - --selector=job-name=dex-local-login-conformance
+              - --namespace=dex
+              - --tail=-1
+        - command:
+            entrypoint: kubectl
+            args:
+              - describe
+              - pod
+              - --selector=job-name=dex-local-login-conformance
+              - --namespace=dex
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - job/dex-local-login-conformance
+              - configmap/dex-local-ca-conformance
+              - configmap/dex-local-login-conformance
+              - secret/dex-local-login-conformance-inputs
+              - --namespace=dex
+              - --ignore-not-found=true
+              - --wait=true
+# LINT.ThenChange(//src/infra/definitions/conformance/identity.test.k8s.yaml:authenticate-catalog-tools-via-dex)

@@ -1,0 +1,8 @@
+# Declares shared container image digests and test fixture parameters to defend Chainsaw test suites against unpinned dependencies and registry drift.
+
+# keep-sorted start
+awsCliImage: >-
+  docker.io/amazon/aws-cli:2.37.9@sha256:92de75724b6a746951f0e8b915d86bbccd7cb55aff96cd0cb4f7017272160780
+busyboxImage: >-
+  docker.io/library/busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+# keep-sorted end

@@ -1,0 +1,64 @@
+# Proves SigNoz telemetry ingestion, query door authentication, and Prometheus compatibility defend cross-cluster observability and identity attribution.
+
+# LINT.IfChange(query-signoz-telemetry-via-egress-door)
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-signoz-telemetry-via-egress-door
+  labels:
+    cadence: commit
+    capability: observability
+    mutates: none
+spec:
+  namespace: otel-system
+  concurrent: false
+  timeouts:
+    apply: 1m
+    cleanup: 1m
+    exec: 3m
+  steps:
+    - try:
+        - command:
+            entrypoint: kubectl
+            args: [delete, job/observability-door-query-probe, --namespace=otel-system, --ignore-not-found=true, --wait=true]
+        - apply:
+            file: fixtures/observability/door-query.test.k8s.yaml
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                attempt=0
+                while [ "${attempt}" -lt 120 ]; do
+                  phase="$(kubectl get pods --namespace=otel-system --selector=job-name=observability-door-query-probe --output=jsonpath='{.items[0].status.phase}' 2>/dev/null || true)"
+                  if [ "${phase}" = "Succeeded" ]; then
+                    exit 0
+                  fi
+                  if [ "${phase}" = "Failed" ]; then
+                    printf 'Pod for observability-door-query-probe failed\n' >&2
+                    exit 1
+                  fi
+                  attempt=$((attempt + 1))
+                  sleep 1
+                done
+                printf 'Pod for observability-door-query-probe timed out\n' >&2
+                exit 1
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - logs
+              - --selector=job-name=observability-door-query-probe
+              - --namespace=otel-system
+              - --tail=-1
+        - command:
+            entrypoint: kubectl
+            args:
+              - describe
+              - pod
+              - --selector=job-name=observability-door-query-probe
+              - --namespace=otel-system
+        - command:
+            entrypoint: kubectl
+            args: [delete, job/observability-door-query-probe, --namespace=otel-system, --ignore-not-found=true, --wait=true]
+# LINT.ThenChange(//src/infra/definitions/conformance/observability.test.k8s.yaml:query-signoz-telemetry-via-egress-door)

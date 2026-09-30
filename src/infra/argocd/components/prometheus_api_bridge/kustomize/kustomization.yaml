@@ -1,0 +1,14 @@
+# Composes RBAC, secrets, CA bundles, and autoscaling policies for the Prometheus API bridge.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - control-ca-bundle.yaml
+  - kube-state-metrics.network-policy.yaml
+  - local-ca-policy.yaml
+  - probe-policy.yaml
+  - rbac.yaml
+  - scaled-object.yaml
+  - secrets.yaml
+  # keep-sorted end

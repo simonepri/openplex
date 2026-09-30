@@ -1,0 +1,53 @@
+# Helm values configuring Kuberhealthy operator, resource limits, and minimal checks.
+
+fullnameOverride: kuberhealthy
+
+imageURL: docker.io/kuberhealthy/kuberhealthy:v2.7.1@sha256:3915fb0be76e244d2885851d55d7a8316134b944daf8b4cc85d32a3433facd43
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+deployment:
+  replicas: 1
+  imagePullPolicy: IfNotPresent
+  podAnnotations:
+    automount-service-account-token: "true"
+  env:
+    KH_EXTERNAL_REPORTING_URL: "http://kuberhealthy.kuberhealthy.svc.cluster.local:8080/externalCheckStatus"
+
+serviceAccount:
+  annotations:
+    automount-service-account-token: "true"
+
+securityContext:
+  enabled: true
+  runAsNonRoot: true
+  runAsUser: 999
+  fsGroup: 999
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  seccompProfile:
+    type: RuntimeDefault
+
+podDisruptionBudget:
+  enabled: false
+
+service:
+  externalPort: 8080
+  type: ClusterIP
+
+# Disable default upstream checks: synthetic suites run via declarative Chainsaw KuberhealthyChecks
+check:
+  daemonset:
+    enabled: false
+  deployment:
+    enabled: false
+  dnsInternal:
+    enabled: false
+  dnsExternal:
+    enabled: false

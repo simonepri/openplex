@@ -1,0 +1,50 @@
+# Proves virtual local and global S3 endpoints resolve via cell gateways and defends S3 data plane operations.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: read-and-write-s3-objects-via-gateway
+  labels:
+    cadence: commit
+    capability: storage
+    mutates: scratch
+spec:
+  namespace: team-examples-workloads
+  concurrent: false
+  timeouts:
+    apply: 30s
+    assert: 30s
+    cleanup: 30s
+    exec: 2m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - date -u +chainsaw-%Y%m%dT%H%M%SZ
+            outputs:
+              - name: objectSuffix
+                value: (trim_space($stdout))
+        - apply:
+            file: fixtures/storage/gateway-name-resolution-probe.test.k8s.yaml
+            bindings:
+              - name: objectSuffix
+                value: ($objectSuffix)
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - pod/gateway-name-resolution
+              - --namespace=team-examples-workloads
+              - --for=jsonpath={.status.phase}=Succeeded
+              - --timeout=120s
+      finally:
+        - command:
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod/gateway-name-resolution
+              - --namespace=team-examples-workloads
+              - --ignore-not-found=true
+              - --wait=false

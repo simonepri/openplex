@@ -1,0 +1,59 @@
+# Defines NetworkPolicy and VerticalPodAutoscaler (Off mode) for the parca-agent DaemonSet, rendered by `kustomize/base` for every `<cluster>-parca-agent` cell registration.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: parca-agent
+  namespace: parca
+  labels:
+    app.kubernetes.io/name: parca-agent
+    app.kubernetes.io/instance: parca-agent
+    app.kubernetes.io/component: profiler
+    app.kubernetes.io/managed-by: argocd
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: parca-agent
+      app.kubernetes.io/instance: parca-agent
+      app.kubernetes.io/component: profiler
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {port: 7071, protocol: TCP}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - {port: 53, protocol: TCP}
+        - {port: 53, protocol: UDP}
+    - to:
+        - ipBlock: {cidr: 169.254.20.10/32}
+      ports:
+        - {port: 53, protocol: TCP}
+        - {port: 53, protocol: UDP}
+    # Parca profile store in-cluster interface.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: parca
+              app.kubernetes.io/instance: parca-server
+      ports:
+        - {port: 7070, protocol: TCP}
+    # Kubernetes metadata discovery and the public ingest door both use TLS.
+    - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
+        - ipBlock: {cidr: 192.168.0.0/16}
+      ports:
+        - {port: 443, protocol: TCP}
