@@ -1,0 +1,22 @@
+# Configures VerticalPodAutoscaler sizing (Initial mode) for the otel-collector-agent DaemonSet, rendered by every `<cluster>-otel-collector` registration on control and cell clusters.
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: otel-collector-agent
+  namespace: otel-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: opentelemetry
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: DaemonSet
+    name: otel-collector-agent
+  updatePolicy:
+    updateMode: "Initial"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: opentelemetry-collector
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly

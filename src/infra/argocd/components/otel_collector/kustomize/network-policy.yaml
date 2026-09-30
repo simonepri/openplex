@@ -1,0 +1,23 @@
+# Restricts ingress into the OpenTelemetry Collector namespace while permitting cluster-wide egress required for pod metric scraping and telemetry export.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otel-collector-network-isolation
+  namespace: otel-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Allow intra-namespace agent scraping and OTLP receiver ports
+    - ports:
+        - {protocol: TCP, port: 4317}
+        - {protocol: TCP, port: 4318}
+        - {protocol: TCP, port: 13133}
+  egress:
+    # OpenTelemetry Collector agent requires cluster-wide egress to scrape pods
+    # across namespaces and export telemetry to in-cluster and external sinks.
+    - {}
