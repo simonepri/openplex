@@ -1,0 +1,18 @@
+# Defines pnpm workspace packages and monorepo dependency resolution for TypeScript and JavaScript workloads.
+
+virtualStoreDir: .tmp/cache/pnpm/virtual-store
+
+packages:
+  # keep-sorted start
+  - src/**
+  # keep-sorted end
+
+  # Lifecycle scripts stay forbidden except where a Bazel custom postinstall
+  # repairs rules_js extraction (see MODULE.bazel); platform binaries arrive as
+  # optional dependencies instead.
+allowBuilds:
+  "@sveltejs/kit": true
+  esbuild: false
+
+overrides:
+  cookie: 0.7.2
