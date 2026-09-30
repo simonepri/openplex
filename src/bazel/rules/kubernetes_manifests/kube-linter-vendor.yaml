@@ -1,0 +1,8 @@
+# Define kube-linter policy checks tailored for standalone vendor Helm chart manifest validation.
+
+checks:
+  doNotAutoAddDefaults: true
+  addAllBuiltIn: false
+  include:
+    - mismatching-selector
+    - unsafe-proc-mount

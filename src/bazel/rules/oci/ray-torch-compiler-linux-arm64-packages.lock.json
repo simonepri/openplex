@@ -1,0 +1,379 @@
+{
+  "packages": [
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "binutils_2.38-4ubuntu2.12_arm64",
+      "name": "binutils",
+      "sha256": "610ecebee108eea384fc9cfe9a569957b60d8d6b31fb91137e298fe79dd0dc6b",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/b/binutils/binutils_2.38-4ubuntu2.12_arm64.deb"
+      ],
+      "version": "2.38-4ubuntu2.12"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "binutils-aarch64-linux-gnu_2.38-4ubuntu2.12_arm64",
+      "name": "binutils-aarch64-linux-gnu",
+      "sha256": "469f40f9c0f489836fe996d4cfa1dc072c4cef4f10cd3fea02fd26c47910ac28",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/b/binutils/binutils-aarch64-linux-gnu_2.38-4ubuntu2.12_arm64.deb"
+      ],
+      "version": "2.38-4ubuntu2.12"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "binutils-common_2.38-4ubuntu2.12_arm64",
+      "name": "binutils-common",
+      "sha256": "e27872f3a5bc8021e007b491d3395b7a4886c2c523765663379e39c64b9188d7",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/b/binutils/binutils-common_2.38-4ubuntu2.12_arm64.deb"
+      ],
+      "version": "2.38-4ubuntu2.12"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "cpp_4-11.2.0-1ubuntu1_arm64",
+      "name": "cpp",
+      "sha256": "6be683387ebdfe8dfc7c7a983d3d4458ff0c9d02c7ee7247d0252afc87bffd1b",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-defaults/cpp_11.2.0-1ubuntu1_arm64.deb"
+      ],
+      "version": "4:11.2.0-1ubuntu1"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "cpp-11_11.4.0-1ubuntu1_22.04.3_arm64",
+      "name": "cpp-11",
+      "sha256": "9e84375f6e800e36ac2982cb01434f0911dd1bfdf69def555340cb48676df709",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-11/cpp-11_11.4.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "11.4.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "g-p--p-_4-11.2.0-1ubuntu1_arm64",
+      "name": "g++",
+      "sha256": "43ae21a89a37094b4f744196b8650da39aa69cee1fa881232db36d06d5c18ad7",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-defaults/g++_11.2.0-1ubuntu1_arm64.deb"
+      ],
+      "version": "4:11.2.0-1ubuntu1"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "g-p--p--11_11.4.0-1ubuntu1_22.04.3_arm64",
+      "name": "g++-11",
+      "sha256": "9eea44628500b0f205e710146e4d28f4dafcbbace9e3bffb551f6044beb4f447",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-11/g++-11_11.4.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "11.4.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "gcc_4-11.2.0-1ubuntu1_arm64",
+      "name": "gcc",
+      "sha256": "426deed543cc32f388ad8336354e312fb76a47450194d2d775d855ad5878f82e",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-defaults/gcc_11.2.0-1ubuntu1_arm64.deb"
+      ],
+      "version": "4:11.2.0-1ubuntu1"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "gcc-11_11.4.0-1ubuntu1_22.04.3_arm64",
+      "name": "gcc-11",
+      "sha256": "bf80a479611a7cbd554ebf4d33d404666e1a3fd26fd08c497cab91b47990d3f0",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-11/gcc-11_11.4.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "11.4.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "gcc-11-base_11.4.0-1ubuntu1_22.04.3_arm64",
+      "name": "gcc-11-base",
+      "sha256": "69d03f54155fedab6c941e63149cf6ddadaa3638a005bbc66ef0d8445c3e5af3",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-11/gcc-11-base_11.4.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "11.4.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libasan6_11.4.0-1ubuntu1_22.04.3_arm64",
+      "name": "libasan6",
+      "sha256": "c32dad7b409a6275c6af8a9bf5fe6e40acf15aad33d9a6c0d0b16c539bf77927",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-11/libasan6_11.4.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "11.4.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libatomic1_12.3.0-1ubuntu1_22.04.3_arm64",
+      "name": "libatomic1",
+      "sha256": "936154d57c566aebc0842cf0451b694539e61ca65617d707aa89b4db07285eb1",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-12/libatomic1_12.3.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "12.3.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libbinutils_2.38-4ubuntu2.12_arm64",
+      "name": "libbinutils",
+      "sha256": "cccc7cf1b728838f51054a44316a04e520b936dfec48de944ebace8c171e2773",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/b/binutils/libbinutils_2.38-4ubuntu2.12_arm64.deb"
+      ],
+      "version": "2.38-4ubuntu2.12"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libc-dev-bin_2.35-0ubuntu3.14_arm64",
+      "name": "libc-dev-bin",
+      "sha256": "2a565cac87ca40cba0252c75f77a128980b67f41cbbc49313cebefd4a5eecdd4",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/glibc/libc-dev-bin_2.35-0ubuntu3.14_arm64.deb"
+      ],
+      "version": "2.35-0ubuntu3.14"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libc6-dev_2.35-0ubuntu3.14_arm64",
+      "name": "libc6-dev",
+      "sha256": "21e50e76729c36891e4bd4397d4f58dabe8589e972535765da3deabcc5a55bba",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/glibc/libc6-dev_2.35-0ubuntu3.14_arm64.deb"
+      ],
+      "version": "2.35-0ubuntu3.14"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libcc1-0_12.3.0-1ubuntu1_22.04.3_arm64",
+      "name": "libcc1-0",
+      "sha256": "bdbfa92037d98d1f5d13cdb8de2387dbc69c34fa7635d951af7df41fdb4d06fb",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-12/libcc1-0_12.3.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "12.3.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libcrypt-dev_1-4.4.27-1_arm64",
+      "name": "libcrypt-dev",
+      "sha256": "17805b64d386655edca4aafbf01e6b89bd3b9a35cde7a31da964dd766ad9c5b6",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/libx/libxcrypt/libcrypt-dev_4.4.27-1_arm64.deb"
+      ],
+      "version": "1:4.4.27-1"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libctf-nobfd0_2.38-4ubuntu2.12_arm64",
+      "name": "libctf-nobfd0",
+      "sha256": "5bf301b309977b4bfa75c92b84ab1461ac6954c73872efb19f3766051010bf63",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/b/binutils/libctf-nobfd0_2.38-4ubuntu2.12_arm64.deb"
+      ],
+      "version": "2.38-4ubuntu2.12"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libctf0_2.38-4ubuntu2.12_arm64",
+      "name": "libctf0",
+      "sha256": "423c4a9bd007178f838d35caedf1fe7d1a447ea4d96a8a2949ad116b6f50da0f",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/b/binutils/libctf0_2.38-4ubuntu2.12_arm64.deb"
+      ],
+      "version": "2.38-4ubuntu2.12"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libgcc-11-dev_11.4.0-1ubuntu1_22.04.3_arm64",
+      "name": "libgcc-11-dev",
+      "sha256": "8f65b96e09a0c0f9dace290d8e91ba9209ac991ef1c57803ff6ae8a0e8402527",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-11/libgcc-11-dev_11.4.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "11.4.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libgomp1_12.3.0-1ubuntu1_22.04.3_arm64",
+      "name": "libgomp1",
+      "sha256": "9a1038bc9b4305ba4dfbc2c4c77a1a173a8a4e8801d32d7642a5d9a4e5fb1da7",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-12/libgomp1_12.3.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "12.3.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libhwasan0_12.3.0-1ubuntu1_22.04.3_arm64",
+      "name": "libhwasan0",
+      "sha256": "64fe35ce16542512e927df55e40079599b1bbe31ddd260c5dbc15f7f458896fc",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-12/libhwasan0_12.3.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "12.3.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libisl23_0.24-2build1_arm64",
+      "name": "libisl23",
+      "sha256": "1e6e12c1ec8aa83839fe9451b533bfe5bf63b44b0e66a71c1e41706c481fb6e9",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/i/isl/libisl23_0.24-2build1_arm64.deb"
+      ],
+      "version": "0.24-2build1"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libitm1_12.3.0-1ubuntu1_22.04.3_arm64",
+      "name": "libitm1",
+      "sha256": "5a84f22d2589c37d8521e70ec261f6eca060b89faaca27bab6fc245a3b0abb70",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-12/libitm1_12.3.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "12.3.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "liblsan0_12.3.0-1ubuntu1_22.04.3_arm64",
+      "name": "liblsan0",
+      "sha256": "142cd8186e587d538e2b9b01fbe2c573c8e68e173d089bd0fbfe21fd4d0db99b",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-12/liblsan0_12.3.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "12.3.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libmpc3_1.2.1-2build1_arm64",
+      "name": "libmpc3",
+      "sha256": "7f6fc0fdb744474a5f49077c37bc848af64392eb970fddf447092f190a3fe635",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/m/mpclib3/libmpc3_1.2.1-2build1_arm64.deb"
+      ],
+      "version": "1.2.1-2build1"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libmpfr6_4.1.0-3build3_arm64",
+      "name": "libmpfr6",
+      "sha256": "cef55f2fe8a149d8d460140a10b8e8539ada9f7fbfa3a44f77ac2a049b3baaa2",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/m/mpfr4/libmpfr6_4.1.0-3build3_arm64.deb"
+      ],
+      "version": "4.1.0-3build3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libnsl-dev_1.3.0-2build2_arm64",
+      "name": "libnsl-dev",
+      "sha256": "4a111ee814455ebf4db3be9caec555752315048cb5ec9c4c076fe3f00da22ec9",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/libn/libnsl/libnsl-dev_1.3.0-2build2_arm64.deb"
+      ],
+      "version": "1.3.0-2build2"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libstdc-p--p--11-dev_11.4.0-1ubuntu1_22.04.3_arm64",
+      "name": "libstdc++-11-dev",
+      "sha256": "e6b5485acb1c0380f388c069188f2f50b0bd72508ed75cc0551493a79d91c348",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-11/libstdc++-11-dev_11.4.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "11.4.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libtirpc-dev_1.3.2-2ubuntu0.1_arm64",
+      "name": "libtirpc-dev",
+      "sha256": "844036d62c2c0c97f6801bf585de068bd3753351122384d6b5830a070d781aa0",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/libt/libtirpc/libtirpc-dev_1.3.2-2ubuntu0.1_arm64.deb"
+      ],
+      "version": "1.3.2-2ubuntu0.1"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libtsan0_11.4.0-1ubuntu1_22.04.3_arm64",
+      "name": "libtsan0",
+      "sha256": "cf9d812f8ac20f0fe04f275e921a38ec018268ca476f1cc895b59b5904a70104",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-11/libtsan0_11.4.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "11.4.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "libubsan1_12.3.0-1ubuntu1_22.04.3_arm64",
+      "name": "libubsan1",
+      "sha256": "36e0ac611cc5900b2bdc58a2d4b3ba1c0f5341f39c168f59533316394e51c168",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/g/gcc-12/libubsan1_12.3.0-1ubuntu1~22.04.3_arm64.deb"
+      ],
+      "version": "12.3.0-1ubuntu1~22.04.3"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "linux-libc-dev_5.15.0-186.196_arm64",
+      "name": "linux-libc-dev",
+      "sha256": "a8f63974234e1ea73f1d0d223f51dd97bfacdb4fa40b61c96028ccf17b3eddc0",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/l/linux/linux-libc-dev_5.15.0-186.196_arm64.deb"
+      ],
+      "version": "5.15.0-186.196"
+    },
+    {
+      "arch": "arm64",
+      "dependencies": [],
+      "key": "rpcsvc-proto_1.4.2-0ubuntu6_arm64",
+      "name": "rpcsvc-proto",
+      "sha256": "07e79aa5de920bbb123d9590cdb2add2a8ec366864d7403794741db604698376",
+      "urls": [
+        "https://snapshot.ubuntu.com/ubuntu/20260801T000000Z/pool/main/r/rpcsvc-proto/rpcsvc-proto_1.4.2-0ubuntu6_arm64.deb"
+      ],
+      "version": "1.4.2-0ubuntu6"
+    }
+  ],
+  "version": 1
+}

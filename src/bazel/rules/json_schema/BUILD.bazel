@@ -1,0 +1,5 @@
+"""Export JSON Schema build validation rules and schema verification target factories."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package_sources()
