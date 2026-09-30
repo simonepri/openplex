@@ -1,0 +1,919 @@
+# Registry of Helm overrides and Kustomize patches selected by cluster availability profile.
+
+profiles:
+  minimal:
+    cells:
+      - cell-eaws-lh1
+    components:
+      aws-load-balancer-controller:
+        helmValues:
+          replicaCount: 1
+          podDisruptionBudget:
+            minAvailable: 0
+      barman-cloud:
+        helmValues:
+          replicaCount: 1
+      buildbuddy-enterprise-cache-proxy:
+        helmValues:
+          replicas: 1
+          podDisruptionBudget:
+            enabled: false
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      buildbuddy-executor:
+        helmValues:
+          replicas: 1
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      buildbuddy-executor-gpu:
+        helmValues:
+          replicas: 1
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      cert-manager:
+        helmValues:
+          replicaCount: 1
+          webhook:
+            replicaCount: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          cainjector:
+            replicaCount: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          podDisruptionBudget:
+            enabled: false
+            minAvailable: 1
+      clickhouse:
+        patches:
+          - target:
+              group: clickhouse.altinity.com
+              kind: ClickHouseInstallation
+              name: signoz-clickhouse
+            patch: |
+              - op: replace
+                path: /spec/configuration/clusters/0/layout/shardsCount
+                value: 1
+              - op: replace
+                path: /spec/configuration/clusters/0/layout/replicasCount
+                value: 1
+              - op: replace
+                path: /spec/templates/podTemplates/0/spec/containers/0/resources/requests/cpu
+                value: 100m
+              - op: replace
+                path: /spec/templates/podTemplates/0/spec/containers/0/resources/requests/memory
+                value: 512Mi
+              - op: replace
+                path: /spec/templates/podTemplates/0/spec/containers/0/resources/limits/cpu
+                value: '2'
+              - op: replace
+                path: /spec/templates/podTemplates/0/spec/containers/0/resources/limits/memory
+                value: 4Gi
+          - target:
+              group: clickhouse-keeper.altinity.com
+              kind: ClickHouseKeeperInstallation
+              name: signoz-keeper
+            patch: |
+              - op: replace
+                path: /spec/configuration/clusters/0/layout/replicasCount
+                value: 1
+              - op: replace
+                path: /spec/configuration/clusters/0/pdbManaged
+                value: 'false'
+              - op: replace
+                path: /spec/templates/podTemplates/0/spec/containers/0/resources/requests/cpu
+                value: 50m
+              - op: replace
+                path: /spec/templates/podTemplates/0/spec/containers/0/resources/requests/memory
+                value: 128Mi
+              - op: replace
+                path: /spec/templates/podTemplates/0/spec/containers/0/resources/limits/cpu
+                value: 200m
+              - op: replace
+                path: /spec/templates/podTemplates/0/spec/containers/0/resources/limits/memory
+                value: 256Mi
+          - target:
+              group: autoscaling.k8s.io
+              kind: VerticalPodAutoscaler
+              name: signoz-clickhouse-shard-0-replica-1
+            patch: |-
+              $patch: delete
+              apiVersion: autoscaling.k8s.io/v1
+              kind: VerticalPodAutoscaler
+              metadata:
+                name: unused
+          - target:
+              group: autoscaling.k8s.io
+              kind: VerticalPodAutoscaler
+              name: signoz-clickhouse-shard-1-replica-0
+            patch: |-
+              $patch: delete
+              apiVersion: autoscaling.k8s.io/v1
+              kind: VerticalPodAutoscaler
+              metadata:
+                name: unused
+          - target:
+              group: autoscaling.k8s.io
+              kind: VerticalPodAutoscaler
+              name: signoz-clickhouse-shard-1-replica-1
+            patch: |-
+              $patch: delete
+              apiVersion: autoscaling.k8s.io/v1
+              kind: VerticalPodAutoscaler
+              metadata:
+                name: unused
+          - target:
+              group: autoscaling.k8s.io
+              kind: VerticalPodAutoscaler
+              name: signoz-keeper-replica-1
+            patch: |-
+              $patch: delete
+              apiVersion: autoscaling.k8s.io/v1
+              kind: VerticalPodAutoscaler
+              metadata:
+                name: unused
+          - target:
+              group: autoscaling.k8s.io
+              kind: VerticalPodAutoscaler
+              name: signoz-keeper-replica-2
+            patch: |-
+              $patch: delete
+              apiVersion: autoscaling.k8s.io/v1
+              kind: VerticalPodAutoscaler
+              metadata:
+                name: unused
+          - target:
+              kind: ConfigMap
+              name: signoz-clickhouse-backup-common
+              namespace: signoz
+            patch: |
+              - op: replace
+                path: /data/BACKUP_KEEP_CHAINS
+                value: '1'
+      clickhouse-coordinator:
+        patches:
+          - target:
+              group: apps
+              kind: Deployment
+              name: clickhouse-coordinator
+            patch: |
+              - op: replace
+                path: /spec/replicas
+                value: 1
+          - target:
+              group: keda.sh
+              kind: ScaledObject
+              name: clickhouse-coordinator
+            patch: |
+              - op: replace
+                path: /spec/minReplicaCount
+                value: 1
+              - op: replace
+                path: /spec/fallback/replicas
+                value: 1
+              - op: replace
+                path: /spec/pollingInterval
+                value: 60
+      cloudnative-pg:
+        helmValues:
+          additionalArgs:
+            - --leader-elect=false
+          replicaCount: 1
+      dragonfly-manager:
+        helmValues:
+          manager:
+            replicas: 1
+      dragonfly-peer:
+        helmValues:
+          scheduler:
+            replicas: 1
+          seedClient:
+            replicas: 1
+      envoy-gateway:
+        helmValues:
+          deployment:
+            replicas: 1
+          podDisruptionBudget:
+            minAvailable: 0
+      envoy-gateway-instance:
+        helmValues:
+          proxy:
+            autoscaling:
+              pollingInterval: 60
+              minReplicas: 1
+              maxReplicas: 1
+              fallback:
+                replicas: 1
+      external-secrets:
+        helmValues:
+          leaderElect: false
+          replicaCount: 1
+          webhook:
+            replicaCount: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          certController:
+            replicaCount: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          podDisruptionBudget:
+            enabled: false
+            minAvailable: 1
+      kargo:
+        helmValues:
+          api:
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          webhooksServer:
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+      karpenter-aws:
+        helmValues:
+          replicas: 1
+      keda:
+        helmValues:
+          operator:
+            replicaCount: 1
+          metricsServer:
+            replicaCount: 1
+          webhooks:
+            replicaCount: 1
+          podDisruptionBudget:
+            operator: null
+            metricServer: null
+            webhooks: null
+      keda-http:
+        helmValues:
+          interceptor:
+            replicas:
+              min: 1
+              max: 1
+            pdb:
+              enabled: false
+              maxUnavailable: null
+              minAvailable: 1
+          operator:
+            replicas: 1
+          scaler:
+            replicas: 1
+      kube-oidc-proxy:
+        patches:
+          - target:
+              group: apps
+              kind: Deployment
+              name: kube-oidc-proxy
+            patch: |
+              - op: replace
+                path: /spec/replicas
+                value: 1
+      kuberay:
+        helmValues:
+          leaderElectionEnabled: false
+          replicas: 1
+      kueue:
+        helmValues:
+          controllerManager:
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+      kueue-admission:
+        helmValues:
+          compute:
+            ceiling:
+              cpu: '6'
+              memory: 20Gi
+            cpu_capabilities: []
+            floors:
+              be:
+                cpu: '0'
+                memory: '0'
+              ha:
+                cpu: '4'
+                memory: 12Gi
+              ma:
+                cpu: '1'
+                memory: 6Gi
+              wa:
+                cpu: '1'
+                memory: 2Gi
+            gpu_classes: {}
+            tpu_classes: {}
+          teams:
+            - quota:
+                classes:
+                  be:
+                    cpu: '0'
+                    memory: '0'
+                  ha:
+                    cpu: '4'
+                    memory: 12Gi
+                  ma:
+                    cpu: '1'
+                    memory: 6Gi
+                  wa:
+                    cpu: '1'
+                    memory: 2Gi
+              slug: examples
+      kyverno:
+        helmValues:
+          features:
+            forceFailurePolicyIgnore:
+              enabled: true
+          admissionController:
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          backgroundController:
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          cleanupController:
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          reportsController:
+            enabled: false
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+      oauth2-proxy:
+        helmValues:
+          podDisruptionBudget:
+            enabled: false
+          replicas: 1
+      observability:
+        patches:
+          - target:
+              group: resources.signoz.io
+              kind: Rule
+            patch: |
+              - op: replace
+                path: /spec/objectTemplate/spec/evaluation/spec/frequency
+                value: 5m
+      opencost:
+        helmValues:
+          opencost:
+            exporter:
+              replicas: 1
+          pdb:
+            enabled: false
+            minAvailable: 1
+      otel-collector:
+        helmValues:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+      prometheus-api-bridge:
+        patches:
+          - target:
+              group: keda.sh
+              kind: ScaledObject
+              name: prometheus-api-bridge
+            patch: |
+              - op: replace
+                path: /spec/minReplicaCount
+                value: 1
+              - op: replace
+                path: /spec/maxReplicaCount
+                value: 1
+              - op: replace
+                path: /spec/pollingInterval
+                value: 60
+        helmValues:
+          server:
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+      pvc-autoresizer:
+        helmValues:
+          controller:
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+      s3-gateway:
+        helmValues:
+          writerCell: cell-eaws-lh1
+      signoz:
+        helmValues:
+          otelCollector:
+            replicaCount: 1
+            additionalEnvs:
+              GOMEMLIMIT: 1536MiB
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 1
+                memory: 2Gi
+            config:
+              processors:
+                batch:
+                  timeout: 30s
+        patches:
+          - target:
+              group: keda.sh
+              kind: ScaledObject
+              name: signoz-otel-collector
+            patch: |
+              - op: replace
+                path: /spec/minReplicaCount
+                value: 1
+              - op: replace
+                path: /spec/maxReplicaCount
+                value: 1
+              - op: replace
+                path: /spec/pollingInterval
+                value: 60
+          - target:
+              group: batch
+              kind: Job
+              name: signoz-log-retention
+              namespace: signoz
+            patch: |
+              - op: replace
+                path: /spec/template/spec/containers/0/env/0/value
+                value: '3'
+      signoz-operator:
+        helmValues:
+          controller:
+            args:
+              - --watch-namespaces=signoz
+              - --leader-elect=false
+      trivy-operator:
+        helmValues:
+          operator:
+            replicas: 1
+      trivy-server:
+        helmValues:
+          replicaCount: 1
+      trust-manager:
+        helmValues:
+          app:
+            leaderElection:
+              enabled: false
+          replicaCount: 1
+          podDisruptionBudget:
+            enabled: false
+            minAvailable: 1
+      valkey-operator:
+        helmValues:
+          manager:
+            leaderElection:
+              enabled: false
+          replicaCount: 1
+          podDisruptionBudget:
+            enabled: false
+            minAvailable: 1
+      velero:
+        helmValues:
+          schedules:
+            cluster-daily:
+              template:
+                ttl: 48h0m0s
+      velero-ui:
+        helmValues:
+          replicaCount: 1
+      vpa:
+        helmValues:
+          admissionController:
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          recommender:
+            # Helm replaces arrays; retain the shared history contract.
+            # LINT.IfChange(vpa_recommender_history)
+            extraArgs:
+              - --storage=checkpoint
+              - --cpu-histogram-decay-half-life=8h
+              - --memory-histogram-decay-half-life=8h
+              - --memory-aggregation-interval=8h
+              - --recommender-interval=5m
+              - --checkpoints-timeout=45s
+              - --v=2
+              - --pod-recommendation-min-memory-mb=32
+              - --pod-recommendation-min-cpu-millicores=10
+            # LINT.ThenChange(//src/infra/argocd/components/vpa/helm/values.yaml:vpa_recommender_history)
+            leaderElection:
+              enabled: false
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+          updater:
+            # Helm replaces arrays; preserve the updater safety settings.
+            # LINT.IfChange(vpa_updater_timing)
+            extraArgs:
+              - --feature-gates=InPlace=true
+              - --in-place-skip-disruption-budget=true
+              - --min-replicas=1
+              - --in-recommendation-bounds-eviction-lifetime-threshold=5m
+              - --pod-update-threshold=0.15
+              - --updater-interval=1m
+              - --v=2
+            # LINT.ThenChange(//src/infra/argocd/components/vpa/helm/values.yaml:vpa_updater_timing)
+            leaderElection:
+              enabled: false
+            replicas: 1
+            podDisruptionBudget:
+              enabled: false
+              minAvailable: 1
+    patches:
+      - target:
+          group: policy
+          kind: PodDisruptionBudget
+        patch: |
+          $patch: delete
+          apiVersion: policy/v1
+          kind: PodDisruptionBudget
+          metadata:
+            name: unused
+  production:
+    cells:
+      - cell-aws-usw2
+      - cell-gcp-euw4
+    components:
+      aws-load-balancer-controller:
+        helmValues:
+          replicaCount: 2
+          podDisruptionBudget:
+            minAvailable: 1
+      barman-cloud:
+        helmValues:
+          replicaCount: 2
+      buildbuddy-enterprise-cache-proxy:
+        helmValues:
+          replicas: 3
+          podDisruptionBudget:
+            enabled: true
+            spec:
+              minAvailable: 1
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "4"
+              memory: 16Gi
+      buildbuddy-executor:
+        helmValues:
+          replicas: 1
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "4"
+              memory: 16Gi
+      buildbuddy-executor-gpu:
+        helmValues:
+          replicas: 1
+          resources:
+            requests:
+              cpu: "8"
+              memory: 32Gi
+            limits:
+              cpu: "8"
+              memory: 32Gi
+      cert-manager:
+        helmValues:
+          replicaCount: 2
+          webhook:
+            replicaCount: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          cainjector:
+            replicaCount: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          podDisruptionBudget:
+            enabled: true
+            minAvailable: 1
+      cloudnative-pg:
+        helmValues:
+          replicaCount: 2
+      dragonfly-manager:
+        helmValues:
+          manager:
+            replicas: 2
+      dragonfly-peer:
+        helmValues:
+          scheduler:
+            replicas: 2
+          seedClient:
+            replicas: 2
+      envoy-gateway:
+        helmValues:
+          deployment:
+            replicas: 2
+          podDisruptionBudget:
+            minAvailable: 1
+      envoy-gateway-instance:
+        helmValues:
+          proxy:
+            autoscaling:
+              minReplicas: 2
+              maxReplicas: 8
+              fallback:
+                replicas: 4
+      external-secrets:
+        helmValues:
+          replicaCount: 2
+          webhook:
+            replicaCount: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          certController:
+            replicaCount: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          podDisruptionBudget:
+            enabled: true
+            minAvailable: 1
+      kargo:
+        helmValues:
+          api:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          webhooksServer:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+      karpenter-aws:
+        helmValues:
+          replicas: 2
+      keda:
+        helmValues:
+          operator:
+            replicaCount: 2
+          metricsServer:
+            replicaCount: 2
+          webhooks:
+            replicaCount: 2
+          podDisruptionBudget:
+            operator:
+              minAvailable: 1
+            metricServer:
+              minAvailable: 1
+            webhooks:
+              minAvailable: 1
+      keda-http:
+        helmValues:
+          interceptor:
+            replicas:
+              min: 2
+              max: 8
+            pdb:
+              enabled: true
+              maxUnavailable: null
+              minAvailable: 1
+          operator:
+            replicas: 2
+          scaler:
+            replicas: 2
+      kube-oidc-proxy:
+        patches:
+          - target:
+              group: apps
+              kind: Deployment
+              name: kube-oidc-proxy
+            patch: |
+              - op: replace
+                path: /spec/replicas
+                value: 2
+      kuberay:
+        helmValues:
+          replicas: 2
+      kueue:
+        helmValues:
+          controllerManager:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+      kueue-admission:
+        helmValues:
+          compute:
+            ceiling:
+              cpu: '128'
+              memory: 512Gi
+              nvidia.com/gpu: '16'
+            cpu_capabilities:
+              - avx2
+            floors:
+              be:
+                cpu: '0'
+                memory: '0'
+              ha:
+                cpu: '16'
+                memory: 64Gi
+                nvidia.com/gpu: '2'
+              ma:
+                cpu: '32'
+                memory: 128Gi
+                nvidia.com/gpu: '4'
+              wa:
+                cpu: '16'
+                memory: 64Gi
+                nvidia.com/gpu: '2'
+            gpu_classes:
+              a100-40gb:
+                max_count: 8
+              a100-80gb:
+                max_count: 8
+              a10g:
+                max_count: 8
+              b200:
+                max_count: 8
+              b300:
+                max_count: 8
+              h100:
+                max_count: 8
+              h200:
+                max_count: 8
+              l4:
+                max_count: 8
+              l40s:
+                max_count: 8
+              rtx-pro-server-6000:
+                max_count: 8
+              t4:
+                max_count: 8
+              v100:
+                max_count: 8
+            tpu_classes: {}
+          teams:
+            - quota:
+                classes:
+                  be:
+                    cpu: '0'
+                    memory: '0'
+                  ha:
+                    accelerators:
+                      a100-80gb: '2'
+                    cpu: '16'
+                    memory: 64Gi
+                  ma:
+                    accelerators:
+                      h100: '4'
+                    cpu: '32'
+                    memory: 128Gi
+                  wa:
+                    accelerators:
+                      l4: '2'
+                    cpu: '16'
+                    memory: 64Gi
+              slug: examples
+      kyverno:
+        helmValues:
+          admissionController:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          backgroundController:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          cleanupController:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          reportsController:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+      oauth2-proxy:
+        helmValues:
+          podDisruptionBudget:
+            enabled: true
+          replicas: 2
+      opencost:
+        helmValues:
+          opencost:
+            exporter:
+              replicas: 2
+          pdb:
+            enabled: true
+            minAvailable: 1
+      prometheus-api-bridge:
+        patches:
+          - target:
+              group: keda.sh
+              kind: ScaledObject
+              name: prometheus-api-bridge
+            patch: |
+              - op: replace
+                path: /spec/minReplicaCount
+                value: 2
+              - op: replace
+                path: /spec/maxReplicaCount
+                value: 6
+        helmValues:
+          server:
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+      pvc-autoresizer:
+        helmValues:
+          controller:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+      s3-gateway:
+        helmValues:
+          writerCell: cell-aws-usw2
+      signoz:
+        patches:
+          - target:
+              group: keda.sh
+              kind: ScaledObject
+              name: signoz-otel-collector
+            patch: |
+              - op: replace
+                path: /spec/minReplicaCount
+                value: 2
+              - op: replace
+                path: /spec/maxReplicaCount
+                value: 8
+      trivy-operator:
+        helmValues:
+          operator:
+            replicas: 2
+      trivy-server:
+        helmValues:
+          replicaCount: 1
+      trust-manager:
+        helmValues:
+          replicaCount: 2
+          podDisruptionBudget:
+            enabled: true
+            minAvailable: 1
+      valkey-operator:
+        helmValues:
+          replicaCount: 2
+          podDisruptionBudget:
+            enabled: true
+            minAvailable: 1
+      velero-ui:
+        helmValues:
+          replicaCount: 2
+      vpa:
+        helmValues:
+          admissionController:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          recommender:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
+          updater:
+            replicas: 2
+            podDisruptionBudget:
+              enabled: true
+              minAvailable: 1
