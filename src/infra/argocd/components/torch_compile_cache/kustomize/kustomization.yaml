@@ -1,0 +1,10 @@
+# Composes disposable PyTorch compile cache workloads and network policies.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - credentials.yaml
+  - network-policy.yaml
+  - workload.yaml
+  # keep-sorted end

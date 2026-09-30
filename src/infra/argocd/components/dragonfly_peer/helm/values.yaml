@@ -1,0 +1,190 @@
+# Dragonfly peer upstream helm values consumed by the cell Dragonfly Peer Application.
+
+fullnameOverride: dragonfly
+
+injector:
+  enable: false
+
+mysql:
+  enable: false
+
+redis:
+  enable: false
+
+externalPostgres:
+  enable: false
+
+externalRedis:
+  enable: false
+
+manager:
+  enable: false
+
+scheduler:
+  enable: true
+  replicas: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels: {app: dragonfly, component: scheduler}
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  statefulsetAnnotations:
+    argocd.argoproj.io/sync-wave: "1"
+  image:
+    digest: sha256:d5dea9e662cdc0ceb8c7c624e06ab714aa803c90a124a26a75da0551411878d5
+    registry: docker.io
+    repository: dragonflyoss/scheduler
+    tag: v2.5.2
+  initContainer:
+    image:
+      digest: sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0
+      registry: docker.io
+      repository: busybox
+      tag: 1.38.0
+  extraEnvVars:
+    - name: SCHEDULER_CONFIG
+      value: /etc/dragonfly-runtime/scheduler.yaml
+  extraVolumeMounts:
+    - mountPath: /etc/dragonfly-runtime
+      name: runtime-config
+      readOnly: true
+    - mountPath: /etc/dragonfly-mtls
+      name: mtls
+      readOnly: true
+    - mountPath: /etc/dragonfly-trust
+      name: trust
+      readOnly: true
+  extraVolumes:
+    - name: runtime-config
+      secret:
+        items:
+          - key: scheduler.yaml
+            path: scheduler.yaml
+        secretName: dragonfly-runtime
+    - name: mtls
+      secret:
+        secretName: dragonfly-grpc-mtls
+    - name: trust
+      configMap:
+        name: dragonfly-grpc-ca-bundle
+  priorityClassName: cluster-operators
+  resources:
+    limits: {cpu: 1, memory: 2Gi}
+    requests: {cpu: 100m, memory: 256Mi}
+  updateStrategy:
+    type: RollingUpdate
+
+seedClient:
+  enable: true
+  replicas: 2
+  podLabels:
+    release: dragonfly
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - podAffinityTerm:
+            labelSelector:
+              matchLabels: {app: dragonfly, component: seed-client}
+            topologyKey: kubernetes.io/hostname
+          weight: 100
+  statefulsetAnnotations:
+    argocd.argoproj.io/sync-wave: "2"
+  image:
+    digest: sha256:b3e726eb104c399595f8b7ee1a9b191f7c6a3766dbd40eb1f25e48ce178fd33e
+    registry: docker.io
+    repository: dragonflyoss/client
+    tag: v1.5.7
+  initContainer:
+    image:
+      digest: sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0
+      registry: docker.io
+      repository: busybox
+      tag: 1.38.0
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+  extraVolumeMounts:
+    - mountPath: /etc/dragonfly-mtls
+      name: mtls
+      readOnly: true
+  extraVolumes:
+    - name: mtls
+      secret:
+        secretName: dragonfly-grpc-mtls
+  persistence:
+    accessModes: [ReadWriteOnce]
+    enable: true
+    size: 10Gi
+    storageClass: general-expandable
+  priorityClassName: cluster-operators
+  resources:
+    limits: {cpu: 2, memory: 4Gi}
+    requests: {cpu: 250m, memory: 512Mi}
+  config:
+    scheduler:
+      caCert: /etc/dragonfly-mtls/ca.crt
+      cert: /etc/dragonfly-mtls/tls.crt
+      key: /etc/dragonfly-mtls/tls.key
+      serverName: dragonfly-scheduler.dragonfly-system.svc.cluster.local
+
+client:
+  enable: true
+  podLabels:
+    release: dragonfly
+  daemonsetAnnotations:
+    argocd.argoproj.io/sync-wave: "2"
+  config:
+    proxy:
+      registryMirror:
+        enableTaskIDBasedBlobDigest: true
+      server:
+        ip: 127.0.0.1
+    scheduler:
+      caCert: /etc/dragonfly-mtls/ca.crt
+      cert: /etc/dragonfly-mtls/tls.crt
+      key: /etc/dragonfly-mtls/tls.key
+      serverName: dragonfly-scheduler.dragonfly-system.svc.cluster.local
+  hostIPC: false
+  hostNetwork: true
+  hostPID: false
+  dfinit:
+    enable: false
+  nodeSelector:
+    kubernetes.io/os: linux
+  sysctlInit:
+    enable: false
+  image:
+    digest: sha256:b3e726eb104c399595f8b7ee1a9b191f7c6a3766dbd40eb1f25e48ce178fd33e
+    registry: docker.io
+    repository: dragonflyoss/client
+    tag: v1.5.7
+  initContainer:
+    image:
+      digest: sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0
+      registry: docker.io
+      repository: busybox
+      tag: 1.38.0
+  extraVolumeMounts:
+    - mountPath: /var/lib/dragonfly/
+      name: storage
+    - mountPath: /var/log/dragonfly/dfdaemon/
+      name: logs
+    - mountPath: /etc/dragonfly-mtls
+      name: mtls
+      readOnly: true
+  extraVolumes:
+    - name: storage
+      emptyDir: {}
+    - name: logs
+      emptyDir: {}
+    - name: mtls
+      secret:
+        secretName: dragonfly-grpc-mtls
+  priorityClassName: node-agents
+  resources:
+    limits: {cpu: 1, memory: 2Gi}
+    requests: {cpu: 100m, memory: 256Mi}
+  tolerations:
+    - operator: Exists

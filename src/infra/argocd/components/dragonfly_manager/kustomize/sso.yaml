@@ -1,0 +1,135 @@
+# Runs the Floci-only Dragonfly Console identity bridge behind Envoy Gateway OIDC.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dragonfly-sso
+  namespace: dragonfly-system
+  annotations:
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Dragonfly SSO bridge requires JWT and OIDC credentials via environment.
+  labels:
+    app.kubernetes.io/component: authentication
+    app.kubernetes.io/name: dragonfly-sso
+    app.kubernetes.io/part-of: dragonfly
+spec:
+  replicas: 1
+  strategy: {type: RollingUpdate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: dragonfly-sso}
+  template:
+    metadata:
+      annotations:
+        ignore-check.kube-linter.io/read-secret-from-env-var: >-
+          Dragonfly SSO bridge requires JWT and OIDC credentials via environment.
+      labels:
+        app.kubernetes.io/component: authentication
+        app.kubernetes.io/name: dragonfly-sso
+        app.kubernetes.io/part-of: dragonfly
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: bridge
+          image: docker.io/cluster/dragonfly-sso@sha256:4232376de19a6b1b7288654478c0a30234bf0419409ed9c284dd856735e08a67
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: CELL_ID, value: invalid}
+            - {name: OAUTH_COOKIE_NAME, value: _dragonfly_console}
+            - name: JWT_KEY
+              valueFrom: {secretKeyRef: {name: dragonfly-runtime, key: jwt-key}}
+            - name: OIDC_ISSUER
+              valueFrom: {secretKeyRef: {name: dragonfly-oidc, key: issuer-url}}
+            - {name: OPERATOR_GROUP, valueFrom: {secretKeyRef: {key: operator-group, name: dragonfly-oidc}}}
+            - {name: TRUSTED_PROXIES, value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"}
+          ports: [{name: http, containerPort: 8081, protocol: TCP}]
+          readinessProbe: {tcpSocket: {port: http}, initialDelaySeconds: 2, periodSeconds: 5}
+          livenessProbe: {tcpSocket: {port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dragonfly-sso
+  namespace: dragonfly-system
+  labels:
+    app.kubernetes.io/component: authentication
+    app.kubernetes.io/name: dragonfly-sso
+    app.kubernetes.io/part-of: dragonfly
+spec:
+  selector: {app.kubernetes.io/name: dragonfly-sso}
+  ports: [{name: http, port: 8081, targetPort: http, protocol: TCP}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dragonfly-sso
+  namespace: dragonfly-system
+  labels:
+    app.kubernetes.io/component: authentication
+    app.kubernetes.io/name: dragonfly-sso
+    app.kubernetes.io/part-of: dragonfly
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: dragonfly-sso}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+      ports: [{protocol: TCP, port: 8081}]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app: dragonfly, component: manager}
+      ports: [{protocol: TCP, port: 8080}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchExpressions:
+              - {key: k8s-app, operator: In, values: [kube-dns, node-local-dns]}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dragonfly-manager-sso
+  namespace: dragonfly-system
+  labels:
+    app.kubernetes.io/component: authentication
+    app.kubernetes.io/name: dragonfly-sso
+    app.kubernetes.io/part-of: dragonfly
+spec:
+  podSelector:
+    matchLabels: {app: dragonfly, component: manager}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: dragonfly-sso}
+      ports: [{protocol: TCP, port: 8080}]
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: envoy-gateway-system}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/managed-by: envoy-gateway
+              gateway.envoyproxy.io/owning-gateway-name: private-access
+        - ipBlock: {cidr: 192.0.2.1/32}
+        - ipBlock: {cidr: 172.31.0.0/16}
+        - ipBlock: {cidr: 172.19.0.0/16}
+        - ipBlock: {cidr: 10.240.0.0/14}
+      ports: [{protocol: TCP, port: 65003}]

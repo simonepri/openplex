@@ -1,0 +1,19 @@
+# Publishes the Dragonfly v2 Manager on the Floci control node and issues its shared-CA server and callback client identity. The fleet supplies the host and address.
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dragonfly-grpc-mtls
+  namespace: dragonfly-system
+  annotations: {argocd.argoproj.io/sync-wave: "-2"}
+spec:
+  dnsNames:
+    - dragonfly-manager.invalid
+    - dragonfly-manager.dragonfly-system.svc
+    - dragonfly-manager.dragonfly-system.svc.cluster.local
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: cluster-local-ca
+  secretName: dragonfly-grpc-mtls
+  usages: [client auth, server auth]
