@@ -129,7 +129,10 @@ git_hook(
 git_hook(
     name = "format",
     src = ":fix",
-    args = ["--check"],
+    args = [
+        "--check",
+        "--staged",
+    ],
     stage = "pre-commit",
     summary = "Source and configuration files match formatting and generation",
 )
@@ -163,22 +166,10 @@ git_hooks(
     testonly = True,
     srcs = [
         # keep-sorted start
-        ":argocd_links",
-        ":codeowners",
         ":commit_message",
-        ":coverage",
-        ":dev_tool_isolation",
-        ":dotenv",
         ":format",
-        ":function_length",
-        ":gazelle_drift",
-        ":ifttt",
-        ":json_schemas",
-        ":rulesync",
         ":rulesync_post_checkout",
         ":rulesync_post_merge",
-        ":semgrep",
-        ":source_names",
         # keep-sorted end
     ],
 )

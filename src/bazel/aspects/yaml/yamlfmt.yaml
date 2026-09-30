@@ -1,0 +1,7 @@
+# Define canonical YAML formatting style and indentation rules for yamlfmt across the repository.
+
+formatter:
+  type: basic
+  indent: 2
+  include_document_start: false
+  retain_line_breaks_single: true

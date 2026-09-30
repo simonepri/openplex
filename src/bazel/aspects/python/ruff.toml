@@ -1,0 +1,112 @@
+# Configure Ruff linter and formatter rules for first-party Python sources across the repository.
+
+line-length = 100
+target-version = "py313"
+preview = true
+exclude = [".tmp"]
+
+[lint]
+select = [
+  # keep-sorted start
+  "A",
+  "ANN",
+  "ARG",
+  "ASYNC",
+  "B",
+  "BLE",
+  "C4",
+  "DTZ",
+  "E",
+  "F",
+  "FA",
+  "FBT",
+  "FURB",
+  "G",
+  "I",
+  "LOG",
+  "N",
+  "PGH",
+  "PIE",
+  "PL",
+  "PTH",
+  "RET",
+  "RSE",
+  "RUF",
+  "S",
+  "SIM",
+  "SLF",
+  "T20",
+  "TCH",
+  "TRY",
+  "UP",
+  "W",
+  "complex-structure",
+  "undocumented-public-module",
+  # keep-sorted end
+]
+ignore = [
+  # keep-sorted start
+  "assert",
+  "blind-except",
+  "boolean-positional-value-in-call",
+  "boolean-type-hint-positional-argument",
+  "error-suffix-on-exception-name",
+  "hardcoded-bind-all-interfaces",
+  "hardcoded-password-func-arg",
+  "hardcoded-password-string",
+  "hardcoded-temp-file",
+  "line-too-long",
+  "magic-value-comparison",
+  "no-self-use",
+  "print",
+  "raise-vanilla-args",
+  "raise-within-try",
+  "start-process-with-partial-path",
+  "subprocess-popen-with-shell-equals-true",
+  "subprocess-run-without-check",
+  "subprocess-without-shell-equals-true",
+  "suspicious-subprocess-import",
+  "suspicious-url-open-usage",
+  "too-many-arguments",
+  "too-many-boolean-expressions",
+  "too-many-nested-blocks",
+  "too-many-positional-arguments",
+  "too-many-public-methods",
+  "too-many-statements",
+  "too-many-statements-in-try-clause",
+  "try-consider-else",
+  "try-except-pass",
+  "type-check-without-type-error",
+  # keep-sorted end
+]
+
+[lint.per-file-ignores]
+# Tests and test fixtures: allow private member access, fixture patterns, and test-specific imports
+"*_test.py" = [
+  "builtin-argument-shadowing",
+  "compare-to-empty-string",
+  "multiple-with-statements",
+  "private-member-access",
+  "unused-function-argument",
+  "unused-method-argument",
+  "unused-static-method-argument",
+]
+"**/*fixtures*/**" = [
+  "import-outside-top-level",
+  "import-private-name",
+  "multiple-with-statements",
+  "private-member-access",
+  "unused-function-argument",
+  "unused-method-argument",
+]
+
+[lint.mccabe]
+max-complexity = 15
+
+[lint.pylint]
+max-args = 8
+max-branches = 12
+max-locals = 25
+max-nested-blocks = 5
+max-returns = 6
+max-statements = 50
