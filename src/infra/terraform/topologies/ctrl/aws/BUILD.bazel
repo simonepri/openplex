@@ -1,0 +1,29 @@
+"""Defines OpenTofu module check targets for AWS control plane topology composition and testing."""
+
+load("@rules_tf//tf:def.bzl", "tf_module")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+tf_module(
+    name = "aws",
+    providers = [
+        "aws",
+        "helm",
+        "kubernetes",
+        "tailscale",
+    ],
+    deps = [
+        "//src/infra/terraform/components/argo_bootstrap",
+        "//src/infra/terraform/components/cloud_cost/aws",
+        "//src/infra/terraform/components/cluster/aws",
+        "//src/infra/terraform/components/dns/aws",
+        "//src/infra/terraform/components/identity/aws",
+        "//src/infra/terraform/components/network_mesh/aws",
+        "//src/infra/terraform/components/registry/aws",
+        "//src/infra/terraform/components/secret_manager/aws",
+        "//src/infra/terraform/components/storage/aws",
+        "//src/infra/terraform/components/vpc/aws",
+        "//src/infra/terraform/topologies/ctrl/_interface",
+    ],
+)
+
+package_sources()
