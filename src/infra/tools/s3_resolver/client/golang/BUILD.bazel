@@ -1,0 +1,23 @@
+"""Builds Go client library and unit tests for the S3 URI resolver."""
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# gazelle:prefix go.invalid/internal/tools/s3_resolver/client/golang
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "golang",
+    srcs = ["client.go"],
+    importpath = "go.invalid/internal/tools/s3_resolver/client/golang",
+)
+
+go_test(
+    name = "golang_test",
+    size = "small",
+    srcs = ["client_test.go"],
+    embed = [":golang"],
+)
+
+package_sources()

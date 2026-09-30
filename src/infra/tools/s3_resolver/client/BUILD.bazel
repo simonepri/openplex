@@ -1,0 +1,27 @@
+"""Exposes client SDKs for the S3 URI resolver."""
+
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "client",
+    actual = "//src/infra/tools/s3_resolver/client/python",
+)
+
+alias(
+    name = "golang",
+    actual = "//src/infra/tools/s3_resolver/client/golang",
+)
+
+alias(
+    name = "python",
+    actual = "//src/infra/tools/s3_resolver/client/python",
+)
+
+alias(
+    name = "typescript",
+    actual = "//src/infra/tools/s3_resolver/client/typescript:web_sources",
+)
+
+package_sources()
