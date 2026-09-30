@@ -1,0 +1,22 @@
+"""Builds the Coder snapshot portal entrypoint binary."""
+
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "portal_lib",
+    srcs = ["main.go"],
+    importpath = "go.invalid/internal/tools/coder_snapshot_portal/cmd/portal",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/infra/tools/coder_snapshot_portal/pkg/auth",
+        "//src/infra/tools/coder_snapshot_portal/pkg/model",
+        "//src/infra/tools/coder_snapshot_portal/pkg/server",
+        "//src/infra/tools/coder_snapshot_portal/pkg/storage",
+    ],
+)
+
+go_binary(
+    name = "portal",
+    embed = [":portal_lib"],
+    visibility = ["//:__subpackages__"],
+)
