@@ -1,0 +1,22 @@
+# Configures Atlantis pull-request automation workflows and project root directories for Terraform plans.
+
+version: 3
+automerge: true
+autodiscover:
+  mode: disabled
+projects:
+  - name: fleet
+    dir: .
+    apply_requirements: [approved, mergeable, undiverged]
+    autoplan:
+      enabled: true
+      when_modified:
+        # keep-sorted start
+        - .github/atlantis.yaml
+        - src/infra/argocd/apps/ctrl.yaml
+        - src/infra/argocd/components/atlantis/**
+        - src/infra/terraform/components/**
+        - src/infra/terraform/deployments/**
+        - src/infra/terraform/topologies/**
+        # keep-sorted end
+        - "!src/infra/terraform/deployments/local/**"
