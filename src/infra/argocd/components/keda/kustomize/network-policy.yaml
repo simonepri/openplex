@@ -1,0 +1,154 @@
+# Allows API server access to KEDA admission webhooks, metrics scraping, and Gateway ingress to HTTP add-on.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keda-admission-webhook
+  namespace: keda-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: keda-admission-webhooks
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: keda
+      app.kubernetes.io/name: keda-admission-webhooks
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {protocol: TCP, port: 9443}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keda-external-metrics-api
+  namespace: keda-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: keda-operator-metrics-apiserver
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: keda
+      app.kubernetes.io/name: keda-operator-metrics-apiserver
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - {protocol: TCP, port: 6443}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keda-operator
+  namespace: keda-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: keda-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: keda
+      app.kubernetes.io/name: keda-operator
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keda-http-external-scaler
+  namespace: keda-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: keda-http-external-scaler
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: scaler
+      app.kubernetes.io/instance: keda-http
+      app.kubernetes.io/name: http-add-on
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: keda
+              app.kubernetes.io/name: keda-operator
+      ports:
+        - {protocol: TCP, port: 9090}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keda-http-interceptor
+  namespace: keda-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: keda-http-interceptor
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: interceptor
+      app.kubernetes.io/instance: keda-http
+      app.kubernetes.io/name: http-add-on
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+      ports:
+        - {protocol: TCP, port: 8080}
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: scaler
+              app.kubernetes.io/instance: keda-http
+              app.kubernetes.io/name: http-add-on
+      ports:
+        - {protocol: TCP, port: 9090}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keda-http-metrics
+  namespace: keda-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: keda-http-metrics
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [interceptor, scaler]
+    matchLabels:
+      app.kubernetes.io/instance: keda-http
+      app.kubernetes.io/name: http-add-on
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: otel-system
+      ports:
+        - {protocol: TCP, port: 2223}

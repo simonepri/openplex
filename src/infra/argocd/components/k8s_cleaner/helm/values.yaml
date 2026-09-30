@@ -1,0 +1,42 @@
+# Configures default values for the upstream k8s-cleaner controller chart.
+
+fullnameOverride: k8s-cleaner
+
+controller:
+  image:
+    registry: docker.io
+    repository: projectsveltos/k8s-cleaner
+    tag: "v0.24.0@sha256:bb99fcb04056942dacaa342df0d48a8cf7f09127a35afb525ee71c3710394b3a"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  securityContext:
+    enabled: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    runAsNonRoot: true
+
+podSecurityContext:
+  enabled: true
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

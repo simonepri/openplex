@@ -1,0 +1,12 @@
+# Kustomize base for each `<cell>-kueue` Application. It owns only the kueue-system namespace; queues, priorities, and team admission live in kueue-admission.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  - priorities.yaml
+  - scheduling-defaults.yaml
+  - team-governance.yaml
+  # keep-sorted end

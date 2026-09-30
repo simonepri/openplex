@@ -1,0 +1,122 @@
+# Common production Helm values for the upstream Kueue chart.
+
+fullnameOverride: kueue
+# The rebuilt fleet does not install cert-manager as a scheduling
+# prerequisite. Kueue rotates its own serving certificates.
+enableCertManager: false
+controllerManager:
+  featureGates:
+    - {enabled: false, name: AdmissionFairSharing}
+    - {enabled: true, name: ConcurrentAdmission}
+    - {enabled: true, name: KueueDRAIntegration}
+    - {enabled: true, name: KueueDRAIntegrationConsumableCapacity}
+    - {enabled: true, name: KueueDRAIntegrationExtendedResource}
+    - {enabled: true, name: KueueDRAIntegrationPartitionableDevices}
+    - {enabled: true, name: TASAssignmentsEncodingByHostnamePrefix}
+    - {enabled: true, name: TASBalancedPlacement}
+    - {enabled: true, name: TASCacheNodeMatchResults}
+    - {enabled: true, name: TASCachingRemainingResources}
+    - {enabled: true, name: TASFailedNodeReplacement}
+    - {enabled: true, name: TASFailedNodeReplacementFailFast}
+    - {enabled: true, name: TASHandleOverlappingFlavors}
+    - {enabled: true, name: TASMultiLayerTopology}
+    - {enabled: true, name: TASProfileMixed}
+    - {enabled: true, name: TASRecomputeAssignmentWithinSchedulingCycle}
+    - {enabled: true, name: TASReplaceNodeOnNodeTaints}
+    - {enabled: true, name: TASReplaceNodeOnPodTermination}
+    - {enabled: true, name: TASRespectNodeAffinityPreferred}
+    - {enabled: true, name: TopologyAwareScheduling}
+    - {enabled: true, name: UnadmittedWorkloadsObservability}
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 12
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 12
+  manager:
+    priorityClassName: cluster-operators
+    logLevel: info
+    image:
+      repository: registry.k8s.io/kueue/kueue
+      tag: v0.20.0@sha256:7c57f630b2987058cc543710aa4829cfd8119b7f7c23431cbc242b82cf4bce57
+    resources:
+      limits:
+        cpu: "2"
+        memory: 512Mi
+      requests:
+        cpu: 500m
+        memory: 512Mi
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      readOnlyRootFilesystem: true
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  podDisruptionBudget: {enabled: true, minAvailable: 1}
+  replicas: 2
+  topologySpreadConstraints:
+    - labelSelector:
+        matchLabels:
+          app.kubernetes.io/instance: kueue
+          app.kubernetes.io/name: kueue
+          control-plane: controller-manager
+      maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+managerConfig:
+  controllerManagerConfigYaml: |-
+    apiVersion: config.kueue.x-k8s.io/v1beta2
+    kind: Configuration
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: :8443
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      leaseDuration: 60s
+      renewDeadline: 45s
+      resourceName: c1f6bfd2.kueue.x-k8s.io
+      retryPeriod: 10s
+    managedJobsNamespaceSelector:
+      matchLabels:
+        kueue.x-k8s.io/managed: "true"
+    manageJobsWithoutQueueName: false
+    integrations:
+      frameworks:
+        - batch/job
+        - ray.io/rayjob
+        - ray.io/raycluster
+        - pod
+        - deployment
+        - statefulset
+    resources:
+      deviceClassMappings:
+        - name: nvidia.com/gpu
+          deviceClassNames:
+            - gpu.nvidia.com
+    waitForPodsReady:
+      timeout: 15m
+      recoveryTimeout: 5m
+      blockAdmission: false
+      requeuingStrategy:
+        timestamp: Creation
+        backoffLimitCount: 3
+        backoffBaseSeconds: 30
+        backoffMaxSeconds: 300
+    internalCertManagement:
+      enable: true

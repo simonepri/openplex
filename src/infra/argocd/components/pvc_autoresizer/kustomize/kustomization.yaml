@@ -1,0 +1,11 @@
+# Composes PVC autoresizer namespace and admission policies alongside upstream values.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - autoresize-policy.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - probe-policy.yaml
+  # keep-sorted end

@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["clusterName", "compute", "flavors", "provider", "role", "teams", "topologies"],
+  "properties": {
+    "role": { "type": "string", "enum": ["disabled", "cell"] },
+    "clusterName": { "type": "string" },
+    "cohortRootName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    },
+    "provider": { "type": "string", "enum": ["", "aws", "floci", "gcp"] },
+    "compute": { "$ref": "#/definitions/compute" },
+    "flavors": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 2,
+      "items": { "$ref": "#/definitions/flavor" }
+    },
+    "topologies": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/topology" }
+    },
+    "teams": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/team" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "role": { "const": "cell" } } },
+      "then": {
+        "properties": {
+          "clusterName": { "minLength": 1 },
+          "flavors": { "minItems": 1 },
+          "provider": { "enum": ["aws", "floci", "gcp"] },
+          "topologies": {
+            "minItems": 1,
+            "contains": { "type": "object", "properties": { "name": { "const": "cell-topology" } } }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "flavors": { "maxItems": 0 },
+          "topologies": { "maxItems": 0 }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "compute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ceiling", "cpu_capabilities", "floors", "gpu_classes", "tpu_classes"],
+      "properties": {
+        "cpu_capabilities": {
+          "type": "array",
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": { "const": "avx2" }
+        },
+        "gpu_classes": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+          },
+          "additionalProperties": { "$ref": "#/definitions/gpuClass" }
+        },
+        "tpu_classes": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+          "additionalProperties": { "$ref": "#/definitions/tpuClass" }
+        },
+        "floors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["be", "ha", "ma", "wa"],
+          "properties": {
+            "be": { "$ref": "#/definitions/resources" },
+            "ha": { "$ref": "#/definitions/resources" },
+            "ma": { "$ref": "#/definitions/resources" },
+            "wa": { "$ref": "#/definitions/resources" }
+          }
+        },
+        "ceiling": { "$ref": "#/definitions/resources" },
+        "fixed_pools": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tpu", "tpu-spot"],
+          "properties": {
+            "tpu": { "$ref": "#/definitions/fixedTpuPool" },
+            "tpu-spot": { "$ref": "#/definitions/fixedTpuPool" }
+          }
+        }
+      }
+    },
+    "fixedTpuPool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "nodes"],
+      "properties": {
+        "class": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "nodes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "gpuClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_count"],
+      "properties": {
+        "max_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "tpuClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_count"],
+      "properties": {
+        "max_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "flavor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "nodeLabels"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        },
+        "nodeLabels": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
+        },
+        "nodeTaints": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/taint" }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": {
+        "cpu": { "$ref": "#/definitions/wholeQuantity" },
+        "memory": { "$ref": "#/definitions/wholeGiQuantity" },
+        "nvidia.com/gpu": { "$ref": "#/definitions/wholeQuantity" },
+        "google.com/tpu": { "$ref": "#/definitions/wholeQuantity" }
+      }
+    },
+    "taint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effect", "key", "value"],
+      "properties": {
+        "effect": { "enum": ["NoExecute", "NoSchedule"] },
+        "key": { "type": "string", "minLength": 1 },
+        "value": { "type": "string" }
+      }
+    },
+    "team": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quota", "slug"],
+      "properties": {
+        "quota": { "$ref": "#/definitions/teamQuota" },
+        "slug": {
+          "type": "string",
+          "maxLength": 31,
+          "pattern": "^[a-z][a-z0-9]{1,30}$"
+        }
+      }
+    },
+    "teamQuota": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classes"],
+      "properties": {
+        "classes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "be": { "$ref": "#/definitions/teamQuotaResources" },
+            "ha": { "$ref": "#/definitions/teamQuotaResources" },
+            "ma": { "$ref": "#/definitions/teamQuotaResources" },
+            "wa": { "$ref": "#/definitions/teamQuotaResources" }
+          }
+        }
+      }
+    },
+    "accelerators": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "a10": { "$ref": "#/definitions/wholeQuantity" },
+        "a100-40gb": { "$ref": "#/definitions/wholeQuantity" },
+        "a100-80gb": { "$ref": "#/definitions/wholeQuantity" },
+        "a10g": { "$ref": "#/definitions/wholeQuantity" },
+        "b200": { "$ref": "#/definitions/wholeQuantity" },
+        "b300": { "$ref": "#/definitions/wholeQuantity" },
+        "h100": { "$ref": "#/definitions/wholeQuantity" },
+        "h100-nvl-94gb": { "$ref": "#/definitions/wholeQuantity" },
+        "h200": { "$ref": "#/definitions/wholeQuantity" },
+        "l4": { "$ref": "#/definitions/wholeQuantity" },
+        "l40s": { "$ref": "#/definitions/wholeQuantity" },
+        "rtx-pro-server-6000": { "$ref": "#/definitions/wholeQuantity" },
+        "t4": { "$ref": "#/definitions/wholeQuantity" },
+        "v100": { "$ref": "#/definitions/wholeQuantity" },
+        "v5e-2x2": { "$ref": "#/definitions/wholeQuantity" }
+      }
+    },
+    "teamQuotaResources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": {
+        "accelerators": { "$ref": "#/definitions/accelerators" },
+        "a10": { "$ref": "#/definitions/wholeQuantity" },
+        "a100-40gb": { "$ref": "#/definitions/wholeQuantity" },
+        "a100-80gb": { "$ref": "#/definitions/wholeQuantity" },
+        "a10g": { "$ref": "#/definitions/wholeQuantity" },
+        "b200": { "$ref": "#/definitions/wholeQuantity" },
+        "b300": { "$ref": "#/definitions/wholeQuantity" },
+        "cpu": { "$ref": "#/definitions/wholeQuantity" },
+        "google.com/tpu": { "$ref": "#/definitions/wholeQuantity" },
+        "h100": { "$ref": "#/definitions/wholeQuantity" },
+        "h100-nvl-94gb": { "$ref": "#/definitions/wholeQuantity" },
+        "h200": { "$ref": "#/definitions/wholeQuantity" },
+        "l4": { "$ref": "#/definitions/wholeQuantity" },
+        "l40s": { "$ref": "#/definitions/wholeQuantity" },
+        "memory": { "$ref": "#/definitions/wholeGiQuantity" },
+        "nvidia.com/gpu": { "$ref": "#/definitions/wholeQuantity" },
+        "rtx-pro-server-6000": { "$ref": "#/definitions/wholeQuantity" },
+        "t4": { "$ref": "#/definitions/wholeQuantity" },
+        "v100": { "$ref": "#/definitions/wholeQuantity" },
+        "v5e-2x2": { "$ref": "#/definitions/wholeQuantity" }
+      }
+    },
+    "topology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["levels", "name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        },
+        "levels": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "wholeQuantity": { "type": "string", "pattern": "^[0-9]+$" },
+    "wholeGiQuantity": { "type": "string", "pattern": "^(0|[1-9][0-9]*Gi)$" }
+  }
+}

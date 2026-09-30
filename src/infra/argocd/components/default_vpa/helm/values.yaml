@@ -1,0 +1,12 @@
+# Configures default VerticalPodAutoscaler resources and workload-tailored update modes for fleet workloads.
+
+updateMode: InPlace
+statefulSetUpdateMode: InPlace
+controlledValues: RequestsOnly
+controlledResources:
+  - cpu
+  - memory
+minAllowed:
+  cpu: 10m
+  memory: 32Mi
+targets: []

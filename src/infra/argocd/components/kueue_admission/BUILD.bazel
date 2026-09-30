@@ -1,0 +1,115 @@
+"""Check targets for the kueue_admission Argo CD component."""
+
+load("@rules_helm//helm:defs.bzl", "helm_chart", "helm_lint_test", "helm_template")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "GENERATED", "HELM_TEMPLATE", "package_sources", "source_set")
+load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
+
+helm_chart(
+    name = "chart",
+    chart = "helm/Chart.yaml",
+    schema = "helm/values.schema.json",
+    templates = glob(
+        ["helm/templates/**"],
+        allow_empty = True,
+    ),
+    values = "helm/values.yaml",
+)
+
+helm_lint_test(
+    name = "helm-lint-cell-aws-usw2",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values-cell-aws-usw2.yaml"],
+)
+
+helm_template(
+    name = "helm_render-cell-aws-usw2",
+    chart = ":chart",
+    values = ["helm/lint-values-cell-aws-usw2.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm-cell-aws-usw2",
+    rendered = ":helm_render-cell-aws-usw2",
+)
+
+helm_lint_test(
+    name = "helm-lint-cell-eaws-lh1",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values-cell-eaws-lh1.yaml"],
+)
+
+helm_template(
+    name = "helm_render-cell-eaws-lh1",
+    chart = ":chart",
+    values = ["helm/lint-values-cell-eaws-lh1.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm-cell-eaws-lh1",
+    rendered = ":helm_render-cell-eaws-lh1",
+)
+
+helm_lint_test(
+    name = "helm-lint-cell-gcp-euw4",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values-cell-gcp-euw4.yaml"],
+)
+
+helm_template(
+    name = "helm_render-cell-gcp-euw4",
+    chart = ":chart",
+    values = ["helm/lint-values-cell-gcp-euw4.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm-cell-gcp-euw4",
+    rendered = ":helm_render-cell-gcp-euw4",
+)
+
+helm_lint_test(
+    name = "helm-lint",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values.yaml"],
+)
+
+helm_template(
+    name = "helm_render",
+    chart = ":chart",
+    values = ["helm/lint-values.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm",
+    rendered = ":helm_render",
+)
+
+source_set(
+    name = "helm_templates",
+    srcs = glob(["helm/templates/**"]),
+    kind = HELM_TEMPLATE,
+)
+
+source_set(
+    name = "generated_values",
+    srcs = [
+        "helm/lint-values-cell-aws-usw2.yaml",
+        "helm/lint-values-cell-eaws-lh1.yaml",
+        "helm/lint-values-cell-gcp-euw4.yaml",
+    ],
+    kind = GENERATED,
+)
+
+package_sources(exclude = [
+    "helm/lint-values-cell-aws-usw2.yaml",
+    "helm/lint-values-cell-eaws-lh1.yaml",
+    "helm/lint-values-cell-gcp-euw4.yaml",
+    "helm/templates/**",
+])

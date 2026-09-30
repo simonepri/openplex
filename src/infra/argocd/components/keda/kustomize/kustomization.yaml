@@ -1,0 +1,11 @@
+# Kustomize base owning the keda namespace alongside the upstream Helm chart; rendered by every <cluster>-keda Application.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - image-digest-policy.yaml
+  - namespace.yaml
+  - network-policy.yaml
+  - pdb.yaml
+  # keep-sorted end
