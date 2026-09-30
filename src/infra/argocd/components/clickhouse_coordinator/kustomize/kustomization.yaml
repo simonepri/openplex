@@ -1,0 +1,11 @@
+# Kustomize base for stateless ClickHouse coordinator routing layer in front of SigNoz shards.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - config.yaml
+  - deployment.yaml
+  - scaled-object.yaml
+  - service.yaml
+  # keep-sorted end

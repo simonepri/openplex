@@ -1,0 +1,17 @@
+# ConfigMap configuring cell-wide shared BuildBuddy remote cache and storage parameters.
+
+app:
+  build_buddy_url: "$BUILDBUDDY_PUBLIC_URL"
+  events_api_url: grpc://buildbuddy-cache.buildbuddy.svc.cluster.local:1985
+cache:
+  max_size_bytes: 1000000000
+  disk:
+    root_directory: /var/lib/buildbuddy/cache
+database:
+  data_source: "${BUILDBUDDY_DATABASE_URL}"
+disable_telemetry: true
+storage:
+  disable_persist_cache_artifacts: true
+  disk:
+    root_directory: /var/lib/buildbuddy/storage
+  ttl_seconds: 604800

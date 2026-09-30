@@ -1,0 +1,60 @@
+# KEDA ScaledObject autoscaling ClickHouse coordinator replicas based on query load and CPU.
+
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: clickhouse-coordinator
+  namespace: signoz
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: clickhouse-coordinator
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: clickhouse-coordinator
+  pollingInterval: 30
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 15
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 120
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-api-bridge.signoz.svc.cluster.local:9090
+        metricName: clickhouse_coordinator_concurrent_queries
+        query: sum(clickhouse_system_metrics_query{job="clickhouse-coordinator"})
+        threshold: "30"
+        timeout: "30s"
+    - type: prometheus
+      metricType: Value
+      metadata:
+        serverAddress: http://prometheus-api-bridge.signoz.svc.cluster.local:9090
+        metricName: clickhouse_coordinator_cpu_utilization
+        query: ((sum(rate(container_cpu_usage_seconds_total{namespace="signoz",pod=~"clickhouse-coordinator.*",container!="",container!="POD"}[2m])) / sum(kube_pod_container_resource_requests{namespace="signoz",pod=~"clickhouse-coordinator.*",resource="cpu"})) * 100)
+        threshold: "70"
+        timeout: "30s"
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-api-bridge.signoz.svc.cluster.local:9090
+        metricName: clickhouse_coordinator_query_queue_length
+        query: sum(clickhouse_system_metrics_query_preempted{job="clickhouse-coordinator"} or clickhouse_system_metrics_query_queue_length{job="clickhouse-coordinator"} or clickhouse_system_metrics_concurrent_query_scheduled{job="clickhouse-coordinator"} or vector(0))
+        threshold: "5"
+        timeout: "30s"

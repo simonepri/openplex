@@ -1,0 +1,28 @@
+# Service publishing HTTP and native TCP endpoints for the ClickHouse coordinator.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-coordinator
+  namespace: signoz
+  labels:
+    app.kubernetes.io/name: clickhouse-coordinator
+    app.kubernetes.io/instance: clickhouse-coordinator
+    app.kubernetes.io/component: coordinator
+    app.kubernetes.io/part-of: signoz
+    app.kubernetes.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: clickhouse-coordinator
+    app.kubernetes.io/instance: clickhouse-coordinator
+    app.kubernetes.io/component: coordinator
+  ports:
+    - name: http
+      port: 8123
+      targetPort: http
+      protocol: TCP
+    - name: tcp
+      port: 9000
+      targetPort: tcp
+      protocol: TCP

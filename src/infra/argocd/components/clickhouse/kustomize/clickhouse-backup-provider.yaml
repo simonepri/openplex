@@ -1,0 +1,25 @@
+# ConfigMap configuring cloud object storage destination and credentials for ClickHouse backups.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signoz-clickhouse-backup-provider
+  namespace: signoz
+  labels:
+    app.kubernetes.io/name: clickhouse-backup
+    app.kubernetes.io/instance: signoz
+    app.kubernetes.io/component: database-backup
+    app.kubernetes.io/part-of: signoz
+data:
+  # keep-sorted start
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ENDPOINT_URL_S3: https://s3.amazonaws.com
+  AWS_REGION: us-east-1
+  BACKUP_BUCKET: examples-clickhouse-backups
+  BACKUP_CELL: ctrl-eaws-lh1
+  BACKUP_ENGINE: S3
+  CLICKHOUSE_BACKUP_URL: https://s3.amazonaws.com/examples-clickhouse-backups/backups/telemetry/clickhouse/
+  CLICKHOUSE_COLD_STORAGE_TYPE: local
+  CLICKHOUSE_COLD_STORAGE_URL: https://s3.amazonaws.com/openplex-telemetry/clickhouse/
+  RETENTION_PROVIDER: aws
+  # keep-sorted end

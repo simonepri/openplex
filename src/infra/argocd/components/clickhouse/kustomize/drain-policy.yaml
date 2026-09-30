@@ -1,0 +1,50 @@
+# Kyverno ClusterPolicy extending termination grace periods for ClickHouse and Keeper pods.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: signoz-clickhouse-runtime-hardening
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: signoz-clickhouse
+    app.kubernetes.io/part-of: signoz
+spec:
+  admission: true
+  background: true
+  emitWarning: false
+  failurePolicy: Fail
+  validationFailureAction: Audit
+  rules:
+    - name: give-clickhouse-time-to-drain
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [signoz]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: clickhouse
+                  app.kubernetes.io/instance: signoz
+                  app.kubernetes.io/component: clickhouse
+      mutate:
+        patchStrategicMerge:
+          spec:
+            terminationGracePeriodSeconds: 120
+      skipBackgroundRequests: true
+    - name: give-keeper-time-to-drain
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [signoz]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: clickhouse-keeper
+                  app.kubernetes.io/instance: signoz
+                  app.kubernetes.io/component: keeper
+      mutate:
+        patchStrategicMerge:
+          spec:
+            terminationGracePeriodSeconds: 60
+      skipBackgroundRequests: true

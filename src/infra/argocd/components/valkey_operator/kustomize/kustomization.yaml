@@ -1,0 +1,10 @@
+# Composes admission policies and manifests for Valkey operator workloads.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  - pod-policy.yaml
+  # keep-sorted end

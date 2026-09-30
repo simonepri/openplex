@@ -1,0 +1,58 @@
+# Helm values configuring GPU executor pool resources, tolerations, CDI mounts, and affinities.
+
+poolName: gpu
+
+extraPodLabels:
+  availability-class: ma
+  latency-class: ls
+  kueue.x-k8s.io/managed: "true"
+  kueue.x-k8s.io/queue-name: ma
+
+extraPodAnnotations:
+  kueue.x-k8s.io/pod-suspending-parent: deployment
+
+priorityClassName: ma-ls
+
+resources:
+  requests:
+    cpu: "8"
+    memory: 32Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "8"
+    memory: 32Gi
+    nvidia.com/gpu: "1"
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+
+nodeSelector:
+  accelerator: nvidia
+
+config:
+  executor:
+    oci:
+      cdi_devices:
+        - "nvidia.com/gpu=all"
+      cdi_spec_dirs:
+        - /etc/cdi
+        - /var/run/cdi
+
+extraVolumes:
+  - name: cdi-etc
+    hostPath:
+      path: /etc/cdi
+  - name: cdi-run
+    hostPath:
+      path: /var/run/cdi
+
+extraVolumeMounts:
+  - name: cdi-etc
+    mountPath: /etc/cdi
+    readOnly: true
+  - name: cdi-run
+    mountPath: /var/run/cdi
+    readOnly: true
