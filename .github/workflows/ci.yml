@@ -100,57 +100,48 @@ jobs:
       - *configure-bazel
       - name: Run affected test suite
         run: python3 src/bazel/tools/diff/cli.py test --config=ci
+  # Publication pushes to the registry named by the WORKLOAD_REGISTRY
+  # repository variable; repositories without it skip the job.
   publish:
     name: Publish
     needs: [format, lint, test]
-    if: vars.USE_BUILDBUDDY != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      vars.USE_BUILDBUDDY != 'true' && vars.WORKLOAD_REGISTRY != '' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read # Required to read repository contents
       id-token: write # Required for AWS OIDC authentication
       packages: write # Required to push workload images to GHCR fallback
+    env:
+      WORKLOAD_REGISTRY: ${{ vars.WORKLOAD_REGISTRY }}
+      WORKLOAD_EXTRA_TAGS: main
     steps:
       - *free-disk-space
       - *checkout
       - *mise
       - *cache-bazel
       - *configure-bazel
-      - name: Configure container registry
-        id: registry-auth
-        env:
-          CONFIGURED_REGISTRY: ${{ vars.WORKLOAD_REGISTRY }}
+      - name: Configure stream tag
         run: |
-          git_repo="$(yq -r '.git.url' src/infra/installation.yaml)"
-          current_repo="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
-          if [[ "$current_repo" != "$git_repo" ]]; then
-            echo "Repository does not match installation coordinate, skipping publication."
-            echo "matched=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "matched=true" >> "$GITHUB_OUTPUT"
-          registry="${CONFIGURED_REGISTRY:-$(yq -r '.oci.image_root' src/infra/installation.yaml)}"
-          echo "WORKLOAD_REGISTRY=$registry" >> "$GITHUB_ENV"
           stream_tag="$(bash src/bazel/rules/oci/stream_tag.sh "$GITHUB_SHA")"
           echo "WORKLOAD_STREAM_TAG=ci-$stream_tag" >> "$GITHUB_ENV"
-          echo "WORKLOAD_EXTRA_TAGS=main" >> "$GITHUB_ENV"
       # v5.1.1
       - name: Authenticate to the AWS origin
-        if: steps.registry-auth.outputs.matched == 'true' && contains(env.WORKLOAD_REGISTRY, '.dkr.ecr.')
+        if: contains(vars.WORKLOAD_REGISTRY, '.dkr.ecr.')
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
         with:
           aws-region: ${{ vars.AWS_WORKLOAD_REGISTRY_REGION }}
           role-to-assume: ${{ vars.AWS_WORKLOAD_REGISTRY_ROLE_ARN }}
       - name: Log in to the AWS origin
-        if: steps.registry-auth.outputs.matched == 'true' && contains(env.WORKLOAD_REGISTRY, '.dkr.ecr.')
+        if: contains(vars.WORKLOAD_REGISTRY, '.dkr.ecr.')
         run: >-
           aws ecr get-login-password | docker login "${WORKLOAD_REGISTRY%%/*}" --username AWS --password-stdin
       - name: Authenticate the GHCR origin
-        if: steps.registry-auth.outputs.matched == 'true' && !contains(env.WORKLOAD_REGISTRY, '.dkr.ecr.')
+        if: ${{ !contains(vars.WORKLOAD_REGISTRY, '.dkr.ecr.') }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           echo "$GH_TOKEN" | docker login "${WORKLOAD_REGISTRY%%/*}" --username "$GITHUB_ACTOR" --password-stdin
       - name: Publish affected images
-        if: steps.registry-auth.outputs.matched == 'true'
         run: python3 src/bazel/tools/diff/cli.py publish
