@@ -310,14 +310,19 @@ def _render_runner_bin_dir(launcher):
 # and its arguments come from the same declaration the aspect uses, so check and
 # fix can never disagree about how a file should look.
 
-# BuildBuddy Workflows export CI=true, GIT_BRANCH, and GIT_PR_NUMBER (0 on push). A push to main
-# has an empty merge-base diff, so every gate runs on everything.
+# A CI push to main has an empty merge-base diff, so every gate runs on everything. BuildBuddy
+# Workflows export CI=true, GIT_BRANCH, and GIT_PR_NUMBER (0 on push); GitHub Actions exports
+# GITHUB_ACTIONS=true, GITHUB_EVENT_NAME, and GITHUB_REF_NAME.
+# LINT.IfChange(ci_push_to_main)
 _CI_PUSH_TO_MAIN_LINES = [
     'if [ "${CI:-}" = "true" ] && [ "${GIT_BRANCH:-}" = "main" ] && [ "${GIT_PR_NUMBER:-0}" = "0" ]; then',
+    '  mode="all"',
+    'elif [ "${GITHUB_ACTIONS:-}" = "true" ] && [ "${GITHUB_EVENT_NAME:-}" = "push" ] && [ "${GITHUB_REF_NAME:-}" = "main" ]; then',
     '  mode="all"',
     "fi",
     "",
 ]
+# LINT.ThenChange(//src/bazel/tools/diff/git_diff.py:ci_push_to_main)
 
 def _render_nested_bazel_env(label_name):
     # `bazel run` starts the binary in its runfiles tree under

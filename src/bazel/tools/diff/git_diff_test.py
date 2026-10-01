@@ -62,7 +62,7 @@ def _commit(repo: Path, rel_path: str, content: str, message: str) -> str:
 
 
 class CiPushToMainTest(unittest.TestCase):
-    """Verifies detection of BuildBuddy Workflows push runs on main."""
+    """Verifies detection of BuildBuddy Workflows and GitHub Actions push runs on main."""
 
     def test_push_to_main_is_detected(self) -> None:
         env = {"CI": "true", "GIT_BRANCH": "main", "GIT_PR_NUMBER": "0"}
@@ -79,6 +79,42 @@ class CiPushToMainTest(unittest.TestCase):
     def test_local_run_is_not_detected(self) -> None:
         self.assertFalse(is_ci_push_to_main({}))
         self.assertFalse(is_ci_push_to_main({"GIT_BRANCH": "main"}))
+
+    def test_github_push_to_main_is_detected(self) -> None:
+        env = {
+            "CI": "true",
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_EVENT_NAME": "push",
+            "GITHUB_REF_NAME": "main",
+        }
+        self.assertTrue(is_ci_push_to_main(env))
+
+    def test_github_pull_request_is_not_detected(self) -> None:
+        env = {
+            "CI": "true",
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_EVENT_NAME": "pull_request",
+            "GITHUB_REF_NAME": "12/merge",
+        }
+        self.assertFalse(is_ci_push_to_main(env))
+
+    def test_github_push_to_other_branch_is_not_detected(self) -> None:
+        env = {
+            "CI": "true",
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_EVENT_NAME": "push",
+            "GITHUB_REF_NAME": "feature",
+        }
+        self.assertFalse(is_ci_push_to_main(env))
+
+    def test_github_dispatch_on_main_is_not_detected(self) -> None:
+        env = {
+            "CI": "true",
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_EVENT_NAME": "workflow_dispatch",
+            "GITHUB_REF_NAME": "main",
+        }
+        self.assertFalse(is_ci_push_to_main(env))
 
 
 class ChangedFilesDiscoveryTest(unittest.TestCase):

@@ -110,6 +110,18 @@ class CliArgParsingTest(unittest.TestCase):
         with mock.patch.dict("os.environ", {**env, "GIT_PR_NUMBER": "7"}, clear=True):
             self.assertFalse(parse_cli_args(["test"], repo_root=self.repo_root).run_all)
 
+    def test_github_push_to_main_implies_all(self) -> None:
+        env = {
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_EVENT_NAME": "push",
+            "GITHUB_REF_NAME": "main",
+        }
+        with mock.patch.dict("os.environ", env, clear=True):
+            self.assertTrue(parse_cli_args(["test"], repo_root=self.repo_root).run_all)
+        pull_request = {**env, "GITHUB_EVENT_NAME": "pull_request", "GITHUB_REF_NAME": "7/merge"}
+        with mock.patch.dict("os.environ", pull_request, clear=True):
+            self.assertFalse(parse_cli_args(["test"], repo_root=self.repo_root).run_all)
+
     def test_normalizes_positional_targets(self) -> None:
         parsed = parse_cli_args(["test", "src/pkg"], repo_root=self.repo_root)
         self.assertEqual(parsed.explicit_targets, ["//src/pkg/..."])

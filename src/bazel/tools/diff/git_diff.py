@@ -57,17 +57,29 @@ def _run_git(repo_root: Path, args: Sequence[str]) -> str:
         return ""
 
 
+# LINT.IfChange(ci_push_to_main)
 def is_ci_push_to_main(env: Mapping[str, str] | None = None) -> bool:
-    """Detects a BuildBuddy Workflows push run on main, where the merge-base diff is empty.
+    """Detects a CI push run on main, where the merge-base diff is empty.
 
-    Workflows export CI=true, GIT_BRANCH, and GIT_PR_NUMBER (0 for push triggers).
+    BuildBuddy Workflows export CI=true, GIT_BRANCH, and GIT_PR_NUMBER (0 for
+    push triggers). GitHub Actions exports GITHUB_ACTIONS=true,
+    GITHUB_EVENT_NAME, and GITHUB_REF_NAME.
     """
     env = os.environ if env is None else env
-    return (
+    buildbuddy_push = (
         env.get("CI") == "true"
         and env.get("GIT_BRANCH") == "main"
         and env.get("GIT_PR_NUMBER", "0") in {"", "0"}
     )
+    github_push = (
+        env.get("GITHUB_ACTIONS") == "true"
+        and env.get("GITHUB_EVENT_NAME") == "push"
+        and env.get("GITHUB_REF_NAME") == "main"
+    )
+    return buildbuddy_push or github_push
+
+
+# LINT.ThenChange(//src/bazel/rules/lint_aspect/defs.bzl:ci_push_to_main)
 
 
 def detect_git_baseline(repo_root: Path) -> tuple[str, str]:
