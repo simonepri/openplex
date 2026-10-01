@@ -20,6 +20,7 @@ jobs:
     outputs:
       active: ${{ steps.override.outputs.active }}
       reason: ${{ steps.override.outputs.reason }}
+      unconfigured: ${{ steps.credentials.outputs.unconfigured }}
     steps:
       - name: Parse override from PR description
         id: override
@@ -35,14 +36,35 @@ jobs:
           out = os.environ.get("GITHUB_OUTPUT")
           if out:
               with open(out, "a", encoding="utf-8") as f:
-                  f.write(f"active={\"true\" if active else \"false\"}\n")
+                  f.write("active=" + ("true" if active else "false") + "\n")
                   f.write(f"reason={reason}\n")
           print(f"Override: active={active}, reason={reason}")
           '
 
+      # Fork pull requests never receive secrets, so only a same-repository
+      # pull request can prove that no review credentials are configured.
+      - name: Detect review credentials
+        id: credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEYS: ${{ secrets.ANTHROPIC_API_KEYS }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEYS: ${{ secrets.OPENAI_API_KEYS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+          SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          unconfigured=false
+          if [[ -z "$ANTHROPIC_API_KEY$ANTHROPIC_API_KEYS$OPENAI_API_KEY$OPENAI_API_KEYS$GEMINI_API_KEY$GEMINI_API_KEYS" && "$SAME_REPOSITORY" == "true" ]]; then
+            unconfigured=true
+          fi
+          echo "unconfigured=$unconfigured" >> "$GITHUB_OUTPUT"
+          echo "Review credentials missing: $unconfigured"
+
   run-review:
     name: Run Review
     needs: [review-override]
+    if: needs.review-override.outputs.unconfigured != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -176,11 +198,15 @@ jobs:
         env:
           GATE: ${{ needs.run-review.outputs.gate }}
           OVERRIDE: ${{ needs.review-override.outputs.active }}
+          UNCONFIGURED: ${{ needs.review-override.outputs.unconfigured }}
         run: |
           python3 -c '
           import os, sys
           gate = os.environ.get("GATE", "")
           override = os.environ.get("OVERRIDE", "") == "true"
+          if os.environ.get("UNCONFIGURED", "") == "true":
+              print("Review gate passed: no review credentials are configured")
+              sys.exit(0)
           if gate == "pass" or gate == "override" or override:
               print(f"Review gate passed (gate={gate}, override={override})")
               sys.exit(0)
