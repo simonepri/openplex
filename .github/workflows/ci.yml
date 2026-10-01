@@ -98,6 +98,22 @@ jobs:
       - *mise
       - *cache-bazel
       - *configure-bazel
+      - name: Probe push-to-main detection and publish config
+        run: |
+          env | grep -E '^(CI|GITHUB_ACTIONS|GITHUB_EVENT_NAME|GITHUB_REF_NAME)=' | sort
+          probe='from src.bazel.tools.diff.git_diff import is_ci_push_to_main as f; print("python all-mode:", f())'
+          python3 -c "$probe"
+          GITHUB_EVENT_NAME=push GITHUB_REF_NAME=main python3 -c "$probe"
+          bazel build --config=ci //:check
+          {
+            echo mode=affected
+            awk '/GIT_PR_NUMBER/{p=1} p{print} /^fi/{if(p) exit}' "$(bazel info --config=ci bazel-bin)/check.sh"
+            echo "echo \"shell mode: \$mode\""
+          } > "$RUNNER_TEMP/mode.sh"
+          cat "$RUNNER_TEMP/mode.sh"
+          bash "$RUNNER_TEMP/mode.sh"
+          GITHUB_EVENT_NAME=push GITHUB_REF_NAME=main bash "$RUNNER_TEMP/mode.sh"
+          echo "stream tag: ci-$(bash src/bazel/rules/oci/stream_tag.sh "$GITHUB_SHA")"
       - name: Run affected test suite
         run: python3 src/bazel/tools/diff/cli.py test --config=ci
   # Publication pushes to the registry named by the WORKLOAD_REGISTRY
