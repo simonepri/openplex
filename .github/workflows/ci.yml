@@ -1,4 +1,4 @@
-# GitHub Actions workflow running mise-driven continuous integration tasks, validation checks, and image publishing.
+# GitHub Actions workflow running the Format, Lint, and Test gates in parallel and publishing images.
 
 name: ci
 "on":
@@ -11,17 +11,14 @@ concurrency:
 permissions:
   contents: read # Required to read repository contents
 jobs:
-  ci:
-    name: Run CI
+  format:
+    name: Format
     if: vars.USE_BUILDBUDDY != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    permissions:
-      contents: read # Required to read repository contents
-      id-token: write # Required for AWS OIDC authentication
-      packages: write # Required to push workload images to GHCR fallback
     steps:
-      - name: Free disk space
+      - &free-disk-space
+        name: Free disk space
         run: |
           sudo rm -rf \
             /opt/hostedtoolcache \
@@ -39,37 +36,87 @@ jobs:
           sudo rm -f /swapfile /mnt/swapfile || true
           sudo docker image prune --all --force || true
           df -h
-      # v4.2.2
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - &checkout
+        # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
-      # v4.2.5
-      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518
+      - &mise
+        # v4.2.5
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518
         with:
           cache: true
-      # v4.2.2
-      - name: Cache Bazel
+      - &cache-bazel
+        # v4.2.2
+        name: Cache Bazel
         uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf
         with:
           path: |
             ~/.cache/bazel/repository
             ~/.cache/bazel/disk_cache
-          key: bazel-${{ runner.os }}-${{ hashFiles('**/BUILD', '**/BUILD.bazel', 'MODULE.bazel', 'WORKSPACE.bazel', '.bazelrc') }}
+          key: bazel-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/BUILD', '**/BUILD.bazel', 'MODULE.bazel', 'WORKSPACE.bazel', '.bazelrc') }}
           restore-keys: |
+            bazel-${{ runner.os }}-${{ github.job }}-
             bazel-${{ runner.os }}-
-      - name: Configure CI Bazel profile
+      - &configure-bazel
+        # Scoping the cache flags to the ci config keeps them after its empty
+        # cache defaults even when a command passes --config=ci again.
+        name: Configure CI Bazel profile
         run: |
           cat << EOF >> .bazelrc.user
           common --config=ci
-          common --repository_cache=$HOME/.cache/bazel/repository
-          build --disk_cache=$HOME/.cache/bazel/disk_cache
-          build --experimental_disk_cache_gc_max_size=10G
+          common:ci --repository_cache=$HOME/.cache/bazel/repository
+          build:ci --disk_cache=$HOME/.cache/bazel/disk_cache
+          build:ci --experimental_disk_cache_gc_max_size=10G
           EOF
-      - name: Run CI
-        run: mise run ci
+      - name: Verify formatting and code generation
+        run: bazel run --config=ci //:fix -- --check
+  lint:
+    name: Lint
+    if: vars.USE_BUILDBUDDY != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - *free-disk-space
+      - *checkout
+      - *mise
+      - *cache-bazel
+      - *configure-bazel
+      - name: Run static analysis checks
+        env:
+          BAZEL_CONFIG_FLAGS: --config=ci
+        run: bazel run --config=ci //:check
+  test:
+    name: Test
+    if: vars.USE_BUILDBUDDY != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - *free-disk-space
+      - *checkout
+      - *mise
+      - *cache-bazel
+      - *configure-bazel
+      - name: Run affected test suite
+        run: python3 src/bazel/tools/diff/cli.py test --config=ci
+  publish:
+    name: Publish
+    needs: [format, lint, test]
+    if: vars.USE_BUILDBUDDY != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read # Required to read repository contents
+      id-token: write # Required for AWS OIDC authentication
+      packages: write # Required to push workload images to GHCR fallback
+    steps:
+      - *free-disk-space
+      - *checkout
+      - *mise
+      - *cache-bazel
+      - *configure-bazel
       - name: Configure container registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: registry-auth
         env:
           CONFIGURED_REGISTRY: ${{ vars.WORKLOAD_REGISTRY }}
