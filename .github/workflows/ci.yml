@@ -16,6 +16,8 @@ jobs:
     if: vars.USE_BUILDBUDDY != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      BAZEL_CACHE: format
     steps:
       - &free-disk-space
         name: Free disk space
@@ -47,41 +49,81 @@ jobs:
         uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518
         with:
           cache: true
-      - &cache-bazel
+      - &restore-bazel-cache
+        # Every save uses a fresh key and restores take the newest prefix
+        # match, so the cache follows main instead of freezing at its first
+        # save; GitHub evicts the least recently used generations.
         # v4.2.2
-        name: Cache Bazel
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf
+        name: Restore Bazel caches
+        id: bazel-cache
+        uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf
         with:
-          path: |
+          path: &bazel-cache-paths |
             ~/.cache/bazel/repository
             ~/.cache/bazel/disk_cache
-          key: bazel-${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/BUILD', '**/BUILD.bazel', 'MODULE.bazel', 'WORKSPACE.bazel', '.bazelrc') }}
-          restore-keys: |
-            bazel-${{ runner.os }}-${{ github.job }}-
-            bazel-${{ runner.os }}-
+          key: bazel-${{ runner.os }}-${{ env.BAZEL_CACHE }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: bazel-${{ runner.os }}-${{ env.BAZEL_CACHE }}-
       - &configure-bazel
         # Scoping the cache flags to the ci config keeps them after its empty
-        # cache defaults even when a command passes --config=ci again.
+        # cache defaults even when a command passes --config=ci again. The
+        # pruning step bounds the cache, so Bazel's idle garbage collection
+        # stays off instead of deleting entries while the cache is saved.
         name: Configure CI Bazel profile
         run: |
           cat << EOF >> .bazelrc.user
           common --config=ci
           common:ci --repository_cache=$HOME/.cache/bazel/repository
           build:ci --disk_cache=$HOME/.cache/bazel/disk_cache
-          build:ci --experimental_disk_cache_gc_max_size=10G
+          build:ci --experimental_disk_cache_gc_max_size=0
           EOF
+          touch "$RUNNER_TEMP/bazel-cache-restored"
       - name: Verify formatting and code generation
         run: bazel run --config=ci //:fix -- --check
+      - &prune-bazel-cache
+        # GitHub caps a repository's caches at 10 GB. Bazel refreshes the
+        # mtime of the cache entries it uses, so pruning drops entries this
+        # run left unused before used ones, and the largest first within each
+        # group: large blobs are cheap downloads and copies, while small ones
+        # carry most of the action results.
+        name: Prune Bazel caches
+        if: always() && steps.bazel-cache.outcome == 'success'
+        env:
+          MAX_BYTES: 5000000000
+        run: |
+          # Bazel servers still write cache entries after their last command.
+          bazel shutdown
+          if [ -n "${BAZEL_OUTPUT_ROOT:-}" ]; then
+            bazel --output_user_root="$BAZEL_OUTPUT_ROOT" shutdown
+          fi
+          cache="$HOME/.cache/bazel"
+          mkdir -p "$cache/repository" "$cache/disk_cache"
+          find "$cache/repository" "$cache/disk_cache" -type f -printf '%T@ %s %p\n' |
+            awk -v start="$(stat -c %Y "$RUNNER_TEMP/bazel-cache-restored")" '{ print ($1 >= start), $2, $3 }' |
+            sort -k1,1nr -k2,2n |
+            awk -v max="$MAX_BYTES" '{ if (total + $2 <= max) total += $2; else print $3 }' |
+            xargs -r rm -f
+          du -sh "$cache/repository" "$cache/disk_cache"
+      - &save-bazel-cache
+        # Saving after failed runs keeps the next run warm.
+        # v4.2.2
+        name: Save Bazel caches
+        if: always() && steps.bazel-cache.outcome == 'success'
+        uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf
+        with:
+          path: *bazel-cache-paths
+          key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
   lint:
     name: Lint
     if: vars.USE_BUILDBUDDY != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      BAZEL_CACHE: build
     steps:
       - *free-disk-space
       - *checkout
       - *mise
-      - *cache-bazel
+      - *restore-bazel-cache
       - *configure-bazel
       - name: Run static analysis checks
         env:
@@ -92,14 +134,18 @@ jobs:
     if: vars.USE_BUILDBUDDY != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      BAZEL_CACHE: build
     steps:
       - *free-disk-space
       - *checkout
       - *mise
-      - *cache-bazel
+      - *restore-bazel-cache
       - *configure-bazel
       - name: Run affected test suite
         run: python3 src/bazel/tools/diff/cli.py test --config=ci
+      - *prune-bazel-cache
+      - *save-bazel-cache
   # Publication pushes to the registry named by the WORKLOAD_REGISTRY
   # repository variable; repositories without it skip the job.
   publish:
@@ -116,11 +162,12 @@ jobs:
     env:
       WORKLOAD_REGISTRY: ${{ vars.WORKLOAD_REGISTRY }}
       WORKLOAD_EXTRA_TAGS: main
+      BAZEL_CACHE: build
     steps:
       - *free-disk-space
       - *checkout
       - *mise
-      - *cache-bazel
+      - *restore-bazel-cache
       - *configure-bazel
       - name: Configure stream tag
         run: |
