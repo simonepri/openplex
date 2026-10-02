@@ -20,24 +20,13 @@ jobs:
       BAZEL_CACHE: format
     steps:
       - &free-disk-space
+        # The root disk starts with about 87 GB free and a cold full Test run
+        # peaks at 64 GB, late in the build. Deleting the five largest
+        # preinstalled toolchains (29 GB) in the background widens the margin
+        # to about 50 GB within a few minutes without delaying the job.
         name: Free disk space
         run: |
-          sudo rm -rf \
-            /opt/hostedtoolcache \
-            /usr/lib/jvm \
-            /usr/local/lib/android \
-            /usr/share/dotnet \
-            /opt/ghc \
-            /usr/local/.ghcup \
-            /usr/local/share/boost \
-            /usr/local/share/powershell \
-            /usr/local/share/vcpkg \
-            /usr/local/share/chromium \
-            /usr/local/lib/node_modules
-          sudo swapoff -a || true
-          sudo rm -f /swapfile /mnt/swapfile || true
-          sudo docker image prune --all --force || true
-          df -h
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache /usr/local/.ghcup /usr/share/swift > /dev/null 2>&1 &
       - &checkout
         # v4.2.2
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
