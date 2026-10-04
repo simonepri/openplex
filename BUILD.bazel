@@ -8,6 +8,7 @@ load(
     "CODEOWNERS_PATH_SPECS",
     "DOTENV_PATH_SPECS",
     "GAZELLE_PATH_SPECS",
+    "PACKAGE_OVERRIDES_PATH_SPECS",
     "RULESYNC_PATH_SPECS",
 )
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "GENERATED", "package_sources", "source_set")
@@ -135,6 +136,14 @@ git_hook(
     ],
     stage = "pre-commit",
     summary = "Source and configuration files match formatting and generation",
+)
+
+git_hook(
+    name = "package_overrides",
+    src = "//src/bazel/checks/package_overrides",
+    pathspecs = PACKAGE_OVERRIDES_PATH_SPECS,
+    stage = "pre-commit",
+    summary = "Package overrides are synchronized and actively required",
 )
 
 git_hook(

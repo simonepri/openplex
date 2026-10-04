@@ -55,3 +55,10 @@ RULESYNC_PATH_SPECS = [
     "AGENTS.md",
     "CLAUDE.md",
 ]
+
+PACKAGE_OVERRIDES_PATH_SPECS = [
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "src/bazel/checks/package_overrides/**",
+]

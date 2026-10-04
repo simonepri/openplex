@@ -1,0 +1,48 @@
+"""Define target binaries, libraries, and tests verifying package manager dependency overrides."""
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package_sources()
+
+py_library(
+    name = "validators",
+    # keep
+    srcs = ["check_package_overrides.py"],
+    imports = ["."],
+    visibility = ["//src/bazel/checks:__subpackages__"],
+    # keep
+    deps = [
+        "@dev_python_deps//pyyaml",
+    ],
+)
+
+py_binary(
+    name = "package_overrides",
+    # keep
+    srcs = ["check_package_overrides.py"],
+    main = "check_package_overrides.py",
+    precompile = "disabled",
+    visibility = ["//visibility:public"],
+    # keep
+    deps = [
+        ":validators",
+    ],
+)
+
+py_test(
+    name = "check_package_overrides_test",
+    size = "small",
+    # keep
+    srcs = ["check_package_overrides_test.py"],
+    imports = ["."],
+    main = "check_package_overrides_test.py",
+    precompile = "disabled",
+    # keep
+    deps = [
+        ":validators",
+    ],
+)

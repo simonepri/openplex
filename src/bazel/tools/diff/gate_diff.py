@@ -120,6 +120,12 @@ GATE_TRIGGERS: dict[str, list[str]] = {
         "requirements*.txt",
         "uv.lock",
     ],
+    "//src/bazel/checks/package_overrides": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "src/bazel/checks/package_overrides/**",
+    ],
     "//src/bazel/checks:dups": [
         "*.py",
         "*.go",
