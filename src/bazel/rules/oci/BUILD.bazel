@@ -332,7 +332,7 @@ third_party_image(
     env = {
         "TEST_ENV": "multiarch_ok",
     },
-    repository = "test/third_party_multiarch",
+    repository = "src/test/third_party_multiarch",
 )
 
 third_party_image(
@@ -344,7 +344,7 @@ third_party_image(
     env = {
         "TEST_ENV": "singlearch_ok",
     },
-    repository = "test/third_party_singlearch",
+    repository = "src/test/third_party_singlearch",
 )
 
 py_test(

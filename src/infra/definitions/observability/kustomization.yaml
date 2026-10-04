@@ -28,6 +28,7 @@ resources:
   - rules/kyverno-admission-denial.rule.yaml
   - rules/nvidia-gpu-health.rule.yaml
   - rules/signoz-collector-export-failure.rule.yaml
+  - rules/storage-inventory-stale.rule.yaml
   - rules/velero-backup-stale.rule.yaml
   - rules/workspace-backup-stale.rule.yaml
   - rules/workspace-container-restart.rule.yaml

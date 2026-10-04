@@ -1,0 +1,59 @@
+# Defines every --config profile: CI tuning and the BuildBuddy flavor and execution profiles.
+
+# --- BuildBuddy profiles ---
+# Select at most one flavor (bb-cloud, bb-cloud-proxy, bb-community) and at most
+# one execution profile (bb-rbe-cloud, bb-rbe-sh); bb-community has no executor.
+# bb-cloud-proxy builds on bb-cloud, so it may be added on top of bb-cloud.
+# Profiles starting with "_" are building blocks; //src/bazel/profiles rejects
+# selections that use them directly or combine profiles invalidly.
+
+# Authenticate with the API key that `bb login` stores in git config. Without
+# a key the helper adds no header, so CI's --remote_header still applies.
+common:bb-cloud --bes_backend=grpcs://remote.buildbuddy.io:443
+common:bb-cloud --bes_results_url=https://app.buildbuddy.io/invocation/
+build:bb-cloud --remote_cache=grpcs://remote.buildbuddy.io:443
+build:bb-cloud --remote_download_outputs=minimal
+# BuildBuddy's Remote Asset API serves checksummed downloads from its cache
+# instead of their origin, so a host with an empty repository cache skips the
+# origin; a failed remote fetch retries the origin directly. Registry pulls that
+# need a token always take that retry, because propagating credentials would
+# also send the host's registry token (such as a CI GitHub token) to BuildBuddy.
+build:bb-cloud --experimental_remote_downloader=grpcs://remote.buildbuddy.io:443
+build:bb-cloud --experimental_remote_downloader_local_fallback
+
+common:bb-cloud-proxy --config=bb-cloud
+build:bb-cloud-proxy --remote_cache=grpc://buildbuddy-enterprise-cache-proxy.buildbuddy.svc.cluster.local:1985
+build:bb-cloud-proxy --remote_bytestream_uri_prefix=remote.buildbuddy.io
+
+build:bb-community --remote_cache=grpc://buildbuddy-cache.buildbuddy.svc.cluster.local:1985
+build:bb-community --remote_download_outputs=minimal
+# Build event endpoints are per deployment; the Coder config appends them as common:bb-community lines.
+
+build:_bb-rbe --remote_executor=grpcs://remote.buildbuddy.io:443
+build:_bb-rbe --jobs=50
+build:_bb-rbe --remote_timeout=10m
+build:bb-rbe-cloud --config=_bb-rbe
+build:bb-rbe-sh --config=_bb-rbe
+# Order matters: Bazel picks the first compatible platform, so CPU must come first.
+build:bb-rbe-sh --extra_execution_platforms=//src/bazel/runners:sh_cpu,//src/bazel/runners:sh_gpu
+build:bb-rbe-sh --//src/bazel/runners:gpu_runners
+
+# CI execution profile to maximize core utilization and RAM on dedicated runners.
+common:ci --local_resources=cpu=HOST_CPUS*1.0
+common:ci --local_resources=memory=HOST_RAM*0.9
+common:ci --curses=no
+common:ci --show_progress_rate_limit=10
+common:ci --build_metadata=ROLE=CI
+common:ci --remote_executor=
+common:ci --experimental_build_event_upload_strategy=local
+# The committed lockfile must already hold the runner's platform entries; an
+# in-place update dirties the tree and makes //:fix rerun every generator.
+common:ci --lockfile_mode=error
+build:ci --jobs=auto
+build:ci --disk_cache=
+build:ci --experimental_disk_cache_gc_max_size=4G
+build:ci --experimental_disk_cache_gc_idle_delay=30s
+# Disk writes bound a cold runner's fetch phase, and the repository cache
+# writes a second copy of every checksummed download. With BuildBuddy
+# serving those downloads, the local copy only duplicates its cache.
+common:ci --repository_cache=

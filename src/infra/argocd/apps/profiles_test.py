@@ -81,6 +81,7 @@ class _ProfilesBaseTest(unittest.TestCase):
     infrastructure_inventory: dict[str, Any]
     registry: dict[str, Any]
     apps: list[dict[str, Any]]
+    template_reconciler_manifest: str
 
     @classmethod
     @override
@@ -93,6 +94,9 @@ class _ProfilesBaseTest(unittest.TestCase):
             for path in tool_files
             if path.name == "base_render.yaml" and path.parent.name == "clickhouse"
         ).read_text()
+        cls.template_reconciler_manifest = next(
+            path for path in tool_files if path.name == "template-reconciler.k8s.yaml"
+        ).read_text(encoding="utf-8")
         cls.dragonfly_client_image = yaml.safe_load(
             next(path for path in tool_files if path.name == "client-image.yaml").read_text()
         )
@@ -121,6 +125,7 @@ class _ProfilesBaseTest(unittest.TestCase):
                     "s3-endpoint": "http://172.19.0.2:4566",
                     "secret-store": "runtime-secrets",
                     "registered-cells": "cell-eaws-lh1",
+                    "installation": "corp",
                 },
                 "labels": {"provider": "floci", "profile": profile},
             },
@@ -642,13 +647,13 @@ class ProfilesAppTest(_ProfilesBaseTest):
                     ops = {
                         op["path"]: op["value"] for op in yaml.safe_load(stats_patches[0]["patch"])
                     }
-                    assert ops["/data/INVENTORY_ENABLED"] == "true"
+                    assert ops["/data/INVENTORY_ENABLED"] == "false"
                     if provider == "floci":
                         endpoint = "http://172.19.0.2:4566"
                     else:
                         endpoint = "https://s3-gateway.cell-eaws-lh1.c.corp.local.internal"
                     expected_sources = "\n".join(
-                        f"cell-eaws-lh1|{provider}||{b}||{b}|{endpoint}/cloud-cell-eaws-lh1-meta/inventory/{b}/stats/{{date}}T*/manifest.json"
+                        f"cell-eaws-lh1|{provider}||{b}||{b}|{endpoint}/corp-cell-eaws-lh1-meta/inventory/corp-cell-eaws-lh1-{b}/stats/{{date}}T*/manifest.json"
                         for b in ("home", "scratch", "meta", "backups", "archive")
                     )
                     assert ops["/data/INVENTORY_MANIFEST_SOURCES"] == expected_sources
@@ -671,7 +676,7 @@ class ProfilesAppTest(_ProfilesBaseTest):
         assert len(stats_patches) == 1
         ops = {op["path"]: op["value"] for op in yaml.safe_load(stats_patches[0]["patch"])}
         assert (
-            "cell-custom|floci||home||home|http://10.0.0.1:4566/cloud-cell-custom-meta/inventory/home/stats/{date}T*/manifest.json"
+            "cell-custom|floci||home||home|http://10.0.0.1:4566/corp-cell-custom-meta/inventory/corp-cell-custom-home/stats/{date}T*/manifest.json"
             in ops["/data/INVENTORY_MANIFEST_SOURCES"]
         )
 
@@ -694,7 +699,7 @@ class ProfilesAppTest(_ProfilesBaseTest):
             assert len(stats_patches) == 1
             ops = {op["path"]: op["value"] for op in yaml.safe_load(stats_patches[0]["patch"])}
             assert (
-                f"cell-custom|{provider}||home||home|https://s3-gateway.cell-custom.c.corp.local.internal/cloud-cell-custom-meta/inventory/home/stats/{{date}}T*/manifest.json"
+                f"cell-custom|{provider}||home||home|https://s3-gateway.cell-custom.c.corp.local.internal/corp-cell-custom-meta/inventory/corp-cell-custom-home/stats/{{date}}T*/manifest.json"
                 in ops["/data/INVENTORY_MANIFEST_SOURCES"]
             )
 
@@ -1197,33 +1202,19 @@ class ProfilesAppTest(_ProfilesBaseTest):
             {"cell-eaws-lh1": "eaws-lh1"}, separators=(",", ":")
         )
         cloud_init = cloud_job["spec"]["template"]["spec"]["initContainers"]
-        assert len(cloud_init) == 3
-        assert [c["name"] for c in cloud_init] == [
-            "source",
-            "ecr-login",
-            "resolve-workspace-image",
-        ]
+        assert len(cloud_init) == 1
+        assert [c["name"] for c in cloud_init] == ["source"]
         assert cloud_init[0] == {
             "name": "source",
             "env": [{"name": "SOURCE_REPOSITORY", "value": expected_repo}],
         }
-        assert cloud_init[1]["name"] == "ecr-login"
-        assert (
-            cloud_init[1]["image"]
-            == "docker.io/amazon/aws-cli:2.37.9@sha256:92de75724b6a746951f0e8b915d86bbccd7cb55aff96cd0cb4f7017272160780"
+        workspace_template_entry = next(
+            entry
+            for entry in self.infrastructure_inventory["images"]
+            if entry["name"] == "workspace-template-dev"
         )
-        assert cloud_init[2]["name"] == "resolve-workspace-image"
-        resolve_env = {e["name"]: e["value"] for e in cloud_init[2]["env"]}
-        assert (
-            resolve_env["WORKSPACE_IMAGE_SOURCE"]
-            == "111122223333.dkr.ecr.us-west-2.amazonaws.com/src/infra/definitions/workspaces/templates/dev:dev-v1"
-        )
-        assert (
-            resolve_env["WORKSPACE_IMAGE_REPOSITORY"]
-            == "111122223333.dkr.ecr.us-west-2.amazonaws.com/src/infra/definitions/workspaces/templates/dev"
-        )
-        assert resolve_env["WORKSPACE_IMAGE_SOURCE_INSECURE"] == "false"
-        assert resolve_env["DOCKER_CONFIG"] == "/state/.docker"
+        expected_template_image = f"111122223333.dkr.ecr.us-west-2.amazonaws.com/{workspace_template_entry['repository']}@{workspace_template_entry['imageDigest']}"
+        assert cloud_env_dict["CODER_TEMPLATE_IMAGE"] == expected_template_image
         assert cloud_env_dict["CODER_SESSION_TOKEN_FILE"] == "/var/run/coder/automation-token/token"
         assert cloud_env_dict["PRESERVE_CODER_SESSION_TOKEN"] == "true"
 
@@ -1615,6 +1606,58 @@ class ProfilesContractTest(_ProfilesBaseTest):
                     assert values["control"]["gatewayIPv4"] == "10.0.0.1"
                     assert values["serviceCIDR"] == "172.20.0.0/20"
 
+    def test_cell_parca_agent_remote_store_address(self) -> None:
+        app = next(app for app in self.apps if app["metadata"]["name"] == "cell-apps")
+        component = {
+            "component": "parca-agent",
+            "tier": "fleet",
+            "path": "src/infra/argocd/components/parca_agent/kustomize",
+            "namespace": "parca",
+            "wave": "40",
+        }
+        params = self.parameters(component, "minimal")
+        params["metadata"]["annotations"]["domain"] = "example.internal"
+        rendered = self.render(app, [params])
+        assert rendered.returncode == 0, rendered.stderr
+        application = yaml.safe_load(rendered.stdout)
+        source = next(
+            s for s in application["spec"]["sources"] if s.get("path") == component["path"]
+        )
+        patches = source["kustomize"]["patches"]
+        parca_patch = next(
+            p
+            for p in patches
+            if p["target"].get("kind") == "DaemonSet"
+            and p["target"].get("labelSelector") == "app.kubernetes.io/name=parca-agent"
+        )
+        assert "--remote-store-address=observability.example.internal:443" in parca_patch["patch"]
+
+    def test_cell_coredns_observability_rewrite(self) -> None:
+        app = next(app for app in self.apps if app["metadata"]["name"] == "cell-apps")
+        component = {
+            "component": "coredns",
+            "tier": "fleet",
+            "path": "src/infra/argocd/components/coredns/helm",
+            "namespace": "kube-system",
+            "wave": "5",
+            "helmValues": "values.yaml",
+            "injectClusterDomain": True,
+        }
+        params = self.parameters(component, "minimal")
+        params["metadata"]["labels"]["provider"] = "floci"
+        params["metadata"]["annotations"]["domain"] = "example.internal"
+        rendered = self.render(app, [params])
+        assert rendered.returncode == 0, rendered.stderr
+        application = yaml.safe_load(rendered.stdout)
+        source = next(
+            s for s in application["spec"]["sources"] if s.get("path") == component["path"]
+        )
+        values = source["helm"]["valuesObject"]
+        assert (
+            values["rewrites"]["observability.example.internal"]
+            == "active-ctrl-private-access.tailscale-system.svc.cluster.local"
+        )
+
     def test_local_rawfile_driver_uses_seeded_publish_identity_fix(self) -> None:
         image = next(
             entry
@@ -1866,9 +1909,23 @@ class ProfilesContractTest(_ProfilesBaseTest):
         assert not any(p["target"].get("kind") == "NetworkPolicy" for p in patches)
         node_class_patches = [p for p in patches if p["target"].get("kind") == "EC2NodeClass"]
         assert node_class_patches
-        assert any(
-            "111122223333.dkr.ecr.us-west-2.amazonaws.com" in p["patch"] for p in node_class_patches
-        )
+        for p in node_class_patches:
+            patch_ops = yaml.safe_load(p["patch"])
+            user_data_op = next(op for op in patch_ops if op.get("path") == "/spec/userData")
+            assert (
+                '[[resolver.host."111122223333.dkr.ecr.us-west-2.amazonaws.com".mirrors]]'
+                in user_data_op["value"]
+            )
+            assert (
+                'REGISTRY="111122223333.dkr.ecr.us-west-2.amazonaws.com"' in user_data_op["value"]
+            )
+
+        params_missing_ecr = self.parameters(component, "production")
+        params_missing_ecr["metadata"]["labels"]["provider"] = "aws"
+        params_missing_ecr["metadata"]["annotations"].pop("ecr-registry", None)
+        rendered_missing = self.render(app, [params_missing_ecr])
+        assert rendered_missing.returncode != 0
+        assert "requires ecr-registry annotation" in rendered_missing.stderr
 
         params_minimal = self.parameters(component, "minimal")
         params_minimal["metadata"]["labels"]["provider"] = "floci"
@@ -2228,7 +2285,9 @@ class ProfilesContractTest(_ProfilesBaseTest):
                 assert connector["id"] == "google"
                 assert connector["config"]["clientID"] == "$GOOGLE_CLIENT_ID"
                 assert connector["config"]["clientSecret"] == "$GOOGLE_CLIENT_SECRET"
-                assert connector["config"]["redirectURI"] == "https://dex.corp.openplex.org/callback"
+                assert (
+                    connector["config"]["redirectURI"] == "https://dex.corp.openplex.org/callback"
+                )
                 assert connector["config"]["hostedDomains"] == ["openplex.org", "openplex.io"]
                 assert "serviceAccountFilePath" not in connector["config"]
                 assert "adminEmail" not in connector["config"]
@@ -2382,7 +2441,9 @@ class ProfilesContractTest(_ProfilesBaseTest):
         operations = yaml.safe_load(sec_patch["patch"])
         rule_op = next(op for op in operations if op.get("path") == "/spec/authorization/rules/-")
         assert rule_op["value"]["name"] == "operator-email"
-        assert rule_op["value"]["principal"]["jwt"]["claims"][0]["values"] == ["simone@openplex.org"]
+        assert rule_op["value"]["principal"]["jwt"]["claims"][0]["values"] == [
+            "simone@openplex.org"
+        ]
 
     def test_velero_provider_contracts(self) -> None:
         for app_name in ("cell-apps", "ctrl-apps"):
@@ -2591,7 +2652,8 @@ class ProfilesContractTest(_ProfilesBaseTest):
         assert rendered_eg.returncode == 0, rendered_eg.stderr
         eg_val = yaml.safe_load(rendered_eg.stdout)["spec"]["sources"][0]["helm"]["valuesObject"]
         assert (
-            eg_val["gateway"]["listeners"]["atlantisWebhookHttps"]["hostname"] == "hooks.openplex.org"
+            eg_val["gateway"]["listeners"]["atlantisWebhookHttps"]["hostname"]
+            == "hooks.openplex.org"
         )
         assert (
             "service.beta.kubernetes.io/aws-load-balancer-ip-address-type"
@@ -3043,6 +3105,22 @@ class ProfilesContractTest(_ProfilesBaseTest):
         assert "chainsaw-storage" not in cell_deleted
         assert "chainsaw-storage-tests" not in cell_deleted
 
+        ctrl_obs_patch = next(
+            p["patch"]
+            for p in ctrl_patches
+            if p.get("target", {}).get("name") == "chainsaw-observability-tests"
+        )
+        assert "intranetDomain:" in ctrl_obs_patch
+        assert "clusterDomain:" not in ctrl_obs_patch
+
+        cell_obs_patch = next(
+            p["patch"]
+            for p in cell_patches
+            if p.get("target", {}).get("name") == "chainsaw-observability-tests"
+        )
+        assert "intranetDomain:" in cell_obs_patch
+        assert "clusterDomain:" not in cell_obs_patch
+
     def test_opencost_cloud_cost_gated_by_annotation_or_label(self) -> None:
         app = next(app for app in self.apps if app["metadata"]["name"] == "ctrl-apps")
         components = app["spec"]["generators"][0]["matrix"]["generators"][1]["list"]["elements"]
@@ -3097,6 +3175,49 @@ class ProfilesContractTest(_ProfilesBaseTest):
                     params["metadata"]["annotations"]["workload-registry"] = "my-workload-registry"
                     rendered = self.render(app, [params])
                     assert rendered.returncode == 0, rendered.stderr
+
+    def test_coder_template_reconciler_manifest_images_match_inventory(self) -> None:
+        lines = self.template_reconciler_manifest.splitlines()
+        # Line 85 (1-indexed): CODER_TEMPLATE_IMAGE
+        line_85 = lines[84]
+        # Line 114 (1-indexed): CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE
+        line_114 = lines[113]
+
+        workspace_entry = next(
+            entry
+            for entry in self.infrastructure_inventory["images"]
+            if entry["name"] == "workspace-template-dev"
+        )
+        backup_proxy_entry = next(
+            entry
+            for entry in self.infrastructure_inventory["images"]
+            if entry["name"] == "workspace-backup-proxy"
+        )
+
+        assert workspace_entry["repository"] in line_85
+        assert workspace_entry["imageDigest"] in line_85
+        assert "CODER_TEMPLATE_IMAGE" in line_85
+
+        assert backup_proxy_entry["repository"] in line_114
+        assert backup_proxy_entry["imageDigest"] in line_114
+        assert "CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE" in line_114
+
+    def test_homer_requires_sso_domain_on_cloud(self) -> None:
+        app = next(app for app in self.apps if app["metadata"]["name"] == "ctrl-apps")
+        components = app["spec"]["generators"][0]["matrix"]["generators"][1]["list"]["elements"]
+        component = next(c for c in components if c["component"] == "homer")
+
+        params = self.parameters(component, "minimal")
+        params["metadata"]["labels"]["provider"] = "aws"
+        params["metadata"]["annotations"].pop("sso-domain", None)
+        params["metadata"]["annotations"].pop("aws-sso-domain", None)
+        rendered = self.render(app, [params])
+        assert rendered.returncode != 0
+        assert "requires sso-domain annotation" in rendered.stderr
+
+        params["metadata"]["annotations"]["sso-domain"] = "sso.example.awsapps.com/start"
+        rendered_valid = self.render(app, [params])
+        assert rendered_valid.returncode == 0, rendered_valid.stderr
 
 
 if __name__ == "__main__":

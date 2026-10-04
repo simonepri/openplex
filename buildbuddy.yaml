@@ -11,7 +11,7 @@
 # on the default runner and about 128 s on this one.
 
 actions:
-  - name: "Format"
+  - name: "CI / Format"
     triggers:
       push:
         branches:
@@ -30,17 +30,17 @@ actions:
     git_fetch_depth: 0
     steps:
       - name: "Reset pristine workspace"
-        run: git clean -ffdx && git reset --hard HEAD
+        run: git clean -ffdx -e buildbuddy.bazelrc && git reset --hard HEAD && (command -v git-lfs >/dev/null && git lfs pull || true)
 
       - name: "Configure CI credentials and authentication"
         run: python3 src/bazel/tools/ci/auth.py
 
       - name: "Verify formatting and code generation"
         run: |
-          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud"
-          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="Format" //:fix -- --check
+          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud --remote_executor="
+          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="CI / Format" //:fix -- --check
 
-  - name: "Lint"
+  - name: "CI / Lint"
     triggers:
       push:
         branches:
@@ -61,17 +61,17 @@ actions:
     git_fetch_depth: 0
     steps:
       - name: "Reset pristine workspace"
-        run: git clean -ffdx && git reset --hard HEAD
+        run: git clean -ffdx -e buildbuddy.bazelrc && git reset --hard HEAD && (command -v git-lfs >/dev/null && git lfs pull || true)
 
       - name: "Configure CI credentials and authentication"
         run: python3 src/bazel/tools/ci/auth.py
 
       - name: "Run static analysis checks"
         run: |
-          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud"
-          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="Lint" //:check
+          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud --remote_executor="
+          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="CI / Lint" //:check
 
-  - name: "Test"
+  - name: "CI / Test"
     triggers:
       push:
         branches:
@@ -92,15 +92,15 @@ actions:
     git_fetch_depth: 0
     steps:
       - name: "Reset pristine workspace"
-        run: git clean -ffdx && git reset --hard HEAD
+        run: git clean -ffdx -e buildbuddy.bazelrc && git reset --hard HEAD && (command -v git-lfs >/dev/null && git lfs pull || true)
 
       - name: "Configure CI credentials and authentication"
         run: python3 src/bazel/tools/ci/auth.py
 
       - name: "Run affected test suite"
-        run: python3 src/bazel/tools/diff/cli.py test --config=ci --config=bb-cloud --build_metadata=COMMIT_STATUS_LABEL="Test"
+        run: python3 src/bazel/tools/diff/cli.py test --config=ci --config=bb-cloud --remote_executor= --build_metadata=COMMIT_STATUS_LABEL="CI / Test"
 
-  - name: "Format (Scheduled)"
+  - name: "CI / Format (Scheduled)"
     triggers:
       schedule:
         crons:
@@ -116,17 +116,17 @@ actions:
     git_fetch_depth: 0
     steps:
       - name: "Reset pristine workspace"
-        run: git clean -ffdx && git reset --hard HEAD
+        run: git clean -ffdx -e buildbuddy.bazelrc && git reset --hard HEAD && (command -v git-lfs >/dev/null && git lfs pull || true)
 
       - name: "Configure CI credentials and authentication"
         run: python3 src/bazel/tools/ci/auth.py
 
       - name: "Verify formatting and code generation across all files"
         run: |
-          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud"
-          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="Format" //:fix -- --all --check
+          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud --remote_executor="
+          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="CI / Format" //:fix -- --all --check
 
-  - name: "Lint (Scheduled)"
+  - name: "CI / Lint (Scheduled)"
     triggers:
       schedule:
         crons:
@@ -144,17 +144,17 @@ actions:
     git_fetch_depth: 0
     steps:
       - name: "Reset pristine workspace"
-        run: git clean -ffdx && git reset --hard HEAD
+        run: git clean -ffdx -e buildbuddy.bazelrc && git reset --hard HEAD && (command -v git-lfs >/dev/null && git lfs pull || true)
 
       - name: "Configure CI credentials and authentication"
         run: python3 src/bazel/tools/ci/auth.py
 
       - name: "Run static analysis checks across all targets"
         run: |
-          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud"
-          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="Lint" //:check -- --all
+          export BAZEL_CONFIG_FLAGS="--config=ci --config=bb-cloud --remote_executor="
+          bazel run ${BAZEL_CONFIG_FLAGS} --build_metadata=COMMIT_STATUS_LABEL="CI / Lint" //:check -- --all
 
-  - name: "Test (Scheduled)"
+  - name: "CI / Test (Scheduled)"
     triggers:
       schedule:
         crons:
@@ -172,15 +172,15 @@ actions:
     git_fetch_depth: 0
     steps:
       - name: "Reset pristine workspace"
-        run: git clean -ffdx && git reset --hard HEAD
+        run: git clean -ffdx -e buildbuddy.bazelrc && git reset --hard HEAD && (command -v git-lfs >/dev/null && git lfs pull || true)
 
       - name: "Configure CI credentials and authentication"
         run: python3 src/bazel/tools/ci/auth.py
 
       - name: "Run full test suite"
-        run: python3 src/bazel/tools/diff/cli.py test --all --config=ci --config=bb-cloud --build_metadata=COMMIT_STATUS_LABEL="Test"
+        run: python3 src/bazel/tools/diff/cli.py test --all --config=ci --config=bb-cloud --remote_executor= --build_metadata=COMMIT_STATUS_LABEL="CI / Test"
 
-  - name: "Review"
+  - name: "CI / Review"
     triggers:
       pull_request:
         branches:
@@ -200,15 +200,15 @@ actions:
       MISE_YES: "1"
     steps:
       - name: "Reset pristine workspace"
-        run: git clean -ffdx && git reset --hard HEAD
+        run: git clean -ffdx -e buildbuddy.bazelrc && git reset --hard HEAD && (command -v git-lfs >/dev/null && git lfs pull || true)
 
       - name: "Configure CI credentials and authentication"
         run: python3 src/bazel/tools/ci/auth.py
 
       - name: "Install the review agent CLIs"
         run: |
-          bazel build --config=ci --config=bb-cloud @mise_linux_amd64//file
-          mise="$(bazel info --config=ci --config=bb-cloud execution_root)/$(bazel cquery --config=ci --config=bb-cloud --output=files @mise_linux_amd64//file)"
+          bazel build --config=ci --config=bb-cloud --remote_executor= @mise_linux_amd64//file
+          mise="$(bazel info --config=ci --config=bb-cloud --remote_executor= execution_root)/$(bazel cquery --config=ci --config=bb-cloud --remote_executor= --output=files @mise_linux_amd64//file)"
           mkdir -p "$HOME/.local/bin"
           ln -sf "$mise" "$HOME/.local/bin/mise"
           "$HOME/.local/bin/mise" trust

@@ -284,6 +284,14 @@ fi
 [[ ! -s "${test_root}/calls" ]]
 
 : >"${test_root}/calls"
+rm -f "${test_root}/state/workspace-image"
+if CODER_TEMPLATE_IMAGE="" run_reconciler; then
+  printf '%s\n' 'empty CODER_TEMPLATE_IMAGE was ignored' >&2
+  exit 1
+fi
+[[ ! -s "${test_root}/calls" ]]
+
+: >"${test_root}/calls"
 TEST_CELL="" run_reconciler
 if grep -q -e '^publish ' -e 'templates delete' "${test_root}/calls"; then
   printf '%s\n' 'zero-cell run without a dev template published or deleted a template' >&2

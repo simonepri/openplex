@@ -186,12 +186,6 @@ spec:
                 secretKeyRef: {key: storage-stats-secret-access-key, name: s3-gateway-credentials}
             - name: RCLONE_AUTH_KEY
               value: '"$(S3_GATEWAY_ACCESS_KEY),$(S3_GATEWAY_SECRET_KEY)"'
-            - name: RCLONE_CONFIG_LOCAL_META_PROVIDER_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  key: storage-stats-reader-secret-key
-                  name: ray-data-local-object-credentials
-                  optional: true
           ports:
             - {containerPort: 8080, name: s3, protocol: TCP}
           startupProbe:

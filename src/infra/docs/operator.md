@@ -172,6 +172,9 @@ The Tailscale credential is the tailnet-owned OAuth client "OpenTofu IaC provisi
 
 The [Renovate](https://github.com/renovatebot/renovate) read-only ECR credential (`ctrl-aws-usw2-renovate-ecr-read` in Secrets Manager) provides IAM credentials (JSON `access_key_id`, `secret_access_key`) for automated dependency scanning against private Amazon ECR repositories (`400920695547.dkr.ecr.us-west-2.amazonaws.com`). It is strictly limited to `ecr:GetAuthorizationToken` on `*`, plus `ecr:ListImages` and `ecr:BatchGetImage` on `repository/src/*`, without `ecr:GetDownloadUrlForLayer` or write permissions. These credentials populate the exact Renovate secrets `RENOVATE_ECR_ACCESS_KEY_ID` and `RENOVATE_ECR_SECRET_ACCESS_KEY` configured in `.github/renovate.json` host rules.
 
+> [!NOTE]
+> The `ctrl-aws-usw2-renovate-ecr-read` IAM user only exists after the `research` apply has been run, so the `create-access-key`/`create-secret` commands below must be run after that apply.
+
 To create the secret for the first time without saving secrets in OpenTofu state or printing the secret access key to console/logs, pipe the generated credentials directly:
 
 ```bash
@@ -199,11 +202,11 @@ aws iam create-access-key \
   --secret-string file:///dev/stdin
 ```
 
-Local applies authenticate with `aws sso login --profile boltz-research-admin`; OpenTofu needs a live SSO session for the state backend, not only cached CLI credentials.
+Local applies authenticate with `aws sso login --profile openplex-production-admin`; OpenTofu needs a live SSO session for the state backend, not only cached CLI credentials.
 
 ```bash
 # research
-export AWS_PROFILE=boltz-research-admin
+export AWS_PROFILE=openplex-production-admin
 oauth="$(aws secretsmanager get-secret-value --region us-west-2 --secret-id ctrl-aws-usw2-tailscale-terraform-oauth --query SecretString --output text)"
 export TF_VAR_tailscale_oauth_client_id="$(jq -r .client_id <<<"${oauth}")"
 export TF_VAR_tailscale_oauth_client_secret="$(jq -r .client_secret <<<"${oauth}")"
@@ -216,7 +219,7 @@ export CLOUDFLARE_API_TOKEN="$(aws secretsmanager get-secret-value --region us-w
 tofu -chdir=src/infra/terraform/deployments/dns plan -out=dns.planfile
 
 # renovate
-export AWS_PROFILE=boltz-research-admin
+export AWS_PROFILE=openplex-production-admin
 ecr_creds="$(aws secretsmanager get-secret-value --region us-west-2 --secret-id ctrl-aws-usw2-renovate-ecr-read --query SecretString --output text)"
 export AWS_ACCESS_KEY_ID="$(jq -r .access_key_id <<<"${ecr_creds}")"
 export AWS_SECRET_ACCESS_KEY="$(jq -r .secret_access_key <<<"${ecr_creds}")"

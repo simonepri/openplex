@@ -1,0 +1,147 @@
+# GitHub Actions workflow building and publishing developer workspace and infrastructure images to AWS ECR.
+
+name: CI
+"on":
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write # Required for AWS OIDC authentication
+    env:
+      WORKLOAD_REGISTRY: ${{ vars.WORKLOAD_REGISTRY }}
+      BAZEL_CONFIG_FLAGS: --config=ci --config=bb-cloud --remote_executor= --build_metadata=DISABLE_COMMIT_STATUS_REPORTING=true
+    steps:
+      - name: Validate environment
+        id: check
+        run: |
+          if [ -z "${WORKLOAD_REGISTRY:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "WORKLOAD_REGISTRY is not set; skipping image publication."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Free disk space
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache /usr/local/.ghcup /usr/share/swift > /dev/null 2>&1 &
+
+      # v4.2.2
+      - name: Checkout repository
+        if: steps.check.outputs.configured == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # v4.2.5
+      - name: Setup toolchains
+        if: steps.check.outputs.configured == 'true'
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518
+        with:
+          cache: true
+
+      - name: Configure BuildBuddy authentication
+        if: steps.check.outputs.configured == 'true'
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: |
+          python3 src/bazel/tools/ci/auth.py
+          if [ -n "${BUILDBUDDY_API_KEY:-}" ]; then
+            git config --global buildbuddy.api-key "${BUILDBUDDY_API_KEY}"
+          fi
+
+      # v5.1.1
+      - name: Authenticate to AWS
+        if: steps.check.outputs.configured == 'true'
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        with:
+          aws-region: ${{ vars.AWS_WORKLOAD_REGISTRY_REGION || 'us-west-2' }}
+          role-to-assume: ${{ vars.AWS_WORKSPACE_PUBLISHER_ROLE_ARN || vars.AWS_WORKLOAD_REGISTRY_ROLE_ARN }}
+
+      - name: Log in to AWS ECR
+        if: steps.check.outputs.configured == 'true'
+        env:
+          AWS_REGION: ${{ vars.AWS_WORKLOAD_REGISTRY_REGION || 'us-west-2' }}
+        run: |
+          aws ecr get-login-password --region "${AWS_REGION}" | docker login "${WORKLOAD_REGISTRY%%/*}" --username AWS --password-stdin
+
+      - name: Publish workspace and infrastructure images
+        if: steps.check.outputs.configured == 'true'
+        env:
+          AWS_REGION: ${{ vars.AWS_WORKLOAD_REGISTRY_REGION || 'us-west-2' }}
+          ROLE_ARN: ${{ vars.AWS_WORKSPACE_PUBLISHER_ROLE_ARN || vars.AWS_WORKLOAD_REGISTRY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          : "${WORKLOAD_REGISTRY:?WORKLOAD_REGISTRY is empty or not set}"
+
+          token_dir="${RUNNER_TEMP:-/tmp}/aws-oidc"
+          mkdir -p "${token_dir}"
+          token_file="${token_dir}/token"
+          export AWS_WEB_IDENTITY_TOKEN_FILE="${token_file}"
+          export AWS_ROLE_ARN="${ROLE_ARN}"
+
+          publish_targets=$(bazel query --build_metadata=DISABLE_COMMIT_STATUS_REPORTING=true 'filter(":publish$", //src/...)')
+
+          failed_targets=()
+
+          config_flags=()
+          for flag in ${BAZEL_CONFIG_FLAGS}; do
+            if [ "${flag}" = "--config=bb-cloud" ] && grep -Eq '^[[:space:]]*common[[:space:]]+--config=bb-cloud' .bazelrc 2>/dev/null; then
+              continue
+            fi
+            config_flags+=("${flag}")
+          done
+
+          for target in ${publish_targets}; do
+            [ -z "${target}" ] && continue
+            echo "Publishing ${target}..."
+
+            # Fetch fresh GitHub OIDC token before each target
+            token_temp=$(mktemp "${token_dir}/token.XXXXXX")
+            if ! curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value' > "${token_temp}"; then
+              echo "Error: Failed to fetch OIDC token for ${target}" >&2
+              rm -f "${token_temp}"
+              failed_targets+=("${target}")
+              continue
+            fi
+
+            token_val=$(cat "${token_temp}")
+            if [ -z "${token_val}" ] || [ "${token_val}" = "null" ]; then
+              echo "Error: Invalid OIDC token (empty or null) for ${target}" >&2
+              rm -f "${token_temp}"
+              failed_targets+=("${target}")
+              continue
+            fi
+
+            mv -f "${token_temp}" "${token_file}"
+            chmod 600 "${token_file}"
+
+            # shellcheck disable=SC2086
+            if ! bazel run "${config_flags[@]}" "${target}"; then
+              echo "Error: Failed to publish ${target}" >&2
+              failed_targets+=("${target}")
+            fi
+          done
+
+          if [ ${#failed_targets[@]} -ne 0 ]; then
+            echo "The following targets failed to publish:" >&2
+            for failed in "${failed_targets[@]}"; do
+              echo "  - ${failed}" >&2
+            done
+            exit 1
+          fi

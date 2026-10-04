@@ -142,4 +142,37 @@ resource "google_storage_insights_report_config" "this" {
       frequency_options[0].start_date,
     ]
   }
+
+  depends_on = [
+    google_project_service.storage_insights,
+    google_storage_bucket_iam_member.insights_source,
+    google_storage_bucket_iam_member.insights_destination,
+  ]
+}
+
+resource "google_project_service" "storage_insights" {
+  project                    = local.project != "default" ? local.project : null
+  service                    = "storageinsights.googleapis.com"
+  disable_dependent_services = false
+  disable_on_destroy         = false
+}
+
+data "google_project" "current" {
+  project_id = local.project != "default" ? local.project : null
+}
+
+resource "google_storage_bucket_iam_member" "insights_source" {
+  for_each = toset([for tier in var.storage_tiers : tier if contains(["home", "scratch", "meta", "backups", "archive"], tier)])
+
+  bucket = google_storage_bucket.this[each.key].name
+  role   = "roles/storage.insightsCollectorService"
+  member = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-storageinsights.iam.gserviceaccount.com"
+}
+
+resource "google_storage_bucket_iam_member" "insights_destination" {
+  count = contains(var.storage_tiers, "meta") ? 1 : 0
+
+  bucket = google_storage_bucket.this["meta"].name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-storageinsights.iam.gserviceaccount.com"
 }

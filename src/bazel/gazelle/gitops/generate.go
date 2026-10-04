@@ -418,14 +418,20 @@ func generateShellRules(dir, componentName string) ([]*rule.Rule, []string, []st
 				"$(location bootstrap/containerd-stargz.conf)",
 				"$(location bootstrap/stargz-node-config.yaml)",
 				"$(location //src/bazel/tools:yq)",
+				"$(location bootstrap/dragonfly-mirror.toml)",
+				"$(location bootstrap/dragonfly-prepull.service)",
+				"$(location bootstrap/setup-dragonfly-prepull.sh)",
 			})
 			stRule.SetAttr("data", []string{
 				":overlay-cells_render",
+				"bootstrap/containerd-stargz.conf",
+				"bootstrap/dragonfly-mirror.toml",
+				"bootstrap/dragonfly-prepull.service",
+				"bootstrap/setup-dragonfly-prepull.sh",
 				"bootstrap/stargz-bootstrap.sh",
 				"bootstrap/stargz-config.toml",
-				"bootstrap/stargz-snapshotter.service",
-				"bootstrap/containerd-stargz.conf",
 				"bootstrap/stargz-node-config.yaml",
+				"bootstrap/stargz-snapshotter.service",
 				"//src/bazel/tools:yq",
 			})
 		} else {

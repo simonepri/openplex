@@ -19,12 +19,13 @@ data:
     REPORT_DATE="${REPORT_DATE:-$(TZ=UTC24 date +%F)}"
     : "${S3_ENDPOINT:?S3_ENDPOINT is required}"
     : "${CELL_NAME:?CELL_NAME is required}"
-    DESTINATION_BUCKET="${DESTINATION_BUCKET:-cloud-${CELL_NAME}-meta}"
+    : "${INSTALLATION:?INSTALLATION is required}"
+    DESTINATION_BUCKET="${DESTINATION_BUCKET:-${INSTALLATION}-${CELL_NAME}-meta}"
 
     STORAGE_CLASSES=(home scratch meta backups archive)
 
     for storage_class in "${STORAGE_CLASSES[@]}"; do
-      bucket="cloud-${CELL_NAME}-${storage_class}"
+      bucket="${INSTALLATION}-${CELL_NAME}-${storage_class}"
       echo "Processing storage class: ${storage_class} (bucket: ${bucket}) for date: ${REPORT_DATE}"
 
       count="$(clickhouse-local --query "
@@ -35,7 +36,7 @@ data:
           AND NOT startsWith(substring(_path, length('${bucket}') + 2), 'meta/raw/')
       ")"
 
-      destination_prefix="${S3_ENDPOINT}/${DESTINATION_BUCKET}/inventory/${storage_class}/stats/${REPORT_DATE}T01-00Z"
+      destination_prefix="${S3_ENDPOINT}/${DESTINATION_BUCKET}/inventory/${bucket}/stats/${REPORT_DATE}T01-00Z"
 
       if [[ "${count}" -gt 0 ]]; then
         echo "Found ${count} objects in ${bucket}, generating Parquet shard"
@@ -53,7 +54,7 @@ data:
             AND NOT startsWith(substring(_path, length('${bucket}') + 2), 'meta/raw/')
         "
 
-        manifest_json='{"fileFormat":"Parquet","files":[{"key":"inventory/'"${storage_class}"'/stats/'"${REPORT_DATE}"'T01-00Z/data/shard.parquet"}]}'
+        manifest_json='{"fileFormat":"Parquet","files":[{"key":"inventory/'"${bucket}"'/stats/'"${REPORT_DATE}"'T01-00Z/data/shard.parquet"}]}'
       else
         echo "No objects found in ${bucket}, generating empty manifest"
         manifest_json='{"fileFormat":"Parquet","files":[]}'

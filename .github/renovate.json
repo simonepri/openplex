@@ -43,10 +43,8 @@
     {
       "description": "ECR credentials for private infrastructure container images",
       "matchHost": "400920695547.dkr.ecr.us-west-2.amazonaws.com",
-      "encrypted": {
-        "username": "...",
-        "password": "..."
-      }
+      "username": "{{ secrets.RENOVATE_ECR_ACCESS_KEY_ID }}",
+      "password": "{{ secrets.RENOVATE_ECR_SECRET_ACCESS_KEY }}"
     }
   ],
   "customManagers": [
@@ -153,12 +151,11 @@
       "customType": "regex",
       "managerFilePatterns": ["/^src/infra/images/infrastructure-images\\.json$/"],
       "matchStrings": [
-        "\"imageDigest\":\\s*\"(?<currentDigest>sha256:[a-f0-9]{64})\"[^{}]*?\"repository\":\\s*\"(?<repository>[^\"]+)\"",
-        "\"repository\":\\s*\"(?<repository>[^\"]+)\"[^{}]*?\"imageDigest\":\\s*\"(?<currentDigest>sha256:[a-f0-9]{64})\""
+        "\"imageDigest\":\\s*\"(?<currentDigest>sha256:[a-f0-9]{64})\"[^{}]*?\"repository\":\\s*\"(?<repository>[^\"]+)\"[^{}]*?\"tag\":\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "400920695547.dkr.ecr.us-west-2.amazonaws.com/{{{repository}}}",
-      "versioningTemplate": "regex:^ci-(?<major>\\d+)(?:T(?<minor>\\d+))?Z?_(?<build>[0-9a-f]+)$"
+      "versioningTemplate": "regex:^ci-(?<major>\\d{8})T(?<minor>\\d{6})Z_[0-9a-f]+$"
     }
   ],
   "packageRules": [
@@ -428,6 +425,14 @@
       "description": "Group multiarch Bazel base image digests atomically",
       "matchPackageNames": ["workspace_dev_base_linux_amd64", "workspace_dev_base_linux_arm64_v8"],
       "groupName": "Bazel OCI: workspace dev base multiarch"
+    },
+    {
+      "description": "Loose versioning for custom Dragonfly MTLS client builds",
+      "matchPackageNames": [
+        "400920695547.dkr.ecr.us-west-2.amazonaws.com/src/third_party/dragonflyoss/client",
+        "src/third_party/dragonflyoss/client"
+      ],
+      "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-mtls-r(?<build>\\d+)$"
     },
     {
       "description": "Never group major updates across any ecosystem",

@@ -4,6 +4,6 @@
 enable_keychain = true
 image_service_path = "/run/containerd/containerd.sock"
 
-[[resolver.host."000000000000.dkr.ecr.us-west-2.amazonaws.com".mirrors]]
+[[resolver.host."000000000000.dkr.ecr.region.amazonaws.com".mirrors]]
 host = "127.0.0.1:4001"
 insecure = true

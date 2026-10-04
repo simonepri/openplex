@@ -77,33 +77,12 @@ spec:
             - {name: state, mountPath: /state}
             - {name: tmp, mountPath: /tmp}
             - {name: template-publication-credentials, mountPath: /var/run/coder/template-publication, readOnly: true}
-        - name: resolve-workspace-image
-          image: gcr.io/go-containerregistry/crane:debug@sha256:e78770b31258a3846f878036d9c1f63fbe4c871f9f56990bf77fd95c013e3c1b
-          command: [/busybox/sh, /program/resolve-template-image.sh]
-          env:
-            - {name: WORKSPACE_IMAGE_SOURCE, value: 'origin-registry:5000/000000000000/us-east-1/src/infra/definitions/workspaces/templates/dev:v1'}
-            - {name: WORKSPACE_IMAGE_REPOSITORY, value: 'localhost:15100/000000000000/us-east-1/src/infra/definitions/workspaces/templates/dev'}
-            - {name: WORKSPACE_IMAGE_SOURCE_INSECURE, value: "true"}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities: {drop: [ALL]}
-            readOnlyRootFilesystem: true
-            runAsGroup: 65532
-            runAsNonRoot: true
-            runAsUser: 65532
-            seccompProfile: {type: RuntimeDefault}
-          resources:
-            requests: {cpu: 10m, memory: 16Mi}
-            limits: {cpu: 100m, memory: 64Mi}
-          volumeMounts:
-            - {name: program, mountPath: /program, readOnly: true}
-            - {name: source, mountPath: /source, readOnly: true}
-            - {name: state, mountPath: /state}
       containers:
         - name: reconcile
           image: ghcr.io/coder/coder:v2.37.3@sha256:a48f82c2c437e032ce3f6970b4e937a7900cad3c76956956955099465b45e542
           command: [bash, /program/template-reconciler.sh]
           env:
+            - {name: CODER_TEMPLATE_IMAGE, value: 'localhost:15100/000000000000/us-east-1/src/infra/definitions/workspaces/templates/dev@sha256:d5b0c74dd9090431b9f28ee333d61ddea1bfa3a5d69a886dfd99405cb32e33a8'}
             - {name: CODER_URL, value: 'http://coder.coder.svc.cluster.local'}
             - {name: CODER_SESSION_TOKEN_FILE, value: /var/run/coder/automation-token/token}
             - {name: PRESERVE_CODER_SESSION_TOKEN, value: "true"}

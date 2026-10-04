@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/component: storage-stats-rollup
     app.kubernetes.io/part-of: signoz
 data:
-  INVENTORY_ENABLED: "true"
+  INVENTORY_ENABLED: "false"
   INVENTORY_TABLE_FUNCTION: s3
   INVENTORY_MANIFEST_SOURCES: ""
   INVENTORY_MANIFEST_NAME: manifest.json

@@ -35,7 +35,7 @@ spec:
           image: ($values.pythonImage)
           command: [python, -c]
           env:
-            - {name: INSTALLATION_CLUSTER_DOMAIN, value: ($values.clusterDomain)}
+            - {name: INSTALLATION_INTRANET_DOMAIN, value: ($values.intranetDomain)}
           args:
             - |-
               import json
@@ -46,7 +46,7 @@ spec:
               import urllib.request
 
               url = (
-                  f"https://observability.{os.environ['INSTALLATION_CLUSTER_DOMAIN']}/api/v1/query"
+                  f"https://observability.{os.environ['INSTALLATION_INTRANET_DOMAIN']}/api/v1/query"
                   "?query=up%7Bjob%3D~%22.%2B%22%7D"
               )
               context = ssl.create_default_context()

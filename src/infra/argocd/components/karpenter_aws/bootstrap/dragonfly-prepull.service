@@ -9,7 +9,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 TimeoutStartSec=600
-ExecStart=/usr/bin/bash -c 'until ctr version >/dev/null 2>&1; do sleep 1; done; TOKEN="$$(aws ecr get-login-password --region us-west-2)"; for img in 000000000000.dkr.ecr.us-west-2.amazonaws.com/mirror/busybox:1.37.0 000000000000.dkr.ecr.us-west-2.amazonaws.com/mirror/dragonflyoss/client:v1.5.7; do ctr -n k8s.io image pull --snapshotter stargz --user "AWS:$$TOKEN" "$$img"; done'
+ExecStart=/usr/bin/bash -c 'until ctr version >/dev/null 2>&1; do sleep 1; done; REGISTRY="000000000000.dkr.ecr.region.amazonaws.com"; REGION="$$(echo "$$REGISTRY" | cut -d. -f4)"; TOKEN="$$(aws ecr get-login-password --region "$$REGION")"; for img in "$$REGISTRY/mirror/busybox:1.37.0" "$$REGISTRY/mirror/dragonflyoss/client:v1.5.7"; do ctr -n k8s.io image pull --snapshotter stargz --user "AWS:$$TOKEN" "$$img"; done'
 
 [Install]
 WantedBy=multi-user.target

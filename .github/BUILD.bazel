@@ -2,6 +2,8 @@
 
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "GITHUB_WORKFLOW", "package_sources", "source_set")
 
+exports_files(["renovate.json"])
+
 source_set(
     name = "workflows",
     srcs = glob(

@@ -259,6 +259,10 @@ def oci_workload_publish(
     if publication_mode not in ["digest", "stream"]:
         fail("publication_mode must be digest or stream")
 
+    repo_target = repository_path or native.package_name()
+    if not repo_target.startswith("src/"):
+        fail("Publish repository target must start with 'src/': %s" % repo_target)
+
     if image:
         resolved_images = {"": image}
     else:
@@ -564,6 +568,9 @@ def third_party_image(
         visibility: Target visibility list.
         **kwargs: Additional arguments forwarded to oci_image or publish helpers.
     """
+    if not repository.startswith("src/"):
+        fail("Publish repository target must start with 'src/': %s" % repository)
+
     image_env = dict(env or {})
     if "source_date_epoch" in kwargs:
         sde = kwargs.pop("source_date_epoch")

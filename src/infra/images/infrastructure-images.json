@@ -2,13 +2,16 @@
   "images": [
     {
       "imageDigest": "sha256:156d1b3edb4b5bb8bcc013d2fa500b4e3b3b9bccf92cd1ae03f8d7bc439ac089",
+      "mediaType": "application/vnd.oci.image.index.v1+json",
       "name": "coder-snapshot-portal",
       "repository": "src/infra/tools/coder_snapshot_portal",
       "source": "src/infra/tools/coder_snapshot_portal",
+      "tag": "ci-20261004T182245Z_386650a7bac1",
       "target": "//src/infra/tools/coder_snapshot_portal:publish"
     },
     {
-      "imageDigest": "sha256:b2d2f3c24f29db02ff94b815451b10e1914fd96dfc8bef01806837392d095bd3",
+      "imageDigest": "sha256:4735fb59bea73e194974ca2fbc302aeffddbbbbe98003b1ecf08e8312a5f2a46",
+      "mediaType": "application/vnd.oci.image.index.v1+json",
       "name": "dragonfly-client",
       "repository": "src/third_party/dragonflyoss/client",
       "source": "src/third_party/dragonflyoss/client",
@@ -17,31 +20,48 @@
     },
     {
       "imageDigest": "sha256:17d15fb97ab5e3211baad8f98b721d397c627b1b32e4e00a464ffbb5473479ff",
+      "mediaType": "application/vnd.oci.image.index.v1+json",
       "name": "dragonfly-sso",
       "repository": "src/infra/tools/dragonfly_sso",
       "source": "src/infra/tools/dragonfly_sso",
+      "tag": "ci-20261004T182245Z_386650a7bac1",
       "target": "//src/infra/tools/dragonfly_sso:publish"
     },
     {
       "imageDigest": "sha256:d7498ff0f5380f745f740164640e042c6b2f87174f2f7a6299d43c67c75f8ff4",
+      "mediaType": "application/vnd.oci.image.index.v1+json",
       "name": "rawfile-localpv",
       "repository": "src/third_party/openebs/rawfile-localpv",
       "source": "src/third_party/openebs/rawfile-localpv",
+      "tag": "ci-20261004T182245Z_386650a7bac1",
       "target": "//src/third_party/openebs/rawfile-localpv:image_push"
     },
     {
-      "imageDigest": "sha256:0de8df5a4584f347e4545da6e3e78377d689117f8a007e07056b8b1a4bcd06a1",
+      "imageDigest": "sha256:53164ef4fb959865a9e58f973a18839eb3a7b85c189e2863146afe0c730ed308",
+      "mediaType": "application/vnd.oci.image.index.v1+json",
       "name": "s3-resolver",
       "repository": "src/infra/tools/s3_resolver/server",
       "source": "src/infra/tools/s3_resolver/server",
+      "tag": "ci-20261004T182245Z_386650a7bac1",
       "target": "//src/infra/tools/s3_resolver/server:publish"
     },
     {
       "imageDigest": "sha256:c06cd3abfae1a6b6b7c6e2517e35db5586d47b5c6cf9616c4d4f47126de2a70a",
+      "mediaType": "application/vnd.oci.image.index.v1+json",
       "name": "workspace-backup-proxy",
       "repository": "src/infra/tools/workspace_backup_proxy",
       "source": "src/infra/tools/workspace_backup_proxy",
+      "tag": "ci-20261004T182245Z_386650a7bac1",
       "target": "//src/infra/tools/workspace_backup_proxy:publish"
+    },
+    {
+      "imageDigest": "sha256:d5b0c74dd9090431b9f28ee333d61ddea1bfa3a5d69a886dfd99405cb32e33a8",
+      "mediaType": "application/vnd.oci.image.index.v1+json",
+      "name": "workspace-template-dev",
+      "repository": "src/infra/definitions/workspaces/templates/dev",
+      "source": "src/infra/definitions/workspaces/templates/dev",
+      "tag": "ci-20261004T182245Z_386650a7bac1",
+      "target": "//src/infra/definitions/workspaces/templates/dev:publish"
     }
   ],
   "version": 1

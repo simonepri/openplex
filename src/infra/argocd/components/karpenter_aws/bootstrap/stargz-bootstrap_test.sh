@@ -34,7 +34,7 @@ if (($# == 0)); then
   df_mirror="${script_dir}/dragonfly-mirror.toml"
   df_prepull_service="${script_dir}/dragonfly-prepull.service"
   df_prepull_script="${script_dir}/setup-dragonfly-prepull.sh"
-elif (($# >= 7)); then
+elif (($# == 10)); then
   render=$1
   bootstrap=$2
   config=$3
@@ -42,14 +42,26 @@ elif (($# >= 7)); then
   drop_in=$5
   node_config=$6
   yq_bin=$7
-  df_mirror="${8:-$(dirname "${bootstrap}")/dragonfly-mirror.toml}"
-  df_prepull_service="${9:-$(dirname "${bootstrap}")/dragonfly-prepull.service}"
-  df_prepull_script="${10:-$(dirname "${bootstrap}")/setup-dragonfly-prepull.sh}"
+  df_mirror=$8
+  df_prepull_service=$9
+  df_prepull_script=${10}
 else
-  printf 'usage: %s [RENDER BOOTSTRAP CONFIG UNIT DROP_IN NODE_CONFIG YQ [DF_MIRROR DF_PREPULL_SERVICE DF_PREPULL_SCRIPT]]\n' "$0" >&2
+  printf 'usage: %s RENDER BOOTSTRAP CONFIG UNIT DROP_IN NODE_CONFIG YQ DF_MIRROR DF_PREPULL_SERVICE DF_PREPULL_SCRIPT\n' "$0" >&2
   exit 2
 fi
 readonly render bootstrap config unit drop_in node_config yq_bin df_mirror df_prepull_service df_prepull_script
+
+for required_input in "${render}" "${bootstrap}" "${config}" "${unit}" "${drop_in}" "${node_config}" "${yq_bin}" "${df_mirror}" "${df_prepull_service}" "${df_prepull_script}"; do
+  if [[ ! -f ${required_input} ]]; then
+    printf 'stargz-bootstrap_test: required input file not found: %s\n' "${required_input}" >&2
+    exit 1
+  fi
+done
+if [[ ! -x ${yq_bin} ]]; then
+  printf 'stargz-bootstrap_test: required yq binary not executable: %s\n' "${yq_bin}" >&2
+  exit 1
+fi
+
 readonly cpu_user_data="${test_dir}/cpu-user-data"
 readonly gpu_user_data="${test_dir}/gpu-user-data"
 readonly cloud_config="${test_dir}/cloud-config.yaml"
@@ -113,10 +125,12 @@ assert_embedded() {
   done <"${source}"
 }
 
-for source in "${bootstrap}" "${config}" "${unit}" "${drop_in}" "${node_config}" "${df_prepull_service}" "${df_prepull_script}"; do
-  if [[ -n ${source} && -f ${source} ]]; then
-    assert_embedded "${source}"
+for source in "${bootstrap}" "${config}" "${unit}" "${drop_in}" "${node_config}" "${df_mirror}" "${df_prepull_service}" "${df_prepull_script}"; do
+  if [[ ! -f ${source} ]]; then
+    printf 'stargz-bootstrap_test: required source file not found: %s\n' "${source}" >&2
+    exit 1
   fi
+  assert_embedded "${source}"
 done
 
 line_number() {
@@ -261,21 +275,29 @@ if grep -Fq 'registry-1.docker.io' "${cpu_user_data}"; then
   exit 1
 fi
 
-# Verify ported dragonfly bootstrap files contract when present
-if [[ -n ${df_mirror} && -f ${df_mirror} ]]; then
-  grep -Fq '127.0.0.1:4001' "${df_mirror}"
-  grep -Fq 'insecure = true' "${df_mirror}"
+# Verify ported dragonfly bootstrap files contract
+if [[ ! -f ${df_mirror} ]]; then
+  printf 'stargz-bootstrap_test: dragonfly mirror file not found: %s\n' "${df_mirror}" >&2
+  exit 1
 fi
-if [[ -n ${df_prepull_service} && -f ${df_prepull_service} ]]; then
-  grep -Fq 'Wants=network-online.target' "${df_prepull_service}"
-  grep -Fq 'dragonflyoss/client' "${df_prepull_service}"
-  grep -Fq 'busybox' "${df_prepull_service}"
-  grep -Fq 'ctr -n k8s.io image pull --snapshotter stargz' "${df_prepull_service}"
+grep -Fq '127.0.0.1:4001' "${df_mirror}"
+grep -Fq 'insecure = true' "${df_mirror}"
+
+if [[ ! -f ${df_prepull_service} ]]; then
+  printf 'stargz-bootstrap_test: dragonfly prepull service file not found: %s\n' "${df_prepull_service}" >&2
+  exit 1
 fi
-if [[ -n ${df_prepull_script} && -f ${df_prepull_script} ]]; then
-  grep -Fq 'command -v aws' "${df_prepull_script}"
-  grep -Fq 'systemctl start --no-block dragonfly-prepull.service' "${df_prepull_script}"
+grep -Fq 'Wants=network-online.target' "${df_prepull_service}"
+grep -Fq 'dragonflyoss/client' "${df_prepull_service}"
+grep -Fq 'busybox' "${df_prepull_service}"
+grep -Fq 'ctr -n k8s.io image pull --snapshotter stargz' "${df_prepull_service}"
+
+if [[ ! -f ${df_prepull_script} ]]; then
+  printf 'stargz-bootstrap_test: dragonfly prepull script file not found: %s\n' "${df_prepull_script}" >&2
+  exit 1
 fi
+grep -Fq 'command -v aws' "${df_prepull_script}"
+grep -Fq 'systemctl start --no-block dragonfly-prepull.service' "${df_prepull_script}"
 
 # Validate integrated dragonfly prepull unit in user data
 prepull_unit_content="$(yq -r '
@@ -289,8 +311,9 @@ grep -Fq 'Type=oneshot' <<<"${prepull_unit_content}"
 grep -Fq 'RemainAfterExit=yes' <<<"${prepull_unit_content}"
 grep -Fq 'TimeoutStartSec=600' <<<"${prepull_unit_content}"
 grep -Fq 'ctr -n k8s.io image pull --snapshotter stargz' <<<"${prepull_unit_content}"
-grep -Fq '000000000000.dkr.ecr.us-west-2.amazonaws.com/mirror/dragonflyoss/client:v1.5.7' <<<"${prepull_unit_content}"
-grep -Fq '000000000000.dkr.ecr.us-west-2.amazonaws.com/mirror/busybox:1.37.0' <<<"${prepull_unit_content}"
+grep -Fq '000000000000.dkr.ecr.region.amazonaws.com' <<<"${prepull_unit_content}"
+grep -Fq '$$REGISTRY/mirror/dragonflyoss/client:v1.5.7' <<<"${prepull_unit_content}"
+grep -Fq '$$REGISTRY/mirror/busybox:1.37.0' <<<"${prepull_unit_content}"
 
 if grep -Fq 'systemctl start dragonfly-prepull.service' "${cpu_user_data}" && ! grep -Fq 'systemctl start --no-block dragonfly-prepull.service' "${cpu_user_data}"; then
   printf 'Dragonfly prepull service start must be non-blocking (--no-block)\n' >&2
@@ -457,22 +480,24 @@ grep -Fxq 'systemctl status --no-pager stargz-snapshotter.service' "${trace}"
 
 # 5. Successful startup test in sandbox root
 : >"${trace}"
-python3 -c "import socket; s = socket.socket(socket.AF_UNIX); s.bind('${sandbox_socket}')" 2>/dev/null || true
-if [[ -S ${sandbox_socket} ]]; then
-  if ! PATH="${fake_bin}:${PATH}" TRACE="${trace}" \
-    INSTALL_DIR="${sandbox_bin}" TMP_DIR="${sandbox_tmp}" STARGZ_ROOT="${sandbox_root}" STARGZ_SOCKET="${sandbox_socket}" \
-    bash "${bootstrap}"; then
-    printf 'AWS eStargz bootstrap failed under clean sandbox root\n' >&2
-    exit 1
-  fi
-  if [[ ! -d ${sandbox_root} ]]; then
-    printf 'Stargz data root directory %s was not created\n' "${sandbox_root}" >&2
-    exit 1
-  fi
-  if [[ -f "${sandbox_tmp}/stargz.tgz" ]]; then
-    printf 'Temporary tarball must be removed upon successful bootstrap\n' >&2
-    exit 1
-  fi
+python3 -c "import socket; s = socket.socket(socket.AF_UNIX); s.bind('${sandbox_socket}')"
+if [[ ! -S ${sandbox_socket} ]]; then
+  printf 'Failed to create mock unix domain socket at %s\n' "${sandbox_socket}" >&2
+  exit 1
+fi
+if ! PATH="${fake_bin}:${PATH}" TRACE="${trace}" \
+  INSTALL_DIR="${sandbox_bin}" TMP_DIR="${sandbox_tmp}" STARGZ_ROOT="${sandbox_root}" STARGZ_SOCKET="${sandbox_socket}" \
+  bash "${bootstrap}"; then
+  printf 'AWS eStargz bootstrap failed under clean sandbox root\n' >&2
+  exit 1
+fi
+if [[ ! -d ${sandbox_root} ]]; then
+  printf 'Stargz data root directory %s was not created\n' "${sandbox_root}" >&2
+  exit 1
+fi
+if [[ -f "${sandbox_tmp}/stargz.tgz" ]]; then
+  printf 'Temporary tarball must be removed upon successful bootstrap\n' >&2
+  exit 1
 fi
 
 # 6. Test dual binary gating logic in a sandbox root directory

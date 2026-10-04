@@ -1,0 +1,84 @@
+# Configures monorepo-wide Bazel flags, JVM startup heap options, Bzlmod settings, and build execution defaults.
+
+startup --host_jvm_args=-XX:MaxRAMPercentage=50.0
+
+common --enable_bzlmod
+common --color=yes
+common --show_progress_rate_limit=5
+common --incompatible_default_to_explicit_init_py
+common --downloader_config=src/bazel/downloader.cfg
+common --repository_cache=~/.cache/openplex/bazel/repository
+build --disk_cache=~/.cache/openplex/bazel/disk_cache
+build --experimental_disk_cache_gc_max_size=15G
+build --experimental_disk_cache_gc_max_age=14d
+build --experimental_disk_cache_gc_idle_delay=5m
+# Vendor charts are public inputs. Ignore host Docker credential stores so a
+# stale desktop helper cannot prevent anonymous OCI chart resolution.
+common --repo_env=DOCKER_CONFIG=/nonexistent/anonymous-registry-config
+# Disable Aspect ruleset usage telemetry collection and notices.
+common --repo_env=ASPECT_TOOLS_TELEMETRY=0
+common --repo_env=DO_NOT_TRACK=1
+
+# Bazel 9 otherwise infers a repository-contents cache beside the repository
+# cache. That location is inside the workspace and is rejected; the ordinary
+# repository cache remains persistent and sufficient for this project.
+common --repo_contents_cache=
+# Do not create bazel-bin, bazel-out, bazel-testlogs, or workspace symlinks in
+# the repository root. Their canonical locations remain available via
+# `bazel info`.
+common --symlink_prefix=/
+
+build --incompatible_strict_action_env
+build --remote_download_outputs=toplevel
+
+# Lint runs on every build. Reports land in the _validation output group, so a
+# finding fails the build without being requested; --norun_validations skips it.
+# Tools come from multitool because this strict environment has no PATH to them.
+build --aspects=//src/bazel/aspects:cross_lang/defs.bzl%cross_lang_aspect
+build --aspects=//src/bazel/aspects:gha/defs.bzl%gha_aspect
+build --aspects=//src/bazel/aspects:markdown/defs.bzl%markdown_aspect
+build --aspects=//src/bazel/aspects:python/defs.bzl%python_aspect
+build --aspects=//src/bazel/aspects:shell/defs.bzl%shell_aspect
+build --aspects=//src/bazel/aspects:tofu/defs.bzl%tofu_aspect
+build --aspects=//src/bazel/aspects:toml/defs.bzl%toml_aspect
+build --aspects=//src/bazel/aspects:web/defs.bzl%web_aspect
+build --aspects=//src/bazel/aspects:yaml/defs.bzl%yaml_aspect
+build --keep_going
+# Interactive targets have one requested outcome; stop their dependency work
+# as soon as analysis or execution makes that outcome impossible.
+run --nokeep_going
+# Providers and renders can build concurrently, but validators have high
+# per-process memory use and share the host with the local fleet.
+build --jobs=4
+# --jobs caps concurrent actions, not the CPU each one uses, and analysis
+# threads default to every core. Both are capped here so a build leaves the
+# machine usable; a second Bazel server gets its own budget, so this is 20%
+# of the host per server, leaving headroom for the local fleet.
+common --local_resources=cpu=HOST_CPUS*.2
+common --local_resources=memory=HOST_RAM*.5
+common --loading_phase_threads=auto
+# Test runner actions run standalone to prevent macOS sandbox crashes in
+# Bazel test-setup and XML generation under high concurrency.
+test --strategy=TestRunner=standalone
+test --test_output=errors
+# Manifest validators and test utilities resolve from the host/mise toolchain.
+test --test_env=PATH
+test --test_env=NO_COLOR=1
+# rules_kustomize render actions cannot see their runfiles tree under the
+# macOS sandbox; run them locally until that is fixed upstream.
+build --strategy=KustomizeBuild=local
+
+# Every --config profile lives in one file; check selections against it with
+# //src/bazel/profiles.
+import %workspace%/src/bazel/profiles/profiles.bazelrc
+
+# Default selection for this repository; openplex omits this line and selects
+# no BuildBuddy flavor by default.
+# 
+# Coder writes the target-scoped BuildBuddy configuration from its runtime
+# Secret projection, adding to the selection above. Developer hosts without
+# that file remain valid.
+try-import /var/run/workspace/buildbuddy/buildbuddy.bazelrc
+
+# Optional per-user overrides for developer workstations outside Coder.
+try-import %workspace%/.bazelrc.user

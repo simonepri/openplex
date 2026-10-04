@@ -85,7 +85,15 @@ template_dir="${TEMPLATE_DIR:-/source/repository/src/infra/definitions/workspace
 work_dir="${WORK_DIR:-/tmp}"
 state_dir="${STATE_DIR:-/state}"
 payload_dir="${work_dir}/template"
-CODER_TEMPLATE_IMAGE="$(cat "${state_dir}/workspace-image")"
+if [[ -z ${CODER_TEMPLATE_IMAGE:-} ]]; then
+  if [[ -s "${state_dir}/workspace-image" ]]; then
+    CODER_TEMPLATE_IMAGE="$(<"${state_dir}/workspace-image")"
+  fi
+fi
+if [[ -z ${CODER_TEMPLATE_IMAGE:-} ]]; then
+  printf '%s\n' 'CODER_TEMPLATE_IMAGE is empty or unset' >&2
+  exit 1
+fi
 export CODER_TEMPLATE_IMAGE
 workspace_arch="${CODER_TEMPLATE_ARCH}"
 "${template_dir}/publish.sh" --prepare "${payload_dir}"

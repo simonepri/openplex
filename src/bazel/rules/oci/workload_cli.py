@@ -680,7 +680,9 @@ def _validate_publish_args(args: PublishArgs, workspace: str) -> str:
         )
         sys.exit(1)
 
-    if not REPOSITORY_PATH_PATTERN.match(args.repository_path):
+    if not REPOSITORY_PATH_PATTERN.match(
+        args.repository_path
+    ) or not args.repository_path.startswith("src/"):
         sys.stderr.write(f"Invalid workload repository path: {args.repository_path}\n")
         sys.exit(1)
 

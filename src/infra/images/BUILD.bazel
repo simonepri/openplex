@@ -1,6 +1,7 @@
 """Packages and seeds platform and workload container images."""
 
 load("@rules_multirun//:defs.bzl", "command", "multirun")
+load("@rules_python//python:defs.bzl", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 
 exports_files([
@@ -38,3 +39,13 @@ multirun(
 )
 
 package_sources()
+
+py_test(
+    name = "infrastructure_images_test",
+    srcs = ["infrastructure_images_test.py"],
+    data = [
+        ":infrastructure-images.json",
+        "//.github:renovate.json",
+        "//src/infra/argocd/components/kyverno:kustomize/policies.yaml",
+    ],
+)

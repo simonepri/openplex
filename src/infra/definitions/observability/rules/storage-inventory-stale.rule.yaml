@@ -1,4 +1,4 @@
-# Alerts when the daily storage inventory rollup has not updated within 48 hours.
+# Alerts when the daily storage inventory rollup has not updated within 72 hours.
 
 apiVersion: resources.signoz.io/v1alpha1
 kind: Rule
@@ -28,8 +28,9 @@ spec:
               spec:
                 name: A
                 query: >-
-                  SELECT toUnixTimestamp(now()) AS timestamp, toFloat64(dateDiff('second', toDateTime(max(day)), now())) AS value FROM storage_stats.storage_prefix_daily
+                  SELECT toUnixTimestamp(now()) AS timestamp, toFloat64(dateDiff('second', toDateTime(max(day)), now())) AS value, cell, storage_class AS bucket FROM storage_stats.storage_prefix_daily FINAL GROUP BY cell, bucket HAVING toYear(max(day)) > 1970
                 disabled: false
+                legend: "{{cell}} / {{bucket}}"
           queryType: clickhouse_sql
         selectedQueryName: A
         thresholds:
@@ -38,8 +39,8 @@ spec:
             - name: critical
               matchType: all_the_times
               op: above
-              target: 172800
-      description: The daily storage inventory rollup has not completed within 48 hours.
+              target: 259200
+      description: The daily storage inventory rollup has not completed within 72 hours.
       evaluation:
         kind: rolling
         spec: {evalWindow: 15m, frequency: 5m}

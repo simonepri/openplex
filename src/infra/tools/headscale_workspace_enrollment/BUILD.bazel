@@ -136,7 +136,7 @@ oci_workload_publish(
     name = "publish",
     image = ":image_multiarch",
     publication_mode = "digest",
-    workload_name = "headscale-workspace-enrollment",
+    workload_name = "ws-enrollment",
 )
 
 filegroup(

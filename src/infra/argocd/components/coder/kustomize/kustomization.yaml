@@ -15,7 +15,6 @@ configMapGenerator:
       - scripts/git-askpass.sh
       - scripts/prepare-template-source.sh
       - scripts/reconcile_snapshot_oauth.py
-      - scripts/resolve-template-image.sh
       - scripts/stage-template-publisher-token.sh
       - scripts/template-reconciler.sh
       - scripts/template-watcher.sh

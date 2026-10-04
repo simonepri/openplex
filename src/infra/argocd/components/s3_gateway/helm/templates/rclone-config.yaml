@@ -51,6 +51,8 @@ data:
 {{- end }}
   storage-stats-rclone.conf: |
 {{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.meta "cell" $target "noHeadObject" true "remote" "local_meta_provider") | nindent 4 }}
+
+{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.meta "providerRemote" "local_meta_provider" "remote" "storage-stats" "suffix" "") | nindent 4 }}
 {{- range $team := keys $target.callers.teams | sortAlpha }}
   {{ $team }}-rclone.conf: |
 {{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.home "cell" $target "noHeadObject" true "remote" "local_home_provider") | nindent 4 }}

@@ -18,10 +18,24 @@ module "interface" {
   }
 }
 
+check "meta_tier_present" {
+  assert {
+    condition     = contains(var.storage_tiers, "meta")
+    error_message = "The 'meta' storage tier must be present in storage_tiers."
+  }
+}
+
 resource "aws_s3_bucket" "this" {
   for_each = toset(var.storage_tiers)
 
   bucket = module.interface.names[each.key]
+
+  lifecycle {
+    precondition {
+      condition     = contains(var.storage_tiers, "meta")
+      error_message = "The 'meta' storage tier must be present in storage_tiers."
+    }
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -54,6 +68,23 @@ resource "aws_kms_key" "storage" {
           "kms:Decrypt"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "AllowS3InventoryDelivery"
+        Effect = "Allow"
+        Principal = {
+          Service = "s3.amazonaws.com"
+        }
+        Action = [
+          "kms:GenerateDataKey*",
+          "kms:Decrypt"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
       }
     ]
   })
@@ -172,10 +203,36 @@ resource "aws_s3_bucket_policy" "enforce_tls" {
           Resource = "${aws_s3_bucket.this[each.key].arn}/inventory/*"
           Condition = {
             ArnLike = {
-              "aws:SourceArn" = "arn:aws:s3:::*"
+              "aws:SourceArn" = [
+                for tier in ["home", "scratch", "meta", "backups", "archive"] :
+                aws_s3_bucket.this[tier].arn if contains(var.storage_tiers, tier)
+              ]
             }
             StringEquals = {
               "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+            }
+          }
+        }
+      ] : [],
+      each.key == "meta" ? [
+        {
+          Sid    = "AllowS3GatewayStorageStatsRead"
+          Effect = "Allow"
+          Principal = {
+            AWS = "*"
+          }
+          Action = [
+            "s3:GetObject",
+            "s3:ListBucket",
+          ]
+          Resource = [
+            aws_s3_bucket.this[each.key].arn,
+            "${aws_s3_bucket.this[each.key].arn}/inventory/*",
+          ]
+          Condition = {
+            StringEquals = {
+              "aws:PrincipalAccount"                      = data.aws_caller_identity.current.account_id
+              "aws:PrincipalTag/eks:service-account-name" = "s3-gateway-storage-stats"
             }
           }
         }
@@ -198,7 +255,7 @@ resource "aws_s3_bucket_inventory" "this" {
 
   destination {
     bucket {
-      bucket_arn = aws_s3_bucket.this["meta"].arn
+      bucket_arn = try(aws_s3_bucket.this["meta"].arn, "")
       format     = "Parquet"
       prefix     = "inventory"
     }
@@ -208,6 +265,15 @@ resource "aws_s3_bucket_inventory" "this" {
     "Size",
     "LastModifiedDate",
   ]
+
+  lifecycle {
+    precondition {
+      condition     = contains(var.storage_tiers, "meta")
+      error_message = "The 'meta' storage tier must be present in storage_tiers to support S3 inventory reports."
+    }
+  }
+
+  depends_on = [aws_s3_bucket_policy.enforce_tls]
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "this" {

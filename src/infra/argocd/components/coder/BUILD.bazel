@@ -51,7 +51,6 @@ sh_library(
     srcs = [
         "kustomize/scripts/git-askpass.sh",
         "kustomize/scripts/prepare-template-source.sh",
-        "kustomize/scripts/resolve-template-image.sh",
         "kustomize/scripts/stage-template-publisher-token.sh",
         "kustomize/scripts/template-reconciler.sh",
         "kustomize/scripts/template-watcher.sh",
@@ -113,6 +112,11 @@ package_sources(exclude = [
     "**/*.sh",
     "**/*.py",
 ])
+
+exports_files(
+    ["kustomize/template-reconciler.k8s.yaml"],
+    visibility = ["//src/infra/argocd/apps:__pkg__"],
+)
 
 manifest_checks(
     name = "vendor-helm",

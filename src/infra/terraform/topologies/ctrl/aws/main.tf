@@ -101,7 +101,7 @@ module "registry" {
   source = "../../../components/registry/aws"
 
   installation_name = var.cluster_name
-  repositories      = []
+  repositories      = ["infrastructure"]
 }
 
 module "identity" {
@@ -140,10 +140,6 @@ module "identity" {
       cloud_telemetry = {
         namespace       = "otel-system"
         service_account = "otel-collector"
-      }
-      coder_reconciler_ecr_pull = {
-        namespace       = "coder"
-        service_account = "coder-template-reconciler"
       }
       dragonfly_barman = {
         namespace       = "dragonfly-system"
@@ -245,6 +241,7 @@ module "argo_bootstrap" {
   oidc_tls_insecure_skip_verify = var.oidc_tls_insecure_skip_verify
   cluster_labels                = var.cluster_labels
   annotations = merge(var.annotations, {
+    "installation"     = try(var.annotations["installation"], var.resource_prefix != null && var.resource_prefix != "" ? var.resource_prefix : "corp")
     "aws-account-id"   = data.aws_caller_identity.current.account_id
     "backups-bucket"   = module.storage.record.buckets.backups.name
     "ecr-registry"     = module.registry.record.registry_url

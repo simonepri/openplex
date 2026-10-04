@@ -7,8 +7,6 @@
   valueFrom: {secretKeyRef: {key: writer-secret-key, name: ray-data-local-object-credentials}}
 - name: RCLONE_CONFIG_LOCAL_SCRATCH_PROVIDER_SECRET_ACCESS_KEY
   valueFrom: {secretKeyRef: {key: writer-secret-key, name: ray-data-local-object-credentials}}
-- name: RCLONE_CONFIG_LOCAL_META_PROVIDER_SECRET_ACCESS_KEY
-  valueFrom: {secretKeyRef: {key: storage-stats-reader-secret-key, name: ray-data-local-object-credentials}}
 {{- end }}
 {{- range $cell := .remoteCells }}
 - name: {{ printf "RCLONE_CONFIG_%s_GATEWAY_SECRET_ACCESS_KEY" ($cell.virtualName | upper | replace "-" "_") }}

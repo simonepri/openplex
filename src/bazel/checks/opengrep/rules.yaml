@@ -270,7 +270,7 @@ rules:
         - "/src/infra/docs/**"
         - "**/*test*"
         - "**/*_test.*"
-    pattern-regex: '(?i)\b[a-zA-Z0-9-]+\.(?<!corp\.)local\.internal\b|\b[a-zA-Z0-9._%+-]+@corp\.local\.internal\b|\b[a-zA-Z0-9.-]*\b(?:example\.test|openplex\.(?:xyz|internal))\b'
+    pattern-regex: '(?i)[a-zA-Z0-9-]+\.(?<!corp\.)local\.internal|[a-zA-Z0-9._%+-]+@corp\.local\.internal|[a-zA-Z0-9.-]*(?:example\.test|openplex\.(?:xyz|internal))'
 
   - id: repository.architecture.no-hardcoded-route53-nameservers
     languages: [regex]
@@ -305,8 +305,7 @@ rules:
         - "**/lint-values*.yml"
         - "**/*test*"
         - "**/*_test.*"
-        - /src/infra/argocd/components/homer/**
-    pattern-regex: '(?i)\bopenplex\.(?!git\b)[a-z0-9-]+\b|\b[a-zA-Z0-9._%+-]+@openplex\.[a-z0-9-]+\b'
+    pattern-regex: '(?i)\bopenplex\.(?!git\b|svg\b)[a-z0-9-]+\b|\b[a-zA-Z0-9._%+-]+@openplex\.[a-z0-9-]+\b'
 
   - id: repository.architecture.hardcoded-intranet-dns
     languages: [regex]
@@ -404,8 +403,6 @@ rules:
         - /src/infra/terraform/**/*.yaml
         - /src/infra/terraform/**/*.yml
         # keep-sorted end
-      exclude:
-        - /src/infra/argocd/components/homer/**
     pattern-regex: |-
       (?mx)
         ^[ \t]*-?[ \t]*(?:
@@ -629,8 +626,6 @@ rules:
         - /src/infra/argocd/components/opencost/kustomize/cloud-integration.secret.yaml
         # Karpenter GCP cell-gcp-euw4 node pool and location
         - /src/infra/argocd/components/karpenter_gcp/**
-        # Karpenter AWS node class placeholder registry
-        - /src/infra/argocd/components/karpenter_aws/**
         # Kyverno image verification policy references upstream AWS EKS addon registry
         - /src/infra/argocd/components/kyverno/kustomize/policies.yaml
         # ClickHouse local S3 backup provider defaults
@@ -1249,4 +1244,18 @@ rules:
         - /.github/workflows/publish.yaml
         - /src/bazel/checks/opengrep/**
     pattern: $X
+
+  # Workload publish repositories in oci_workload_publish and third_party_image must start with src/.
+  - id: repository.architecture.publish-repository-starts-with-src
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Every publish repository target in oci_workload_publish and third_party_image must start with src/.
+    paths:
+      include:
+        - "/**/BUILD"
+        - "/**/BUILD.bazel"
+      exclude:
+        - "/src/bazel/checks/opengrep/**"
+    pattern-regex: '(?m)\b(?:repository|repository_path)\s*=\s*["\x27](?!src/)[^"\x27]+["\x27]'
 

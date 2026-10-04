@@ -32,12 +32,35 @@ usage() {
 
 # Find all Parquet metadata shards
 get_parquet_sources() {
-  local _target_cell="${1:-*}"
+  local target_cell="${1:-*}"
 
   if [[ -n ${S3_TEST_PARQUET_GLOB:-} ]]; then
     printf '%s\n' "${S3_TEST_PARQUET_GLOB}"
     return 0
   fi
+
+  local search_paths=(
+    "/fs/s3/${target_cell}/meta/inventory/*/*/*/*.parquet"
+    "/fs/s3/${target_cell}/meta/inventory/*/*/*/*/*.parquet"
+    "/fs/s3/${target_cell}/meta/inventory/**/*.parquet"
+    "/fs/s3/${target_cell}/meta/dt=latest/*.parquet"
+    "/fs/s3/${target_cell}/meta/**/*.parquet"
+  )
+
+  local old_globstar
+  shopt -q globstar && old_globstar=1 || old_globstar=0
+  shopt -s globstar
+
+  local p
+  for p in "${search_paths[@]}"; do
+    if compgen -G "${p}" >/dev/null; then
+      ((old_globstar)) || shopt -u globstar
+      printf '%s\n' "${p}"
+      return 0
+    fi
+  done
+
+  ((old_globstar)) || shopt -u globstar
 
   return 1
 }

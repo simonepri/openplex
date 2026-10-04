@@ -8,7 +8,7 @@ set -euo pipefail
 : "${CLICKHOUSE_PORT:?CLICKHOUSE_PORT is required}"
 : "${CLICKHOUSE_USERNAME:?CLICKHOUSE_USERNAME is required}"
 : "${INVENTORY_DATE_EXPR:=yesterday}"
-: "${INVENTORY_ENABLED:=true}"
+: "${INVENTORY_ENABLED:=false}"
 : "${INVENTORY_PREFIX_DEPTH:=1}"
 : "${INVENTORY_ROW_FILTER:=1}"
 : "${INVENTORY_MANIFEST_NAME:=manifest.json}"
@@ -36,6 +36,14 @@ report_year="${report_date%%-*}"
 report_month_and_day="${report_date#*-}"
 report_month="${report_month_and_day%%-*}"
 report_day="${report_month_and_day#*-}"
+manifest_dates=()
+for i in 0 1 2; do
+  manifest_dates+=("$(date -u -d "${INVENTORY_DATE_EXPR} - ${i} day" +%F)")
+done
+manifest_date_pattern="{$(
+  IFS=,
+  echo "${manifest_dates[*]}"
+)}"
 stats_secret_dir=/var/run/secrets/storage-stats-gateway
 inventory_table_function="${INVENTORY_TABLE_FUNCTION:-}"
 [[ -n ${inventory_table_function} ]] || inventory_table_function="<empty>"
@@ -106,6 +114,7 @@ ingest_sources() {
   local key_prefix_to_strip="$3"
   local logical_namespace="$4"
   local sources="$5"
+  local effective_date="${6:-${report_date}}"
   local rows
   rows="$(run_local_query "
     WITH if(
@@ -123,7 +132,7 @@ ingest_sources() {
     ) AS relative_key,
     splitByChar('/', relative_key) AS rel_segments
     SELECT
-      toDate('${report_date}') AS day,
+      toDate('${effective_date}') AS day,
       '${cell}' AS cell,
       '${storage_class}' AS storage_class,
       arrayElement(rel_segments, 1) AS team,
@@ -164,13 +173,17 @@ ingest_sources() {
         OR match(physical_key, '^home/[^/]+/.+')
         OR match(physical_key, '^global/home/[^/]+/[^/]+/.+')
       )
+      AND (
+        '${storage_class}' != 'meta'
+        OR (NOT startsWith(physical_key, 'inventory/') AND NOT startsWith(physical_key, 'meta/inventory/'))
+      )
     GROUP BY storage_class, team, prefix
     FORMAT TSV
   ")"
-  run_client_query "ALTER TABLE storage_stats.storage_prefix_daily_local ON CLUSTER '{cluster}' DELETE WHERE day = toDate('${report_date}') AND cell = '${cell}' AND storage_class = '${storage_class}' SETTINGS mutations_sync = 2"
+  run_client_query "ALTER TABLE storage_stats.storage_prefix_daily_local ON CLUSTER '{cluster}' DELETE WHERE day = toDate('${effective_date}') AND cell = '${cell}' AND storage_class = '${storage_class}' SETTINGS mutations_sync = 2"
   if [[ -n ${rows} ]]; then
     printf '%s\n' "${rows}" | client --query "INSERT INTO storage_stats.storage_prefix_daily (day, cell, storage_class, team, prefix, object_count, total_bytes, max_last_modified, ingested_at) FORMAT TSV"
-    echo "ingested ${cell} inventory rollup for ${report_date}"
+    echo "ingested ${cell} inventory rollup for ${effective_date}"
   else
     echo "${cell}: completed inventory contains no objects"
   fi
@@ -197,6 +210,7 @@ append_source() {
 declare -A cell_sources=()
 declare -A cell_prefixes=()
 declare -A cell_namespaces=()
+declare -A cell_dates=()
 if [[ -n ${INVENTORY_MANIFEST_SOURCES:-} ]]; then
   while IFS='|' read -r cell source_provider _virtual_name storage_class key_prefix_to_strip logical_namespace manifest_url; do
     [[ -n ${cell} ]] || continue
@@ -204,6 +218,14 @@ if [[ -n ${INVENTORY_MANIFEST_SOURCES:-} ]]; then
       echo "${cell}: manifest URL is required" >&2
       exit 1
     }
+    if [[ -z ${source_provider} ]]; then
+      case "${cell}" in
+        cell-aws* | *-aws-*) source_provider="aws" ;;
+        cell-eaws* | *-floci-* | local-*) source_provider="floci" ;;
+        cell-gcp* | *-gcp-*) source_provider="gcp" ;;
+        *) source_provider="floci" ;;
+      esac
+    fi
     source_key="${cell}|${storage_class}"
     cell_prefixes[${source_key}]="${key_prefix_to_strip}"
     cell_namespaces[${source_key}]="${logical_namespace}"
@@ -212,19 +234,23 @@ if [[ -n ${INVENTORY_MANIFEST_SOURCES:-} ]]; then
     access_key_sql="$(sql_escape "${access_key}")"
     secret_key_sql="$(sql_escape "${secret_key}")"
     credentials="'${access_key_sql}', '${secret_key_sql}', "
-    manifest_url="${manifest_url//\{date\}T\*/${report_date}T*}"
-    manifest_url="${manifest_url//\{date\}\/${INVENTORY_MANIFEST_NAME}/${report_date}T*\/${INVENTORY_MANIFEST_NAME}}"
-    manifest_url="${manifest_url//\{date\}\/manifest.json/${report_date}T*\/manifest.json}"
-    manifest_url="${manifest_url//\{date\}/${report_date}}"
-    manifest_url="${manifest_url//\{year\}/${report_year}}"
-    manifest_url="${manifest_url//\{month\}/${report_month}}"
-    manifest_url="${manifest_url//\{day\}/${report_day}}"
-    manifest_url="${manifest_url//\/${report_date}\/${INVENTORY_MANIFEST_NAME}/\/${report_date}T*\/${INVENTORY_MANIFEST_NAME}}"
-    manifest_url="${manifest_url//\/${report_date}\/manifest.json/\/${report_date}T*\/manifest.json}"
+    manifest_url="${manifest_url//\{date\}T\*/${manifest_date_pattern}T*}"
+    manifest_url="${manifest_url//\{date\}\/${INVENTORY_MANIFEST_NAME}/${manifest_date_pattern}T*\/${INVENTORY_MANIFEST_NAME}}"
+    manifest_url="${manifest_url//\{date\}\/manifest.json/${manifest_date_pattern}T*\/manifest.json}"
+    manifest_url="${manifest_url//\{date\}/${manifest_date_pattern}}"
+    manifest_url="${manifest_url//\{year\}/*}"
+    manifest_url="${manifest_url//\{month\}/*}"
+    manifest_url="${manifest_url//\{day\}/*}"
+    manifest_url="${manifest_url//\/${report_date}\/${INVENTORY_MANIFEST_NAME}/\/${manifest_date_pattern}T*\/${INVENTORY_MANIFEST_NAME}}"
+    manifest_url="${manifest_url//\/${report_date}\/manifest.json/\/${manifest_date_pattern}T*\/manifest.json}"
     case "${INVENTORY_TABLE_FUNCTION}" in
       s3)
         case "${source_provider}" in
-          aws | floci | gcp) ;;
+          aws | floci) ;;
+          gcp)
+            echo "${cell}: GCS Storage Insights manifest ingestion is not yet supported in this rollup script" >&2
+            exit 1
+            ;;
           *)
             echo "${cell}: unsupported manifest provider ${source_provider}" >&2
             exit 1
@@ -236,10 +262,11 @@ if [[ -n ${INVENTORY_MANIFEST_SOURCES:-} ]]; then
         manifest_filter="${INVENTORY_MANIFEST_FILTER}"
         manifest_source="s3('${manifest_url}', ${credentials}'RawBLOB', 'json String')"
         manifest_checksum_source="s3('${manifest_url%"${manifest_name}"}${checksum_name}', ${credentials}'LineAsString', 'checksum String')"
-        manifest_authority="${manifest_url#*://}"
+        url_without_scheme="${manifest_url#*://}"
         manifest_scheme="${manifest_url%%://*}"
-        manifest_authority="${manifest_authority%%/*}"
-        shard_url_prefix="${manifest_scheme}://${manifest_authority}"
+        manifest_authority="${url_without_scheme%%/*}"
+        path_after_authority="${url_without_scheme#*/}"
+        destination_bucket="${path_after_authority%%/*}"
         ;;
       *)
         echo "${cell}: manifest ingestion is unsupported for ${INVENTORY_TABLE_FUNCTION}" >&2
@@ -268,13 +295,19 @@ if [[ -n ${INVENTORY_MANIFEST_SOURCES:-} ]]; then
     "
     manifest_stats="$(run_local_query "
       ${latest_manifest_cte}
-      SELECT count(), coalesce(sum(length(JSONExtractArrayRaw(json, 'files'))), 0)
+      SELECT
+        count(),
+        coalesce(sum(length(JSONExtractArrayRaw(json, 'files'))), 0),
+        coalesce(extract(any(m._path), '([0-9]{4}-[0-9]{2}-[0-9]{2})'), '${report_date}')
       FROM latest
       FORMAT TSVRaw
     ")"
     manifest_count=0
     manifest_file_count=0
-    read -r manifest_count manifest_file_count <<<"${manifest_stats}"
+    manifest_day="${report_date}"
+    read -r manifest_count manifest_file_count manifest_day <<<"${manifest_stats}"
+    [[ -n ${manifest_day} ]] || manifest_day="${report_date}"
+    cell_dates[${source_key}]="${manifest_day}"
     if [[ ${manifest_count:-0} -eq 0 ]]; then
       echo "${cell}: no completed manifest with a valid completion signal" >&2
       exit 1
@@ -305,9 +338,16 @@ if [[ -n ${INVENTORY_MANIFEST_SOURCES:-} ]]; then
           ;;
         *) ;;
       esac
+      clean_shard_path="${shard_path#/}"
+      if [[ ${clean_shard_path} == "${destination_bucket}/"* ]]; then
+        full_shard_path="${clean_shard_path}"
+      else
+        full_shard_path="${destination_bucket}/${clean_shard_path}"
+      fi
+      shard_url="${manifest_scheme}://${manifest_authority}/${full_shard_path}"
       case "${source_provider}" in
-        aws | floci) source="SELECT key AS object_key, size AS object_size, last_modified_date AS object_last_modified FROM s3('${shard_url_prefix}/${shard_path}', ${credentials}'Parquet', 'key String, size Int64, last_modified_date DateTime64(3)')" ;;
-        gcp) source="SELECT name AS object_key, size AS object_size, parseDateTime64BestEffort(updated, 3, 'UTC') AS object_last_modified FROM s3('${shard_url_prefix}/${shard_path}', ${credentials}'Parquet', 'name String, size Int64, updated String')" ;;
+        aws | floci) source="SELECT key AS object_key, size AS object_size, last_modified_date AS object_last_modified FROM s3('${shard_url}', ${credentials}'Parquet', 'key String, size Int64, last_modified_date DateTime64(3)')" ;;
+        gcp) source="SELECT name AS object_key, size AS object_size, parseDateTime64BestEffort(updated, 3, 'UTC') AS object_last_modified FROM s3('${shard_url}', ${credentials}'Parquet', 'name String, size Int64, updated String')" ;;
         *)
           echo "${cell}: unsupported shard provider ${source_provider}" >&2
           exit 1
@@ -324,6 +364,14 @@ if [[ -n ${INVENTORY_SOURCES:-} ]]; then
       echo "${cell}: inventory URL template is required" >&2
       exit 1
     }
+    if [[ -z ${source_provider} ]]; then
+      case "${cell}" in
+        cell-aws* | *-aws-*) source_provider="aws" ;;
+        cell-eaws* | *-floci-* | local-*) source_provider="floci" ;;
+        cell-gcp* | *-gcp-*) source_provider="gcp" ;;
+        *) source_provider="floci" ;;
+      esac
+    fi
     access_key="$(cat "${stats_secret_dir}/access-key-id")"
     secret_key="$(cat "${stats_secret_dir}/secret-access-key")"
     access_key_sql="$(sql_escape "${access_key}")"
@@ -349,5 +397,5 @@ if [[ -n ${INVENTORY_SOURCES:-} ]]; then
 fi
 for source_key in "${!cell_sources[@]}"; do
   IFS='|' read -r cell storage_class <<<"${source_key}"
-  ingest_sources "${cell}" "${storage_class}" "${cell_prefixes[${source_key}]}" "${cell_namespaces[${source_key}]}" "${cell_sources[${source_key}]}"
+  ingest_sources "${cell}" "${storage_class}" "${cell_prefixes[${source_key}]}" "${cell_namespaces[${source_key}]}" "${cell_sources[${source_key}]}" "${cell_dates[${source_key}]:-${report_date}}"
 done

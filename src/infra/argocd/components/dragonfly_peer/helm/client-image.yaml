@@ -2,7 +2,7 @@
 
 client:
   image: &dragonfly-client-image
-    digest: sha256:b2d2f3c24f29db02ff94b815451b10e1914fd96dfc8bef01806837392d095bd3
+    digest: sha256:4735fb59bea73e194974ca2fbc302aeffddbbbbe98003b1ecf08e8312a5f2a46
     # LINT.IfChange(local-origin-registry-publication-root)
     registry: localhost:15100
     repository: 000000000000/us-east-1/dragonfly-client

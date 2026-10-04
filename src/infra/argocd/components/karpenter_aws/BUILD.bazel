@@ -35,15 +35,39 @@ sh_test(
         "$(location bootstrap/containerd-stargz.conf)",
         "$(location bootstrap/stargz-node-config.yaml)",
         "$(location //src/bazel/tools:yq)",
+        "$(location bootstrap/dragonfly-mirror.toml)",
+        "$(location bootstrap/dragonfly-prepull.service)",
+        "$(location bootstrap/setup-dragonfly-prepull.sh)",
     ],
     data = [
         "bootstrap/containerd-stargz.conf",
+        "bootstrap/dragonfly-mirror.toml",
+        "bootstrap/dragonfly-prepull.service",
+        "bootstrap/setup-dragonfly-prepull.sh",
         "bootstrap/stargz-bootstrap.sh",
         "bootstrap/stargz-config.toml",
         "bootstrap/stargz-node-config.yaml",
         "bootstrap/stargz-snapshotter.service",
         ":overlay-cells_render",
         "//src/bazel/tools:yq",
+    ],
+)
+
+sh_test(
+    name = "generate_test",
+    srcs = ["generate.sh"],
+    args = ["--check"],
+    data = [
+        "bootstrap/containerd-stargz.conf",
+        "bootstrap/dragonfly-prepull.service",
+        "bootstrap/setup-dragonfly-prepull.sh",
+        "bootstrap/stargz-bootstrap.sh",
+        "bootstrap/stargz-config.toml",
+        "bootstrap/stargz-node-config.yaml",
+        "bootstrap/stargz-snapshotter.service",
+        "kustomize/base/ec2-node-class.yaml",
+        "kustomize/components/gpu/ec2-node-class.yaml",
+        "//src/infra/argocd/apps:cells.yaml",
     ],
 )
 
@@ -65,6 +89,7 @@ sh_library(
     srcs = [
         "bootstrap/setup-dragonfly-prepull.sh",
         "bootstrap/stargz-bootstrap.sh",
+        "generate.sh",
     ],
 )
 

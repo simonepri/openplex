@@ -412,29 +412,6 @@ locals {
         }
       ]
     })
-    coder_reconciler_ecr_pull = jsonencode({
-      Version = "2012-10-17"
-      Statement = [
-        {
-          Sid      = "ECRAuth"
-          Effect   = "Allow"
-          Action   = ["ecr:GetAuthorizationToken"]
-          Resource = "*"
-        },
-        {
-          Sid    = "ECRWorkspacePull"
-          Effect = "Allow"
-          Action = [
-            "ecr:BatchCheckLayerAvailability",
-            "ecr:GetDownloadUrlForLayer",
-            "ecr:BatchGetImage",
-          ]
-          Resource = [
-            "arn:aws:ecr:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:repository/src/infra/definitions/workspaces/templates/*",
-          ]
-        }
-      ]
-    })
     ecr_pull = jsonencode({
       Version = "2012-10-17"
       Statement = [
@@ -787,11 +764,10 @@ locals {
     for k, v in var.roles : k => (
       contains(keys(local.aws_role_policies), k) ? local.aws_role_policies[k] :
       (endswith(k, "barman") ? local.aws_role_policies.barman :
-        endswith(k, "reconciler_ecr_pull") || endswith(k, "reconciler-ecr-pull") ? local.aws_role_policies.coder_reconciler_ecr_pull :
         endswith(k, "ecr_pull") || endswith(k, "ecr-pull") ? local.aws_role_policies.ecr_pull :
       endswith(k, "workspace_ecr") || endswith(k, "workspace-ecr") ? local.aws_role_policies.workspace_ecr : null)
     )
-    if contains(keys(local.aws_role_policies), k) || endswith(k, "barman") || endswith(k, "reconciler_ecr_pull") || endswith(k, "reconciler-ecr-pull") || endswith(k, "ecr_pull") || endswith(k, "ecr-pull") || endswith(k, "workspace_ecr") || endswith(k, "workspace-ecr")
+    if contains(keys(local.aws_role_policies), k) || endswith(k, "barman") || endswith(k, "ecr_pull") || endswith(k, "ecr-pull") || endswith(k, "workspace_ecr") || endswith(k, "workspace-ecr")
   }
 }
 
