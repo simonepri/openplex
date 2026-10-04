@@ -26,7 +26,11 @@ if [[ -z ${api_key} && -n ${BUILDBUDDY_API_KEY:-} ]]; then
 fi
 
 if [[ -z ${api_key} ]]; then
-  for rc in "${HOME:-}/.bazelrc" /home/buildbuddy/workspace/buildbuddy.bazelrc /etc/bazel.bazelrc; do
+  rc_files=("${PWD}/buildbuddy.bazelrc")
+  if [[ -z ${TEST_TMPDIR:-} ]]; then
+    rc_files+=("${HOME:-}/.bazelrc" /home/buildbuddy/workspace/buildbuddy.bazelrc /etc/bazel.bazelrc)
+  fi
+  for rc in "${rc_files[@]}"; do
     if [[ -f ${rc} ]]; then
       candidate="$(grep -oE 'x-buildbuddy-api-key=[A-Za-z0-9_-]+' "${rc}" 2>/dev/null | head -n 1 | cut -d= -f2 || true)"
       if [[ -n ${candidate} && ${candidate} =~ ^[A-Za-z0-9_-]+$ ]]; then

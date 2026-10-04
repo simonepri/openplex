@@ -1,6 +1,7 @@
 """Defines build and check targets for the prowler Argo CD component."""
 
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
@@ -16,9 +17,27 @@ kustomized_resources(
     visibility = ["//visibility:public"],
 )
 
+# gazelle:exclude prowler_compliance_test.sh
+
+sh_test(
+    name = "prowler_compliance_test",
+    # keep
+    srcs = ["prowler_compliance_test.sh"],
+    # keep
+    args = [
+        "$(location //src/bazel/tools:yq)",
+        "$(location kustomize/cronjob.yaml)",
+    ],
+    # keep
+    data = [
+        "kustomize/cronjob.yaml",
+        "//src/bazel/tools:yq",
+    ],
+)
+
 manifest_checks(
     name = "base_manifest",
     rendered = ":base_render",
 )
 
-package_sources()
+package_sources(exclude = ["**/*.sh"])

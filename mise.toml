@@ -78,7 +78,6 @@ RUFF_CACHE_DIR = "{{env.REPO_CACHE_DIR}}/ruff"
 TF_PLUGIN_CACHE_DIR = "{{env.REPO_CACHE_DIR}}/opentofu/plugins"
 TFLINT_PLUGIN_DIR = "{{env.REPO_CACHE_DIR}}/tflint/plugins"
 TF_CLI_CONFIG_FILE = "{{config_root}}/.tmp/state/opentofu.tfrc"
-AWS_CONFIG_FILE = "{{config_root}}/.aws/config"
 USE_BUILDBUDDY = "false"
 BUILDBUDDY_ORG = "openplex"
 _.path = ["/bin", "/usr/bin", "/usr/sbin", "/sbin"]

@@ -11,7 +11,6 @@ terraform {
   }
 
   backend "s3" {
-    bucket  = "openplex-opentofu-state-111122223333"
     key     = "dns/fleet.tfstate"
     region  = "us-east-1"
     encrypt = true

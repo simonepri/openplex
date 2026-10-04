@@ -1,7 +1,6 @@
 # Provisions AWS IAM roles, OIDC federated trust policies, and EKS Pod Identity associations.
 
 data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
 
 resource "aws_iam_openid_connect_provider" "federated" {
   count = var.trust_mode == "federated" && var.cluster_oidc_arn == "" && var.cluster_oidc_issuer_url != "" ? 1 : 0

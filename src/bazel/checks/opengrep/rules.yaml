@@ -270,7 +270,7 @@ rules:
         - "/src/infra/docs/**"
         - "**/*test*"
         - "**/*_test.*"
-    pattern-regex: '(?i)[a-zA-Z0-9-]+\.(?<!corp\.)local\.internal|[a-zA-Z0-9._%+-]+@corp\.local\.internal|[a-zA-Z0-9.-]*(?:example\.test|openplex\.(?:xyz|internal))'
+    pattern-regex: '(?i)\b[a-zA-Z0-9-]+\.(?<!corp\.)local\.internal\b|\b[a-zA-Z0-9._%+-]+@corp\.local\.internal\b|\b[a-zA-Z0-9.-]*\b(?:example\.test|openplex\.(?:xyz|internal))\b'
 
   - id: repository.architecture.no-hardcoded-route53-nameservers
     languages: [regex]
@@ -1240,8 +1240,12 @@ rules:
       include:
         - /.github/workflows/**
       exclude:
+        - /.github/workflows/ci.yml
+        - /.github/workflows/ci.yaml
         - /.github/workflows/publish.yml
         - /.github/workflows/publish.yaml
+        - /.github/workflows/review.yml
+        - /.github/workflows/review.yaml
         - /src/bazel/checks/opengrep/**
     pattern: $X
 

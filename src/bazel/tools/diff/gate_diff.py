@@ -141,6 +141,12 @@ GATE_TRIGGERS: dict[str, list[str]] = {
     "//src/bazel/checks:cyclo": [
         "*.go",
     ],
+    "//src/infra/argocd:lfs_guard_test": [
+        ".gitattributes",
+        "src/infra/argocd/**",
+        "src/infra/docs/artwork/wordmark.svg",
+        "src/infra/tools/coder_snapshot_portal/web/static/favicon.svg",
+    ],
 }
 
 GENERATOR_TRIGGERS: dict[str, list[str]] = {

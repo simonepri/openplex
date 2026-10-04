@@ -42,5 +42,5 @@ src/third_party/dragonflyoss/client/source-date-epoch-v1.5.2.patch whitespace=-b
 
 # Bazel build inputs opted out of Git LFS.
 src/infra/tools/coder_snapshot_portal/web/static/favicon.svg -filter -diff -merge
-src/infra/docs/artwork/wordmark.svg -filter -diff -merge
+src/infra/docs/**/*.svg -filter -diff -merge
 
