@@ -1,0 +1,11 @@
+# Self-contained DNS deployment manifest declaring Cloudflare NS delegations to downstream zones.
+
+installation:
+  enable_cloudflare: true
+  zone_name: openplex.org
+  delegations:
+    corp:
+      - ns-223.awsdns-27.com
+      - ns-1423.awsdns-49.org
+      - ns-913.awsdns-50.net
+      - ns-2006.awsdns-58.co.uk

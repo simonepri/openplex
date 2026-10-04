@@ -20,7 +20,7 @@ spec:
             matchLabels:
               app.kubernetes.io/component: proxy
               app.kubernetes.io/managed-by: envoy-gateway
-              gateway.envoyproxy.io/owning-gateway-name: public
+              gateway.envoyproxy.io/owning-gateway-name: public-hooks
               gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
       ports:
         - {protocol: TCP, port: 4141}

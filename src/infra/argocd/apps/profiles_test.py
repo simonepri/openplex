@@ -493,9 +493,7 @@ class ProfilesAppTest(_ProfilesBaseTest):
     ) -> None:
         if app_name == "cell-apps":
             bridge = sources["prometheus-api-bridge"][0]["helm"]["valuesObject"]
-            assert (
-                bridge["backend"]["signoz"]["url"] == "https://observability.c.corp.local.internal"
-            )
+            assert bridge["backend"]["signoz"]["url"] == "https://observability.corp.local.internal"
             for component_name, idx in (
                 ("prometheus-api-bridge", 2),
                 ("kube-oidc-proxy", 0),
@@ -621,32 +619,39 @@ class ProfilesAppTest(_ProfilesBaseTest):
         app = next(app for app in self.apps if app["metadata"]["name"] == "ctrl-apps")
         components = app["spec"]["generators"][0]["matrix"]["generators"][1]["list"]["elements"]
         component = next(c for c in components if c["component"] == "clickhouse")
-        for profile in ("minimal", "production"):
-            with self.subTest(profile=profile):
-                rendered = self.render(app, [self.parameters(component, profile)])
-                assert rendered.returncode == 0, rendered.stderr
-                application = yaml.safe_load(rendered.stdout)
-                source = next(
-                    source
-                    for source in application["spec"]["sources"]
-                    if source.get("path") == component["path"]
-                )
-                patches = source.get("kustomize", {}).get("patches", [])
-                stats_patches = [
-                    patch
-                    for patch in patches
-                    if patch["target"].get("name") == "signoz-clickhouse-storage-stats-provider"
-                ]
-                assert len(stats_patches) == 1
-                ops = {op["path"]: op["value"] for op in yaml.safe_load(stats_patches[0]["patch"])}
-                assert ops["/data/INVENTORY_ENABLED"] == "true"
-                assert ops["/data/INVENTORY_MANIFEST_SOURCES"] == (
-                    "cell-eaws-lh1|floci||home||home|http://172.19.0.2:4566/cloud-cell-eaws-lh1-meta/inventory/cell-eaws-lh1/home/{date}/manifest.json\n"
-                    "cell-eaws-lh1|floci||scratch||scratch|http://172.19.0.2:4566/cloud-cell-eaws-lh1-meta/inventory/cell-eaws-lh1/scratch/{date}/manifest.json\n"
-                    "cell-eaws-lh1|floci||meta||meta|http://172.19.0.2:4566/cloud-cell-eaws-lh1-meta/inventory/cell-eaws-lh1/meta/{date}/manifest.json\n"
-                    "cell-eaws-lh1|floci||backups||backups|http://172.19.0.2:4566/cloud-cell-eaws-lh1-meta/inventory/cell-eaws-lh1/backups/{date}/manifest.json\n"
-                    "cell-eaws-lh1|floci||archive||archive|http://172.19.0.2:4566/cloud-cell-eaws-lh1-meta/inventory/cell-eaws-lh1/archive/{date}/manifest.json"
-                )
+        for provider in ("floci", "aws", "gcp"):
+            for profile in ("minimal", "production"):
+                with self.subTest(provider=provider, profile=profile):
+                    params = self.parameters(component, profile)
+                    params["metadata"]["labels"]["provider"] = provider
+                    rendered = self.render(app, [params])
+                    assert rendered.returncode == 0, rendered.stderr
+                    application = yaml.safe_load(rendered.stdout)
+                    source = next(
+                        source
+                        for source in application["spec"]["sources"]
+                        if source.get("path") == component["path"]
+                    )
+                    patches = source.get("kustomize", {}).get("patches", [])
+                    stats_patches = [
+                        patch
+                        for patch in patches
+                        if patch["target"].get("name") == "signoz-clickhouse-storage-stats-provider"
+                    ]
+                    assert len(stats_patches) == 1
+                    ops = {
+                        op["path"]: op["value"] for op in yaml.safe_load(stats_patches[0]["patch"])
+                    }
+                    assert ops["/data/INVENTORY_ENABLED"] == "true"
+                    if provider == "floci":
+                        endpoint = "http://172.19.0.2:4566"
+                    else:
+                        endpoint = "https://s3-gateway.cell-eaws-lh1.c.corp.local.internal"
+                    expected_sources = "\n".join(
+                        f"cell-eaws-lh1|{provider}||{b}||{b}|{endpoint}/cloud-cell-eaws-lh1-meta/inventory/{b}/stats/{{date}}T*/manifest.json"
+                        for b in ("home", "scratch", "meta", "backups", "archive")
+                    )
+                    assert ops["/data/INVENTORY_MANIFEST_SOURCES"] == expected_sources
 
         params = self.parameters(component, "minimal")
         params["metadata"]["annotations"]["registered-cells"] = "cell-custom"
@@ -666,13 +671,14 @@ class ProfilesAppTest(_ProfilesBaseTest):
         assert len(stats_patches) == 1
         ops = {op["path"]: op["value"] for op in yaml.safe_load(stats_patches[0]["patch"])}
         assert (
-            "cell-custom|floci||home||home|http://10.0.0.1:4566/cloud-cell-custom-meta/inventory/cell-custom/home/{date}/manifest.json"
+            "cell-custom|floci||home||home|http://10.0.0.1:4566/cloud-cell-custom-meta/inventory/home/stats/{date}T*/manifest.json"
             in ops["/data/INVENTORY_MANIFEST_SOURCES"]
         )
 
         for provider in ("aws", "gcp"):
             params = self.parameters(component, "minimal")
             params["metadata"]["labels"]["provider"] = provider
+            params["metadata"]["annotations"]["registered-cells"] = "cell-custom"
             rendered = self.render(app, [params])
             assert rendered.returncode == 0, rendered.stderr
             application = yaml.safe_load(rendered.stdout)
@@ -680,9 +686,16 @@ class ProfilesAppTest(_ProfilesBaseTest):
                 s for s in application["spec"]["sources"] if s.get("path") == component["path"]
             )
             patches = source.get("kustomize", {}).get("patches", [])
-            assert not any(
-                p["target"].get("name") == "signoz-clickhouse-storage-stats-provider"
+            stats_patches = [
+                p
                 for p in patches
+                if p["target"].get("name") == "signoz-clickhouse-storage-stats-provider"
+            ]
+            assert len(stats_patches) == 1
+            ops = {op["path"]: op["value"] for op in yaml.safe_load(stats_patches[0]["patch"])}
+            assert (
+                f"cell-custom|{provider}||home||home|https://s3-gateway.cell-custom.c.corp.local.internal/cloud-cell-custom-meta/inventory/home/stats/{{date}}T*/manifest.json"
+                in ops["/data/INVENTORY_MANIFEST_SOURCES"]
             )
 
     def test_clickhouse_backup_provider_patches_backup_cell(self) -> None:
@@ -761,6 +774,10 @@ class ProfilesAppTest(_ProfilesBaseTest):
             with self.subTest(provider=provider):
                 params = self.parameters(component, "production")
                 params["metadata"]["labels"]["provider"] = provider
+                if provider == "aws":
+                    params["metadata"]["annotations"]["ecr-registry"] = (
+                        "111122223333.dkr.ecr.us-west-2.amazonaws.com"
+                    )
                 rendered = self.render(app, [params])
                 assert rendered.returncode == 0, rendered.stderr
                 child = yaml.safe_load(rendered.stdout)
@@ -785,6 +802,11 @@ class ProfilesAppTest(_ProfilesBaseTest):
                 targets = [p["target"]["name"] for p in patches]
                 assert "dynamic-cpu" in targets
                 assert "dynamic-gpu" in targets
+                if provider == "aws":
+                    assert any(
+                        "111122223333.dkr.ecr.us-west-2.amazonaws.com" in p["patch"]
+                        for p in patches
+                    )
 
     def test_registry_edit_changes_rendered_replicas(self) -> None:
         app = self.apps[0]
@@ -883,6 +905,10 @@ class ProfilesAppTest(_ProfilesBaseTest):
             parameters = [self.parameters(c, profile) for c in components]
             for case in parameters:
                 case["metadata"]["labels"].update(labels)
+                if labels.get("provider") != "floci":
+                    case["metadata"]["annotations"]["ecr-registry"] = (
+                        "111122223333.dkr.ecr.us-west-2.amazonaws.com"
+                    )
             rendered = self.render(app, parameters)
             assert rendered.returncode == 0, rendered.stderr
             patches = list(yaml.load_all(rendered.stdout, Loader=UniqueKeyLoader))
@@ -1123,6 +1149,21 @@ class ProfilesAppTest(_ProfilesBaseTest):
         assert reconcile_env_dict["CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY"] == json.dumps(
             {"cell-eaws-lh1": "eaws-lh1"}, separators=(",", ":")
         )
+        assert (
+            reconcile_env_dict["CODER_SESSION_TOKEN_FILE"]
+            == "/var/run/coder/automation-token/token"
+        )
+        assert reconcile_env_dict["PRESERVE_CODER_SESSION_TOKEN"] == "true"
+        assert pod_spec["volumes"] == [
+            {"name": "automation-token", "secret": {"secretName": "coder-automation-token"}},
+        ]
+        assert reconcile["volumeMounts"] == [
+            {
+                "name": "automation-token",
+                "mountPath": "/var/run/coder/automation-token",
+                "readOnly": True,
+            },
+        ]
 
         parameters["metadata"]["labels"]["provider"] = "aws"
         parameters["metadata"]["annotations"]["ecr-registry"] = (
@@ -1169,7 +1210,7 @@ class ProfilesAppTest(_ProfilesBaseTest):
         assert cloud_init[1]["name"] == "ecr-login"
         assert (
             cloud_init[1]["image"]
-            == "docker.io/amazon/aws-cli:2.37.5@sha256:fb7ccfc7b4e3a05017e6c9ded4ba959b99af622130e211fb976c68c2f4d3f224"
+            == "docker.io/amazon/aws-cli:2.37.9@sha256:92de75724b6a746951f0e8b915d86bbccd7cb55aff96cd0cb4f7017272160780"
         )
         assert cloud_init[2]["name"] == "resolve-workspace-image"
         resolve_env = {e["name"]: e["value"] for e in cloud_init[2]["env"]}
@@ -1203,6 +1244,37 @@ class ProfilesAppTest(_ProfilesBaseTest):
             item["target"].get("name") == "coder-automation-token"
             for item in cloud_source["kustomize"]["patches"]
         )
+
+    def test_coder_template_reconciler_metadata_egress_gated_to_gcp(self) -> None:
+        app = next(app for app in self.apps if app["metadata"]["name"] == "ctrl-apps")
+        components = app["spec"]["generators"][0]["matrix"]["generators"][1]["list"]["elements"]
+        component = next(item for item in components if item["component"] == "coder")
+
+        for provider in ("aws", "floci", "gcp"):
+            with self.subTest(provider=provider):
+                parameters = self.parameters(component, "minimal")
+                parameters["metadata"]["labels"]["provider"] = provider
+                if provider != "floci":
+                    parameters["metadata"]["annotations"]["ecr-registry"] = (
+                        "111122223333.dkr.ecr.us-west-2.amazonaws.com"
+                    )
+                rendered = self.render(app, [parameters])
+                assert rendered.returncode == 0, rendered.stderr
+                application = yaml.safe_load(rendered.stdout)
+                source = next(
+                    s for s in application["spec"]["sources"] if s.get("path") == component["path"]
+                )
+                net_patches = [
+                    item
+                    for item in source.get("kustomize", {}).get("patches", [])
+                    if item["target"].get("name") == "coder-template-reconciler"
+                    and item["target"].get("kind") == "NetworkPolicy"
+                ]
+                if provider == "gcp":
+                    assert len(net_patches) == 1
+                    assert "169.254.169.254/32" in net_patches[0]["patch"]
+                else:
+                    assert net_patches == []
 
     def test_coder_automation_token_record_uses_cloud_store_only_on_cloud(self) -> None:
         app = next(app for app in self.apps if app["metadata"]["name"] == "ctrl-apps")
@@ -1629,8 +1701,7 @@ class ProfilesContractTest(_ProfilesBaseTest):
                             "path": "/spec/template/spec/containers/0/image",
                             "value": (
                                 "111122223333.dkr.ecr.us-west-2.amazonaws.com/"
-                                "test-cluster/infrastructure:dragonfly-sso@"
-                                f"{image['imageDigest']}"
+                                f"{image['repository']}@{image['imageDigest']}"
                             ),
                         }
                     ]
@@ -1687,8 +1758,7 @@ class ProfilesContractTest(_ProfilesBaseTest):
                 else:
                     assert values["image"] == {
                         "repository": (
-                            "111122223333.dkr.ecr.us-west-2.amazonaws.com/"
-                            "test-cluster/infrastructure:coder-snapshot-portal"
+                            f"111122223333.dkr.ecr.us-west-2.amazonaws.com/{image['repository']}"
                         ),
                         "digest": image["imageDigest"],
                     }
@@ -1780,6 +1850,9 @@ class ProfilesContractTest(_ProfilesBaseTest):
         }
         params = self.parameters(component, "production")
         params["metadata"]["labels"]["provider"] = "aws"
+        params["metadata"]["annotations"]["ecr-registry"] = (
+            "111122223333.dkr.ecr.us-west-2.amazonaws.com"
+        )
         rendered = self.render(app, [params])
         assert rendered.returncode == 0, rendered.stderr
         patch = yaml.safe_load(rendered.stdout)
@@ -1791,6 +1864,11 @@ class ProfilesContractTest(_ProfilesBaseTest):
         assert any("karpenter.sh~1discovery" in p["patch"] for p in patches)
         assert any("test-cluster" in p["patch"] for p in patches)
         assert not any(p["target"].get("kind") == "NetworkPolicy" for p in patches)
+        node_class_patches = [p for p in patches if p["target"].get("kind") == "EC2NodeClass"]
+        assert node_class_patches
+        assert any(
+            "111122223333.dkr.ecr.us-west-2.amazonaws.com" in p["patch"] for p in node_class_patches
+        )
 
         params_minimal = self.parameters(component, "minimal")
         params_minimal["metadata"]["labels"]["provider"] = "floci"
@@ -2132,9 +2210,9 @@ class ProfilesContractTest(_ProfilesBaseTest):
         dex_comp = next(c for c in components if c["component"] == "dex")
         params = self.parameters(dex_comp, "production")
         params["metadata"]["labels"]["provider"] = "aws"
-        params["metadata"]["annotations"]["public-domain"] = "boltz.bio"
-        params["metadata"]["annotations"]["hosted-domains"] = "boltz.bio,boltz.com"
-        params["metadata"]["annotations"]["admin-email"] = "admin@boltz.bio"
+        params["metadata"]["annotations"]["public-domain"] = "openplex.org"
+        params["metadata"]["annotations"]["hosted-domains"] = "openplex.org,openplex.io"
+        params["metadata"]["annotations"]["admin-email"] = "admin@openplex.org"
         return params
 
     def test_dex_google_connector_groups_disabled_by_default(self) -> None:
@@ -2150,8 +2228,8 @@ class ProfilesContractTest(_ProfilesBaseTest):
                 assert connector["id"] == "google"
                 assert connector["config"]["clientID"] == "$GOOGLE_CLIENT_ID"
                 assert connector["config"]["clientSecret"] == "$GOOGLE_CLIENT_SECRET"
-                assert connector["config"]["redirectURI"] == "https://dex.corp.boltz.bio/callback"
-                assert connector["config"]["hostedDomains"] == ["boltz.bio", "boltz.com"]
+                assert connector["config"]["redirectURI"] == "https://dex.corp.openplex.org/callback"
+                assert connector["config"]["hostedDomains"] == ["openplex.org", "openplex.io"]
                 assert "serviceAccountFilePath" not in connector["config"]
                 assert "adminEmail" not in connector["config"]
                 assert "groups" not in connector["config"]
@@ -2191,13 +2269,13 @@ class ProfilesContractTest(_ProfilesBaseTest):
             connector["config"]["serviceAccountFilePath"]
             == "/etc/dex/google-sa/service-account.json"
         )
-        assert connector["config"]["adminEmail"] == "admin@boltz.bio"
+        assert connector["config"]["adminEmail"] == "admin@openplex.org"
         assert connector["config"]["groups"] == [
             "operators",
-            "operators@boltz.bio",
-            "operators@boltz.com",
+            "operators@openplex.org",
+            "operators@openplex.io",
         ]
-        assert connector["config"]["hostedDomains"] == ["boltz.bio", "boltz.com"]
+        assert connector["config"]["hostedDomains"] == ["openplex.org", "openplex.io"]
         helm_values = next(
             s["helm"]["valuesObject"]
             for s in child["spec"]["sources"]
@@ -2217,11 +2295,11 @@ class ProfilesContractTest(_ProfilesBaseTest):
                     conn["config"]["serviceAccountFilePath"]
                     == "/etc/dex/google-sa/service-account.json"
                 )
-                assert conn["config"]["adminEmail"] == "admin@boltz.bio"
+                assert conn["config"]["adminEmail"] == "admin@openplex.org"
                 assert conn["config"]["groups"] == [
                     "operators",
-                    "operators@boltz.bio",
-                    "operators@boltz.com",
+                    "operators@openplex.org",
+                    "operators@openplex.io",
                 ]
 
         params_override = self._dex_cloud_params()
@@ -2243,8 +2321,8 @@ class ProfilesContractTest(_ProfilesBaseTest):
                 access_comp = next(c for c in components if c["component"] == "cluster-access")
                 params = self.parameters(access_comp, "minimal")
                 params["metadata"]["labels"]["provider"] = "aws"
-                params["metadata"]["annotations"]["operator-emails"] = "simone@boltz.bio"
-                params["metadata"]["annotations"]["hosted-domains"] = "boltz.bio,boltz.com"
+                params["metadata"]["annotations"]["operator-emails"] = "simone@openplex.org"
+                params["metadata"]["annotations"]["hosted-domains"] = "openplex.org,openplex.io"
                 rendered = self.render(app, [params])
                 assert rendered.returncode == 0, rendered.stderr
                 application = yaml.safe_load(rendered.stdout)
@@ -2266,12 +2344,12 @@ class ProfilesContractTest(_ProfilesBaseTest):
                         op["value"] for op in operations if op.get("path") == "/subjects/-"
                     ])
                 assert any(
-                    s.get("kind") == "User" and s.get("name") == "cluster:user:simone@boltz.bio"
+                    s.get("kind") == "User" and s.get("name") == "cluster:user:simone@openplex.org"
                     for s in subjects
                 )
                 assert any(
                     s.get("kind") == "Group"
-                    and s.get("name") == "cluster:group:operators@boltz.bio"
+                    and s.get("name") == "cluster:group:operators@openplex.org"
                     for s in subjects
                 )
 
@@ -2285,8 +2363,8 @@ class ProfilesContractTest(_ProfilesBaseTest):
         params["metadata"]["annotations"]["ecr-registry"] = (
             "111122223333.dkr.ecr.us-west-2.amazonaws.com"
         )
-        params["metadata"]["annotations"]["operator-emails"] = "simone@boltz.bio"
-        params["metadata"]["annotations"]["hosted-domains"] = "boltz.bio,boltz.com"
+        params["metadata"]["annotations"]["operator-emails"] = "simone@openplex.org"
+        params["metadata"]["annotations"]["hosted-domains"] = "openplex.org,openplex.io"
         rendered = self.render(ctrl_app, [params])
         assert rendered.returncode == 0, rendered.stderr
         application = yaml.safe_load(rendered.stdout)
@@ -2304,7 +2382,7 @@ class ProfilesContractTest(_ProfilesBaseTest):
         operations = yaml.safe_load(sec_patch["patch"])
         rule_op = next(op for op in operations if op.get("path") == "/spec/authorization/rules/-")
         assert rule_op["value"]["name"] == "operator-email"
-        assert rule_op["value"]["principal"]["jwt"]["claims"][0]["values"] == ["simone@boltz.bio"]
+        assert rule_op["value"]["principal"]["jwt"]["claims"][0]["values"] == ["simone@openplex.org"]
 
     def test_velero_provider_contracts(self) -> None:
         for app_name in ("cell-apps", "ctrl-apps"):
@@ -2471,10 +2549,8 @@ class ProfilesContractTest(_ProfilesBaseTest):
             == "service.k8s.aws/nlb"
         )
         assert (
-            eg_comp["helmValuesObject"]["proxy"]["service"]["annotations"][
-                "service.beta.kubernetes.io/aws-load-balancer-ip-address-type"
-            ]
-            == "dualstack"
+            "service.beta.kubernetes.io/aws-load-balancer-ip-address-type"
+            not in eg_comp["helmValuesObject"]["proxy"]["service"]["annotations"]
         )
         assert (
             eg_comp["helmValuesObject"]["proxy"]["service"]["annotations"][
@@ -2488,6 +2564,20 @@ class ProfilesContractTest(_ProfilesBaseTest):
             ]
             == "ip"
         )
+        assert (
+            eg_comp["helmValuesObject"]["proxy"]["service"]["annotations"][
+                "service.beta.kubernetes.io/aws-load-balancer-target-group-attributes"
+            ]
+            == "preserve_client_ip.enabled=true"
+        )
+        assert eg_comp["helmValuesObject"]["proxy"]["service"]["ipFamilyPolicy"] == "SingleStack"
+        assert eg_comp["helmValuesObject"]["proxy"]["service"]["ipFamilies"] == ["IPv4"]
+        assert eg_comp["helmValuesObject"]["proxy"]["service"]["loadBalancerSourceRanges"] == [
+            "140.82.112.0/20",
+            "143.55.64.0/20",
+            "185.199.108.0/22",
+            "192.30.252.0/22",
+        ]
         eg_listeners = eg_comp["helmValuesObject"]["gateway"]["listeners"]
         assert eg_listeners["atlantisWebhookHttps"]["enabled"] is True
         assert (
@@ -2496,13 +2586,25 @@ class ProfilesContractTest(_ProfilesBaseTest):
         )
 
         eg_params = self.parameters(eg_comp, "production")
-        eg_params["metadata"]["annotations"]["public-domain"] = "boltz.com"
+        eg_params["metadata"]["annotations"]["public-domain"] = "openplex.org"
         rendered_eg = self.render(app, [eg_params])
         assert rendered_eg.returncode == 0, rendered_eg.stderr
         eg_val = yaml.safe_load(rendered_eg.stdout)["spec"]["sources"][0]["helm"]["valuesObject"]
         assert (
-            eg_val["gateway"]["listeners"]["atlantisWebhookHttps"]["hostname"] == "hooks.boltz.com"
+            eg_val["gateway"]["listeners"]["atlantisWebhookHttps"]["hostname"] == "hooks.openplex.org"
         )
+        assert (
+            "service.beta.kubernetes.io/aws-load-balancer-ip-address-type"
+            not in eg_val["proxy"]["service"]["annotations"]
+        )
+        assert eg_val["proxy"]["service"]["ipFamilyPolicy"] == "SingleStack"
+        assert eg_val["proxy"]["service"]["ipFamilies"] == ["IPv4"]
+        assert eg_val["proxy"]["service"]["loadBalancerSourceRanges"] == [
+            "140.82.112.0/20",
+            "143.55.64.0/20",
+            "185.199.108.0/22",
+            "192.30.252.0/22",
+        ]
 
         # Verify private-access Gateway no longer contains the hooks listener
         priv_comp = next(c for c in elements if c["component"] == "envoy-gateway-instance")
@@ -2517,17 +2619,17 @@ class ProfilesContractTest(_ProfilesBaseTest):
             "wave": "30",
             "chart": "external-dns",
             "chartRepo": "https://kubernetes-sigs.github.io/external-dns",
-            "chartVersion": "1.22.0",
+            "chartVersion": "1.23.0",
         }
         ext_dns_params = self.parameters(ext_dns_comp, "production")
         ext_dns_params["metadata"]["labels"]["provider"] = "aws"
-        ext_dns_params["metadata"]["annotations"]["public-domain"] = "boltz.com"
+        ext_dns_params["metadata"]["annotations"]["public-domain"] = "openplex.org"
         rendered_ext_dns = self.render(app, [ext_dns_params])
         assert rendered_ext_dns.returncode == 0, rendered_ext_dns.stderr
         ext_dns_val = yaml.safe_load(rendered_ext_dns.stdout)["spec"]["sources"][0]["helm"][
             "valuesObject"
         ]
-        assert "boltz.com" in ext_dns_val["domainFilters"]
+        assert "openplex.org" in ext_dns_val["domainFilters"]
 
         # 3. Route assertions on routing-registry-public
         rr_public_comp = next(c for c in elements if c["component"] == "routing-registry-public")
@@ -2536,11 +2638,11 @@ class ProfilesContractTest(_ProfilesBaseTest):
 
         rr_params = self.parameters(rr_public_comp, "production")
         rr_params["metadata"]["labels"]["provider"] = "aws"
-        rr_params["metadata"]["annotations"]["public-domain"] = "boltz.com"
+        rr_params["metadata"]["annotations"]["public-domain"] = "openplex.org"
         rendered_rr = self.render(app, [rr_params])
         assert rendered_rr.returncode == 0, rendered_rr.stderr
         rr_val = yaml.safe_load(rendered_rr.stdout)["spec"]["sources"][0]["helm"]["valuesObject"]
-        assert rr_val["gateway"]["baseDomain"] == "boltz.com"
+        assert rr_val["gateway"]["baseDomain"] == "openplex.org"
         assert rr_val["gateway"]["aliasDomain"] == ""
         assert rr_val["gateway"]["name"] == "public-hooks"
         assert rr_val["gateway"]["routeSections"]["atlantis-webhook"] == "atlantis-webhook-https"

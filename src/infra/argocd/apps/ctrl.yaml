@@ -286,8 +286,8 @@ spec:
                   wave: "30"
                 - component: dragonfly-manager
                   tier: fleet
-                  flociBridgeImage: localhost:15100/000000000000/us-east-1/src/infra/tools/dragonfly_sso@sha256:3c8348905cdc2305293468b185e3e0d3d9fc9ebb5922342e75e6031e10b2b7d9
-                  cloudBridgeDigest: sha256:3c8348905cdc2305293468b185e3e0d3d9fc9ebb5922342e75e6031e10b2b7d9
+                  flociBridgeImage: localhost:15100/000000000000/us-east-1/src/infra/tools/dragonfly_sso@sha256:17d15fb97ab5e3211baad8f98b721d397c627b1b32e4e00a464ffbb5473479ff
+                  cloudBridgeDigest: sha256:17d15fb97ab5e3211baad8f98b721d397c627b1b32e4e00a464ffbb5473479ff
                   path: src/infra/argocd/components/dragonfly_manager/kustomize
                   namespace: dragonfly-system
                   wave: "30"
@@ -459,6 +459,8 @@ spec:
                         annotations:
                           service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
                           service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+                          # IP targets otherwise present the NLB's private address, which the GitHub source allow-list denies.
+                          service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: preserve_client_ip.enabled=true
                         externalTrafficPolicy: Local
                         ipFamilyPolicy: SingleStack
                         ipFamilies: [IPv4]
@@ -1588,11 +1590,16 @@ spec:
     {{- if not $backupEndpoint }}{{ fail "local clickhouse backups require the registered s3-endpoint" }}{{- end }}
     {{- $clickhouseBackupPatch := dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "signoz-clickhouse-backup-provider") "patch" (printf "- op: replace\n  path: /data/AWS_ENDPOINT_URL_S3\n  value: %s\n- op: replace\n  path: /data/BACKUP_BUCKET\n  value: %s\n- op: replace\n  path: /data/CLICKHOUSE_BACKUP_URL\n  value: %s/%s/backups/telemetry/clickhouse/" $backupEndpoint $backupBucket $backupEndpoint $backupBucket) }}
     {{- $patches = append $patches $clickhouseBackupPatch }}
-    {{- $storageEndpoint := $backupEndpoint }}
+    {{- end }}
+    {{- if eq .component "clickhouse" }}
+    {{- $backupEndpoint := index $annotations "s3-endpoint" }}
     {{- $manifestSources := list }}
-    {{- range $cell := $registeredCells }}
+    {{- range $c := $registeredCells }}
+    # floci-divergence: Local Floci routes inventory rollup manifests directly through emulator endpoint.
+    {{- $endpoint := ternary $backupEndpoint (printf "https://s3-gateway.%s.%s" $c $clusterDomain) (eq $provider "floci") }}
     {{- range $bucket := (list "home" "scratch" "meta" "backups" "archive") }}
-    {{- $manifestSources = append $manifestSources (printf "%s|floci||%s||%s|%s/cloud-%s-meta/inventory/%s/%s/{date}/manifest.json" $cell $bucket $bucket $storageEndpoint $cell $cell $bucket) }}
+    {{- $manifestUrl := printf "%s/cloud-%s-meta/inventory/%s/stats/{date}T*/manifest.json" $endpoint $c $bucket }}
+    {{- $manifestSources = append $manifestSources (printf "%s|%s||%s||%s|%s" $c $provider $bucket $bucket $manifestUrl) }}
     {{- end }}
     {{- end }}
     {{- $inventoryEnabled := ternary "true" "false" (gt (len $manifestSources) 0) }}
@@ -1975,7 +1982,7 @@ spec:
     {{- $headlampClusters := join "," (concat (list .nameNormalized) $registeredCells) }}
     {{- $identityValues := printf "# Declares shared container image digests and test fixture parameters to defend Chainsaw test suites against unpinned dependencies and registry drift.\n\nclusterDomain: %s\nheadlampClusters: %s\nintranetDomain: %s\npublicDomain: %s\npythonImage: >-\n  docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df\n" $clusterDomain $headlampClusters $intranetDomain $publicDomain }}
     {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "chainsaw-identity-tests") "patch" (printf "- op: replace\n  path: /data/values.yaml\n  value: %q" $identityValues)) }}
-    {{- $observabilityValues := printf "# Declares shared container image digests and test fixture parameters to defend Chainsaw test suites against unpinned dependencies and registry drift.\n\nclusterDomain: %s\npythonImage: >-\n  docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df\n" $clusterDomain }}
+    {{- $observabilityValues := printf "# Declares shared container image digests and test fixture parameters to defend Chainsaw test suites against unpinned dependencies and registry drift.\n\nclusterDomain: %s\npythonImage: >-\n  docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df\n" $intranetDomain }}
     {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "chainsaw-observability-tests") "patch" (printf "- op: replace\n  path: /data/values.yaml\n  value: %q" $observabilityValues)) }}
     {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "chainsaw-storage-tests") "patch" "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: chainsaw-storage-tests\n$patch: delete") }}
     {{- $patches = append $patches (dict "target" (dict "version" "v1" "kind" "ConfigMap" "name" "chainsaw-scheduling-tests") "patch" "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: chainsaw-scheduling-tests\n$patch: delete") }}
