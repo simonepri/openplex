@@ -1,0 +1,39 @@
+{{- /* Publishes team S3 gateway grant for workspaces in this cell. */ -}}
+
+{{- if .Values.topology }}
+# LINT.IfChange(workspace-s3-grant-contract)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "workspace-s3-grant-team-%s" .Values.team }}
+  namespace: workspaces
+  labels:
+    app.kubernetes.io/component: workspace-s3-grant
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder-workspaces
+data:
+  globalStorage: {{ ternary "true" "false" (and .Values.globalStorage (not (empty .Values.globalStorage.provider)) (not (empty .Values.globalStorage.endpoint)) (not (empty .Values.globalStorage.bucketPrefix)) (not (empty .Values.globalStorage.bucketSuffix))) | quote }}
+  grant: team
+  members: {{ .Values.workspaceGrant.members | default list | sortAlpha | join "," | quote }}
+  recordName: {{ .Values.workspaceGrant.recordName | quote }}
+  team: {{ .Values.team | quote }}
+{{- if eq (default "all" .Values.readers) "all" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "workspace-s3-read-grant-team-%s" .Values.team }}
+  namespace: workspaces
+  labels:
+    app.kubernetes.io/component: workspace-s3-grant
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder-workspaces
+data:
+  globalStorage: {{ ternary "true" "false" (and .Values.globalStorage (not (empty .Values.globalStorage.provider)) (not (empty .Values.globalStorage.endpoint)) (not (empty .Values.globalStorage.bucketPrefix)) (not (empty .Values.globalStorage.bucketSuffix))) | quote }}
+  grant: team
+  members: "*"
+  recordName: {{ default (printf "%s-reader" .Values.workspaceGrant.recordName) .Values.workspaceGrant.readerRecordName | quote }}
+  team: {{ .Values.team | quote }}
+{{- end }}
+# LINT.ThenChange(//src/infra/argocd/components/coder_workspaces/helm/templates/workspace-s3-grant-legacy.yaml:workspace-s3-grant-contract,//src/infra/argocd/components/kyverno/kustomize/workspace-s3-grant-policy.yaml:workspace-s3-grant-contract,//src/infra/definitions/workspaces/templates/dev/s3_access.tf:workspace-s3-grant-contract)
+{{- end }}

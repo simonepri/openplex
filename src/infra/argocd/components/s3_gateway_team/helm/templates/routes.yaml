@@ -1,0 +1,258 @@
+{{- /* Routes SigV4 object-storage requests for this team through the shared Envoy Gateway. */ -}}
+
+{{- if .Values.topology }}
+{{- $team := required "team is required" .Values.team -}}
+{{- $name := printf "s3-gateway-%s" $team -}}
+{{- $targetCount := 0 -}}
+{{- $target := dict -}}
+{{- range $cell := .Values.topology.cells -}}
+  {{- if eq $cell.name $.Values.targetCell -}}
+    {{- $targetCount = add1 $targetCount -}}
+    {{- $target = $cell -}}
+  {{- end -}}
+{{- end -}}
+{{- if ne $targetCount 1 -}}
+{{- fail "targetCell must identify exactly one topology cell" -}}
+{{- end -}}
+{{- $virtual := $target.virtualName -}}
+{{- $accessKeyId := include "s3-gateway-team.accessKeyId" . -}}
+{{- $readerAccessKeyId := include "s3-gateway-team.readerAccessKeyId" . -}}
+{{- $domain := coalesce (dig "clusterDomain" "" $target) (dig "domain" "" $target) .Values.clusterDomain .Values.domain "" -}}
+{{- $crossRegionServer := coalesce (dig "crossRegionServer" "" $target) (and $domain (printf "s3-gateway.%s.%s" $target.name $domain)) (printf "s3-gateway.%s" $target.name) -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ printf "%s-local" $name }}
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: storage-gateway-router
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+  annotations:
+    argocd.argoproj.io/ignore-healthcheck: "true"
+spec:
+  parentRefs:
+    - {group: gateway.networking.k8s.io, kind: Gateway, name: private-access, namespace: envoy-gateway-system, sectionName: s3-http}
+  hostnames: [s3-gateway.s3-system.svc]
+  rules:
+    - matches:
+        - path: {type: PathPrefix, value: {{ printf "/global/home/%s" $team | quote }}}
+          method: POST
+          headers: &team_{{ $team | replace "-" "_" }}
+            - {name: Authorization, type: RegularExpression, value: {{ include "s3-gateway-team.credentialRegex" $accessKeyId | quote }}}
+          queryParams:
+            - {name: select, type: RegularExpression, value: ".*"}
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: HEAD
+          headers: *team_{{ $team | replace "-" "_" }}
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: GET
+          headers: *team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^home(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: GET
+          headers: *team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^scratch(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: GET
+          headers: *team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: "^meta((/|%2[fF]).*)?$"}
+        - path: {type: Exact, value: /global}
+          method: HEAD
+          headers: *team_{{ $team | replace "-" "_" }}
+        - path: {type: Exact, value: /global}
+          method: GET
+          headers: *team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^home(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: /global}
+          method: GET
+          headers: *team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^scratch(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: /global}
+          method: GET
+          headers: *team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: "^meta((/|%2[fF]).*)?$"}
+        - path: {type: PathPrefix, value: {{ printf "/%s/home/%s" $virtual $team | quote }}}
+          headers: *team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/%s/scratch/%s" $virtual $team | quote }}}
+          headers: *team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/%s/meta" $virtual | quote }}}
+          headers: *team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/global/home/%s" $team | quote }}}
+          headers: *team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/global/scratch/%s" $team | quote }}}
+          headers: *team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: /global/meta}
+          headers: *team_{{ $team | replace "-" "_" }}
+      backendRefs: [{group: "", kind: Service, name: {{ printf "s3-gateway-%s-local" $team }}, port: 8080, weight: 1}]
+      timeouts: {request: 0s, backendRequest: 0s}
+    - matches:
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: HEAD
+          headers: &team_reader_{{ $team | replace "-" "_" }}
+            - {name: Authorization, type: RegularExpression, value: {{ include "s3-gateway-team.credentialRegex" $readerAccessKeyId | quote }}}
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^home(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^scratch(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: "^meta((/|%2[fF]).*)?$"}
+        - path: {type: Exact, value: /global}
+          method: HEAD
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: Exact, value: /global}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^home(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: /global}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^scratch(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: /global}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: "^meta((/|%2[fF]).*)?$"}
+        - path: {type: PathPrefix, value: {{ printf "/%s/home/%s" $virtual $team | quote }}}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/%s/home/%s" $virtual $team | quote }}}
+          method: HEAD
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/%s/scratch/%s" $virtual $team | quote }}}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/%s/scratch/%s" $virtual $team | quote }}}
+          method: HEAD
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/%s/meta" $virtual | quote }}}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/%s/meta" $virtual | quote }}}
+          method: HEAD
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/global/home/%s" $team | quote }}}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/global/home/%s" $team | quote }}}
+          method: HEAD
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/global/scratch/%s" $team | quote }}}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/global/scratch/%s" $team | quote }}}
+          method: HEAD
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: /global/meta}
+          method: GET
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: /global/meta}
+          method: HEAD
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+      backendRefs: [{group: "", kind: Service, name: {{ printf "s3-gateway-%s-reader-local" $team }}, port: 8080, weight: 1}]
+      timeouts: {request: 0s, backendRequest: 0s}
+    - matches:
+        - path: {type: PathPrefix, value: /}
+          headers: *team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: /}
+          headers: *team_reader_{{ $team | replace "-" "_" }}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: s3-gateway-not-found}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ printf "%s-cross-region" $name }}
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: storage-gateway-router
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+  annotations:
+    argocd.argoproj.io/ignore-healthcheck: "true"
+spec:
+  parentRefs:
+    - {group: gateway.networking.k8s.io, kind: Gateway, name: private-access, namespace: envoy-gateway-system, sectionName: {{ .Values.crossRegionListener | default "https" }} }
+  hostnames: [{{ $crossRegionServer | quote }}]
+  rules:
+    - matches:
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: HEAD
+          headers: &cross_team_{{ $team | replace "-" "_" }} [{name: Authorization, type: RegularExpression, value: {{ include "s3-gateway-team.credentialRegex" $accessKeyId | quote }}}]
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: GET
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^home(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: GET
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^scratch(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: {{ printf "/%s" $virtual | quote }}}
+          method: GET
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: "^meta((/|%2[fF]).*)?$"}
+        - path: {type: Exact, value: /global}
+          method: HEAD
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+        - path: {type: Exact, value: /global}
+          method: GET
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^home(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: /global}
+          method: GET
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: {{ printf "^scratch(/|%%2[fF])%s((/|%%2[fF]).*)?$" $team | quote }}}
+        - path: {type: Exact, value: /global}
+          method: GET
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+          queryParams:
+            - {name: prefix, type: RegularExpression, value: "^meta((/|%2[fF]).*)?$"}
+      backendRefs: [{group: "", kind: Service, name: {{ printf "s3-gateway-%s-cross-region" $team }}, port: 8080, weight: 1}]
+      timeouts: {request: 0s, backendRequest: 0s}
+    - matches:
+        - path: {type: PathPrefix, value: {{ printf "/%s/home/%s" $virtual $team | quote }}}
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/%s/scratch/%s" $virtual $team | quote }}}
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/%s/meta" $virtual | quote }}}
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/global/home/%s" $team | quote }}}
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: {{ printf "/global/scratch/%s" $team | quote }}}
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+        - path: {type: PathPrefix, value: /global/meta}
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+      backendRefs: [{group: "", kind: Service, name: {{ printf "s3-gateway-%s-cross-region" $team }}, port: 8080, weight: 1}]
+      timeouts: {request: 0s, backendRequest: 0s}
+    - matches:
+        - path: {type: PathPrefix, value: /}
+          headers: *cross_team_{{ $team | replace "-" "_" }}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: s3-gateway-not-found}
+{{- end }}

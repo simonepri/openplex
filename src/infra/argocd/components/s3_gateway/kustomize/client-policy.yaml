@@ -154,10 +154,6 @@ spec:
           !has(container.env) || container.env.all(item, item.name != 'AWS_ENDPOINT_URL')))
       message: >-
         Team containers must not set the generic AWS_ENDPOINT_URL, which also redirects STS and breaks OIDC federation.
-    - expression: >-
-        !has(object.spec.ephemeralContainers) || size(object.spec.ephemeralContainers) == 0
-      message: >-
-        Team pods must not embed ephemeral containers, which admission mutation cannot wire to the explicit S3 profile.
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -244,8 +240,7 @@ spec:
         app.kubernetes.io/component: storage-projection
         kueue.x-k8s.io/managed: "true"
 ---
-# Inline CSI volumes are Pod-controlled fields. Team Pods may use only the
-# three Coder data aliases backed by their namespace-local team-s3 Secret.
+# Restricts inline CSI volumes on team workload pods to approved data aliases.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -262,31 +257,29 @@ spec:
         resources: [pods]
   validations:
     - expression: >-
-        !has(object.spec.volumes) || !object.spec.volumes.exists(volume, has(volume.csi)) || (has(object.metadata.labels) &&
-         object.metadata.labels['app.kubernetes.io/name'] == 'coder-workspace' &&
-         object.spec.serviceAccountName == 'coder-workspace' &&
-         object.spec.volumes.all(volume,
-           !has(volume.csi) || (
-             volume.name in ['home', 'scratch', 'meta', 'global', 'global-scratch', 'global-meta'] &&
-             volume.csi.driver == 'rclone.csi.veloxpack.io' &&
-             has(volume.csi.nodePublishSecretRef) &&
-             volume.csi.nodePublishSecretRef.name == 'team-s3' &&
-             (size(volume.csi.volumeAttributes) == 6 ||
-              (size(volume.csi.volumeAttributes) == 8 &&
-               volume.csi.volumeAttributes['tpslimit'] == '25' &&
-               volume.csi.volumeAttributes['tpslimit-burst'] == '10')) &&
-             volume.csi.volumeAttributes['remotePath'] == '' &&
-             volume.csi.volumeAttributes['uid'] == '1000' &&
-             volume.csi.volumeAttributes['gid'] == '1000' &&
-             volume.csi.volumeAttributes['umask'] == '0022' &&
-             volume.csi.volumeAttributes['vfs-cache-mode'] == 'off' &&
-             ((volume.name == 'home' && volume.csi.volumeAttributes['remote'] == 'home') ||
-              (volume.name == 'scratch' && volume.csi.volumeAttributes['remote'] == 'scratch') ||
-              (volume.name == 'meta' && volume.csi.volumeAttributes['remote'] == 'meta') ||
-              (volume.name == 'global' && volume.csi.volumeAttributes['remote'] in ['global', 'global-home']) ||
-              (volume.name == 'global-scratch' && volume.csi.volumeAttributes['remote'] == 'global-scratch') ||
-              (volume.name == 'global-meta' && volume.csi.volumeAttributes['remote'] == 'global-meta'))
-           )))
+        !has(object.spec.volumes) || !object.spec.volumes.exists(volume, has(volume.csi)) || object.spec.volumes.all(volume,
+          !has(volume.csi) || (
+            volume.name in ['home', 'scratch', 'meta', 'global', 'global-scratch', 'global-meta'] &&
+            volume.csi.driver == 'rclone.csi.veloxpack.io' &&
+            has(volume.csi.nodePublishSecretRef) &&
+            volume.csi.nodePublishSecretRef.name == 'team-s3' &&
+            (size(volume.csi.volumeAttributes) == 7 ||
+             (size(volume.csi.volumeAttributes) == 9 &&
+              volume.csi.volumeAttributes['tpslimit'] == '25' &&
+              volume.csi.volumeAttributes['tpslimit-burst'] == '10')) &&
+            volume.csi.volumeAttributes['no-checksum'] == 'true' &&
+            volume.csi.volumeAttributes['remotePath'] == '' &&
+            volume.csi.volumeAttributes['uid'] == '1000' &&
+            volume.csi.volumeAttributes['gid'] == '1000' &&
+            volume.csi.volumeAttributes['umask'] == '0022' &&
+            volume.csi.volumeAttributes['vfs-cache-mode'] == 'off' &&
+            ((volume.name == 'home' && volume.csi.volumeAttributes['remote'] == 'home') ||
+             (volume.name == 'scratch' && volume.csi.volumeAttributes['remote'] == 'scratch') ||
+             (volume.name == 'meta' && volume.csi.volumeAttributes['remote'] == 'meta') ||
+             (volume.name == 'global' && volume.csi.volumeAttributes['remote'] in ['global', 'global-home']) ||
+             (volume.name == 'global-scratch' && volume.csi.volumeAttributes['remote'] == 'global-scratch') ||
+             (volume.name == 'global-meta' && volume.csi.volumeAttributes['remote'] == 'global-meta'))
+          ))
       message: Team inline CSI volumes must use the pinned Rclone driver, team-s3, and one declared data alias.
     - expression: >-
         object.spec.containers.all(container,
@@ -311,7 +304,7 @@ spec:
               (mount.name == 'global-scratch' && mount.mountPath in ['/s3/global/scratch', '/fs/s3/global/scratch']) ||
               (mount.name == 'global-meta' && mount.mountPath in ['/s3/global/meta', '/fs/s3/global/meta'])))
           )))
-      message: Team Rclone CSI volumes must mount only at the Coder data paths.
+      message: Team Rclone CSI volumes must mount only at the approved data paths.
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding

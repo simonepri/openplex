@@ -6,3 +6,13 @@ authAdapter: ""
 targetCell: ""
 topology: {}
 identity: {}
+globalStorage:
+  bucketPrefix: ""
+  bucketSuffix: ""
+  endpoint: ""
+  provider: ""
+readers: all
+workspaceGrant:
+  members: []
+  recordName: ""
+  readerRecordName: ""

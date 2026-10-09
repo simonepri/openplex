@@ -20,7 +20,11 @@
   {{- if not (hasKey $catalog $name) -}}{{- fail (printf "registered cell %q has no storage contract" $name) -}}{{- end -}}
   {{- $cells = append $cells (index $catalog $name) -}}
 {{- end -}}
-{{- dict "cells" $cells "global" (dict "writerCell" .Values.writerCell "replicaCells" .Values.registeredCells) "version" 1 | toJson -}}
+{{- $globalStorage := required "globalStorage is required" .Values.globalStorage -}}
+{{- $bucketPrefix := required "globalStorage.bucketPrefix is required" $globalStorage.bucketPrefix -}}
+{{- $bucketSuffix := required "globalStorage.bucketSuffix is required" $globalStorage.bucketSuffix -}}
+{{- $endpoint := required "globalStorage.endpoint is required" $globalStorage.endpoint -}}
+{{- dict "cells" $cells "global" (dict "bucketPrefix" $bucketPrefix "bucketSuffix" $bucketSuffix "endpoint" $endpoint) "version" 1 | toJson -}}
 {{- end -}}
 
 {{- define "s3-gateway.validate" -}}
@@ -46,16 +50,5 @@
 {{- end -}}
 {{- if ne $targetCount 1 -}}
 {{- fail "targetCell must identify exactly one topology cell" -}}
-{{- end -}}
-{{- if not (hasKey $cellNames $topology.global.writerCell) -}}
-{{- fail "global.writerCell must name a topology cell" -}}
-{{- end -}}
-{{- if ne (len $topology.global.replicaCells) (len $topology.cells) -}}
-{{- fail "global.replicaCells must name every topology cell" -}}
-{{- end -}}
-{{- range $replica := $topology.global.replicaCells -}}
-  {{- if not (hasKey $cellNames $replica) -}}
-  {{- fail "every global replica must name a topology cell" -}}
-  {{- end -}}
 {{- end -}}
 {{- end -}}

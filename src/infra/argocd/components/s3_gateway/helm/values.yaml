@@ -2,8 +2,14 @@
 
 crossRegionListener: https
 flociS3Endpoint: ""
+globalStorage:
+  bucketPrefix: ""
+  bucketSuffix: ""
+  endpoint: ""
+  provider: ""
+  teams: []
 internalDomain: ""
+legacyStorage: []
 targetCell: ""
 registeredCells: []
-writerCell: ""
 cellCatalog: []

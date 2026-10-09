@@ -1,5 +1,7 @@
 """Defines build and check targets for the s3_gateway Argo CD component."""
 
+# gazelle:resolve py yaml @dev_python_deps//pyyaml
+
 load("@rules_helm//helm:defs.bzl", "helm_chart", "helm_lint_test", "helm_template")
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "HELM_TEMPLATE", "package_sources", "source_set")

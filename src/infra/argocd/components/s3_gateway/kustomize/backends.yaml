@@ -3,6 +3,114 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: s3-gateway-legacy-research-data-local
+  namespace: s3-system
+  annotations:
+    ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+      Rclone S3 gateway runs one process per credential scope so multipart state cannot move pods.
+    ignore-check.kube-linter.io/read-secret-from-env-var: >-
+      Rclone S3 gateway requires object store credentials via environment.
+  labels:
+    app.kubernetes.io/component: legacy-research-gateway
+    app.kubernetes.io/instance: legacy-research-data
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: local-rclone
+      app.kubernetes.io/instance: legacy-research-data
+      app.kubernetes.io/name: s3-gateway
+  template:
+    metadata:
+      annotations:
+        ignore-check.kube-linter.io/no-rolling-update-strategy: >-
+          Rclone S3 gateway runs one process per credential scope so multipart state cannot move pods.
+        ignore-check.kube-linter.io/read-secret-from-env-var: >-
+          Rclone S3 gateway requires object store credentials via environment.
+      labels:
+        app.kubernetes.io/component: local-rclone
+        app.kubernetes.io/instance: legacy-research-data
+        app.kubernetes.io/name: s3-gateway
+        app.kubernetes.io/part-of: data-plane
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      priorityClassName: node-agents
+      serviceAccountName: s3-gateway-legacy-research-data
+      securityContext:
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: rclone
+          image: docker.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+          command: [rclone]
+          args:
+            - serve
+            - s3
+            - "legacy-research-data:"
+            - --addr=:8080
+            - --disable=PutStream
+            - --dir-cache-time=1s
+            - --log-format=json
+            - --poll-interval=0s
+            - --vfs-cache-mode=off
+            # S3 ETags of KMS-encrypted objects are not MD5s. --ignore-checksum skips the
+            # upload check and --no-checksum skips the VFS check after a full read.
+            - --ignore-checksum
+            - --no-checksum
+          env:
+            - {name: RCLONE_CONFIG, value: /etc/s3-gateway/rclone.conf}
+            - name: S3_GATEWAY_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {key: legacy-research-data-access-key-id, name: s3-gateway-credentials}
+            - name: S3_GATEWAY_SECRET_KEY
+              valueFrom:
+                secretKeyRef: {key: legacy-research-data-secret-access-key, name: s3-gateway-credentials}
+            - name: RCLONE_AUTH_KEY
+              value: '"$(S3_GATEWAY_ACCESS_KEY),$(S3_GATEWAY_SECRET_KEY)"'
+          ports:
+            - {containerPort: 8080, name: s3, protocol: TCP}
+          startupProbe:
+            failureThreshold: 30
+            periodSeconds: 5
+            tcpSocket: {port: s3}
+            timeoutSeconds: 5
+          readinessProbe:
+            periodSeconds: 10
+            tcpSocket: {port: s3}
+            timeoutSeconds: 5
+          livenessProbe:
+            periodSeconds: 20
+            tcpSocket: {port: s3}
+            timeoutSeconds: 5
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 500m, memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            runAsGroup: 65532
+            runAsNonRoot: true
+            runAsUser: 65532
+          volumeMounts:
+            - {mountPath: /etc/s3-gateway/rclone.conf, name: config, readOnly: true, subPath: legacy-research-data-rclone.conf}
+            - {mountPath: /tmp, name: temporary}
+      volumes:
+        - emptyDir: {sizeLimit: 512Mi}
+          name: temporary
+        - name: config
+          configMap: {name: s3-gateway-rclone-config}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: s3-gateway-org-workspace-backups-local
   namespace: s3-system
   annotations:
@@ -60,6 +168,10 @@ spec:
             - --log-format=json
             - --poll-interval=0s
             - --vfs-cache-mode=off
+            # S3 ETags of KMS-encrypted objects are not MD5s. --ignore-checksum skips the
+            # upload check and --no-checksum skips the VFS check after a full read.
+            - --ignore-checksum
+            - --no-checksum
           env:
             - {name: RCLONE_CONFIG, value: /etc/s3-gateway/rclone.conf}
             - name: S3_GATEWAY_ACCESS_KEY
@@ -176,6 +288,10 @@ spec:
             - --poll-interval=0s
             - --read-only
             - --vfs-cache-mode=off
+            # S3 ETags of KMS-encrypted objects are not MD5s. --ignore-checksum skips the
+            # upload check and --no-checksum skips the VFS check after a full read.
+            - --ignore-checksum
+            - --no-checksum
           env:
             - {name: RCLONE_CONFIG, value: /etc/s3-gateway/rclone.conf}
             - name: S3_GATEWAY_ACCESS_KEY
@@ -219,115 +335,3 @@ spec:
           name: temporary
         - name: config
           configMap: {name: s3-gateway-rclone-config}
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: s3-gateway-global-replicator-cross-region
-  namespace: s3-system
-  annotations:
-    ignore-check.kube-linter.io/no-rolling-update-strategy: >-
-      Rclone S3 gateway runs one process per credential scope so multipart state cannot move pods.
-    ignore-check.kube-linter.io/read-secret-from-env-var: >-
-      Rclone S3 gateway requires object store credentials via environment.
-  labels:
-    app.kubernetes.io/component: cross-region-storage-replicator
-    app.kubernetes.io/managed-by: argocd
-    app.kubernetes.io/name: s3-gateway
-    app.kubernetes.io/part-of: data-plane
-spec:
-  replicas: 1
-  strategy: {type: Recreate}
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: s3-gateway
-      app.kubernetes.io/component: cross-region-rclone
-      app.kubernetes.io/instance: global-replicator
-  template:
-    metadata:
-      annotations:
-        ignore-check.kube-linter.io/no-rolling-update-strategy: >-
-          Rclone S3 gateway runs one process per credential scope so multipart state cannot move pods.
-        ignore-check.kube-linter.io/read-secret-from-env-var: >-
-          Rclone S3 gateway requires object store credentials via environment.
-      labels:
-        app.kubernetes.io/name: s3-gateway
-        app.kubernetes.io/part-of: data-plane
-        app.kubernetes.io/component: cross-region-rclone
-        app.kubernetes.io/instance: global-replicator
-    spec:
-      automountServiceAccountToken: false
-      enableServiceLinks: false
-      serviceAccountName: s3-gateway-global-replicator
-      securityContext:
-        runAsGroup: 65532
-        runAsNonRoot: true
-        runAsUser: 65532
-        seccompProfile: {type: RuntimeDefault}
-      containers:
-        - name: rclone
-          image: docker.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
-          command: [rclone]
-          args:
-            - serve
-            - s3
-            - "cross-region:"
-            - --addr=:8080
-            - --bwlimit=800000B
-            - --dir-cache-time=1s
-            - --log-format=json
-            - --poll-interval=0s
-            - --vfs-cache-mode=off
-          env:
-            - {name: RCLONE_CONFIG, value: /etc/s3-gateway/rclone.conf}
-            - name: S3_GATEWAY_ACCESS_KEY
-              valueFrom:
-                secretKeyRef: {key: global-replicator-access-key-id, name: s3-gateway-credentials}
-            - name: S3_GATEWAY_SECRET_KEY
-              valueFrom:
-                secretKeyRef: {key: global-replicator-secret-access-key, name: s3-gateway-credentials}
-            - name: RCLONE_AUTH_KEY
-              value: '"$(S3_GATEWAY_ACCESS_KEY),$(S3_GATEWAY_SECRET_KEY)"'
-            - name: RCLONE_CONFIG_LOCAL_HOME_PROVIDER_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  key: writer-secret-key
-                  name: ray-data-local-object-credentials
-                  optional: true
-          ports:
-            - {containerPort: 8080, name: s3, protocol: TCP}
-          startupProbe:
-            failureThreshold: 30
-            periodSeconds: 5
-            tcpSocket: {port: s3}
-            timeoutSeconds: 5
-          readinessProbe:
-            periodSeconds: 10
-            tcpSocket: {port: s3}
-            timeoutSeconds: 5
-          livenessProbe:
-            periodSeconds: 20
-            tcpSocket: {port: s3}
-            timeoutSeconds: 5
-          resources:
-            requests: {cpu: 100m, memory: 128Mi}
-            limits: {cpu: 500m, memory: 512Mi}
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities: {drop: [ALL]}
-            readOnlyRootFilesystem: true
-            runAsGroup: 65532
-            runAsNonRoot: true
-            runAsUser: 65532
-          volumeMounts:
-            # keep-sorted start
-            - {mountPath: /etc/s3-gateway/rclone.conf, name: config, readOnly: true, subPath: global-replicator-rclone.conf}
-            - {mountPath: /tmp, name: temporary,}
-            # keep-sorted end
-      volumes:
-        # keep-sorted start
-        - emptyDir: {sizeLimit: 128Mi}
-          name: temporary
-        - name: config
-          configMap: {name: s3-gateway-rclone-config}
-          # keep-sorted end

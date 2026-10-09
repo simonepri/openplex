@@ -3,6 +3,21 @@
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
+  name: s3-gateway-legacy-research-data-local
+  namespace: s3-system
+  labels: {app.kubernetes.io/managed-by: argocd, app.kubernetes.io/part-of: data-plane}
+spec:
+  targetRef: {apiVersion: apps/v1, kind: Deployment, name: s3-gateway-legacy-research-data-local}
+  updatePolicy: {updateMode: "InPlace"}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: rclone
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
   name: s3-gateway-org-workspace-backups-local
   namespace: s3-system
   labels: {app.kubernetes.io/managed-by: argocd, app.kubernetes.io/part-of: data-plane}

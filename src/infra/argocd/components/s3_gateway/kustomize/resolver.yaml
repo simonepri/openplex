@@ -105,7 +105,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: resolver
-          image: docker.io/cluster/s3-resolver@sha256:3e471daeeb9bc10d25649e42778b54ddea0289bdb52b111bbae7c543e69b5196
+          image: placeholder.invalid/src/infra/tools/s3_resolver/server:inventory
           imagePullPolicy: IfNotPresent
           command: [/ko-app/s3-resolver]
           env:
@@ -113,8 +113,6 @@ spec:
               value: /etc/s3-resolver/topology.json
             - name: PORT
               value: "8080"
-            - name: KUBERNETES_TOKEN_AUDIENCE
-              value: s3-resolver
             - name: KUBERNETES_TOKEN_PATH
               value: /var/run/secrets/tokens/token
             - name: KUBERNETES_CA_PATH

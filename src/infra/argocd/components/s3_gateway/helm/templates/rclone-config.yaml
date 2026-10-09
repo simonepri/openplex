@@ -10,6 +10,12 @@
 {{- range $cell := $topology.cells -}}
   {{- if ne $cell.name $.Values.targetCell -}}{{- $remoteCells = append $remoteCells $cell -}}{{- end -}}
 {{- end -}}
+{{- $globalStorage := required "globalStorage is required" .Values.globalStorage -}}
+{{- $bucketPrefix := required "globalStorage.bucketPrefix is required" $globalStorage.bucketPrefix -}}
+{{- $bucketSuffix := required "globalStorage.bucketSuffix is required" $globalStorage.bucketSuffix -}}
+{{- $provider := required "globalStorage.provider is required" $globalStorage.provider -}}
+{{- $endpoint := required "globalStorage.endpoint is required" $globalStorage.endpoint -}}
+{{- $teams := $globalStorage.teams | default list -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -21,14 +27,26 @@ metadata:
     app.kubernetes.io/name: s3-gateway
     app.kubernetes.io/part-of: data-plane
 data:
-  global-replicator-rclone.conf: |
-{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.home "cell" $target "noHeadObject" true "remote" "local_home_provider") | nindent 4 }}
-
-{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.home "providerRemote" "local_home_provider" "remote" "local-home" "suffix" "") | nindent 4 }}
-
-    [cross-region]
+  legacy-research-data-rclone.conf: |
+{{- if .Values.legacyStorage }}
+{{ include "s3-gateway.legacyResearchStorage" . | nindent 4 }}
+{{- $legacyTopology := include "s3-gateway.legacyTopology" . | fromJson }}
+    [legacy-cell]
     type = combine
-    upstreams = global=local-home:global
+    upstreams = legacy=workspaces-legacy-{{ $legacyTopology.targetSlug }}:
+{{ range $rem := $legacyTopology.remoteLegacies }}
+    [legacy-{{ $rem.slug }}]
+    type = combine
+    upstreams = legacy=workspaces-legacy-{{ $rem.slug }}:
+{{ end }}
+    [legacy-research-data]
+    type = combine
+    upstreams = {{ $target.virtualName }}=legacy-cell:{{ range $rem := $legacyTopology.remoteLegacies }} {{ $rem.upstream }}=legacy-{{ $rem.slug }}:{{ end }}
+{{- else }}
+    [legacy-research-data]
+    type = combine
+    upstreams =
+{{- end }}
   org-workspace-backups-rclone.conf: |
 {{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.backups "cell" $target "noHeadObject" true "remote" "local_backups_provider") | nindent 4 }}
 
@@ -53,37 +71,3 @@ data:
 {{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.meta "cell" $target "noHeadObject" true "remote" "local_meta_provider") | nindent 4 }}
 
 {{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.meta "providerRemote" "local_meta_provider" "remote" "storage-stats" "suffix" "") | nindent 4 }}
-{{- range $team := keys $target.callers.teams | sortAlpha }}
-  {{ $team }}-rclone.conf: |
-{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.home "cell" $target "noHeadObject" true "remote" "local_home_provider") | nindent 4 }}
-
-{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.home "providerRemote" "local_home_provider" "remote" "local-home" "suffix" "") | nindent 4 }}
-
-{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.scratch "cell" $target "noHeadObject" true "remote" "local_scratch_provider") | nindent 4 }}
-
-{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.scratch "providerRemote" "local_scratch_provider" "remote" "local-scratch" "suffix" "") | nindent 4 }}
-
-{{ include "s3-gateway.rcloneBackend" (dict "bucket" $target.buckets.meta "cell" $target "noHeadObject" true "remote" "local_meta_provider") | nindent 4 }}
-
-{{ include "s3-gateway.rcloneAlias" (dict "bucket" $target.buckets.meta "providerRemote" "local_meta_provider" "remote" "local-meta" "suffix" "") | nindent 4 }}
-
-    [local-cell]
-    type = combine
-    upstreams = home=local-home:home scratch=local-scratch:scratch meta=local-meta:meta
-
-    [global-cell]
-    type = combine
-    upstreams = home=local-home:global scratch=local-scratch:global meta=local-meta:global
-
-    [local]
-    type = combine
-    upstreams = {{ $target.virtualName }}=local-cell: global=global-cell:
-
-    [cross-region]
-    type = combine
-    upstreams = {{ $target.virtualName }}=local-cell: global=global-cell:{{ range $cell := $remoteCells }} {{ $cell.virtualName }}={{ $cell.virtualName }}:{{ end }}
-{{- range $cell := $remoteCells }}
-
-{{ include "s3-gateway.rcloneRemoteGateway" (dict "accessKeyId" (index $cell.callers.teams $team).accessKeyId "cell" $cell "target" $target) | nindent 4 }}
-{{- end }}
-{{- end }}

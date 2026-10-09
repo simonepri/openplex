@@ -2,7 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["cellCatalog", "crossRegionListener", "registeredCells", "targetCell", "writerCell"],
+  "required": [
+    "cellCatalog",
+    "crossRegionListener",
+    "globalStorage",
+    "registeredCells",
+    "targetCell"
+  ],
   "properties": {
     "cellCatalog": {
       "type": "array",
@@ -14,8 +20,27 @@
       "maxLength": 2048,
       "pattern": "^(?:|http://[^/?#]+(?::[0-9]{1,5})?)$"
     },
+    "globalStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bucketPrefix", "bucketSuffix", "endpoint", "provider"],
+      "properties": {
+        "bucketPrefix": { "type": "string" },
+        "bucketSuffix": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "provider": { "type": "string" },
+        "teams": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/team" }
+        }
+      }
+    },
     "internalDomain": {
       "type": "string"
+    },
+    "legacyStorage": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/legacyBucket" }
     },
     "registeredCells": {
       "type": "array",
@@ -23,8 +48,7 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/cellName" }
     },
-    "targetCell": { "$ref": "#/$defs/cellName" },
-    "writerCell": { "$ref": "#/$defs/cellName" }
+    "targetCell": { "$ref": "#/$defs/cellName" }
   },
   "$defs": {
     "accessKeyId": {
@@ -32,6 +56,36 @@
       "minLength": 3,
       "maxLength": 128,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]+$"
+    },
+    "legacyBucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "region"],
+      "properties": {
+        "isTarget": { "type": "boolean" },
+        "name": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 253,
+          "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "provider": { "type": "string" },
+        "providerRemote": { "type": "string" },
+        "region": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$"
+        },
+        "regionSlug": { "type": "string" },
+        "roleArn": { "type": "string" },
+        "roleExternalId": { "type": "string" },
+        "upstream": { "type": "string" }
+      }
     },
     "bucket": {
       "type": "object",
@@ -67,7 +121,6 @@
         "crossRegionService",
         "gatewayRecord",
         "gatewaySecretStore",
-        "globalReplicatorIdentity",
         "name",
         "provider",
         "region",
@@ -89,7 +142,6 @@
         "crossRegionServer": { "$ref": "#/$defs/dnsName" },
         "gatewayRecord": { "type": "string" },
         "gatewaySecretStore": { "type": "string" },
-        "globalReplicatorIdentity": { "type": "string" },
         "storageStatsIdentity": { "type": "string" },
         "storageStatsService": { "$ref": "#/$defs/dnsLabel" },
         "storageStatsServer": { "$ref": "#/$defs/dnsName" },
@@ -108,14 +160,13 @@
         "callers": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["globalReplicator", "orgWorkspaceBackups", "storageStats", "teams"],
+          "required": ["legacyResearchData", "orgWorkspaceBackups", "storageStats"],
           "properties": {
-            "globalReplicator": { "$ref": "#/$defs/caller" },
+            "legacyResearchData": { "$ref": "#/$defs/caller" },
             "orgWorkspaceBackups": { "$ref": "#/$defs/caller" },
             "storageStats": { "$ref": "#/$defs/caller" },
             "teams": {
               "type": "object",
-              "minProperties": 1,
               "propertyNames": { "$ref": "#/$defs/team" },
               "additionalProperties": { "$ref": "#/$defs/caller" }
             }

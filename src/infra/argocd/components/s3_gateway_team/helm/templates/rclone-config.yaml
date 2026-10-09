@@ -1,0 +1,22 @@
+# Materializes one team's rclone configuration for local and cross-region backends.
+
+{{- if .Values.topology }}
+{{- $name := printf "s3-gateway-%s" .Values.team -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-rclone-config" $name }}
+  namespace: s3-system
+  labels:
+    app.kubernetes.io/component: runtime-configuration
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+    app.kubernetes.io/instance: {{ .Values.team | quote }}
+data:
+  rclone.conf: |
+{{ include "s3-gateway-team.rcloneConfig" . | indent 4 }}
+  {{ printf "%s-rclone.conf" .Values.team }}: |
+{{ include "s3-gateway-team.rcloneConfig" . | indent 4 }}
+{{- end }}

@@ -27,9 +27,12 @@ spec:
               gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
       ports:
         - {port: s3, protocol: TCP}
-        - {port: team-a-s3, protocol: TCP}
-        - {port: team-b-s3, protocol: TCP}
   egress:
+    # EKS Pod Identity agent, which supplies the backend's S3 credentials.
+    - to:
+        - ipBlock: {cidr: 169.254.170.23/32}
+      ports:
+        - {protocol: TCP, port: 80}
     - ports:
         - {protocol: TCP, port: 4566}
       to:
@@ -101,9 +104,12 @@ spec:
               gateway.envoyproxy.io/owning-gateway-namespace: envoy-gateway-system
       ports:
         - {port: s3, protocol: TCP}
-        - {port: team-a-s3, protocol: TCP}
-        - {port: team-b-s3, protocol: TCP}
   egress:
+    # EKS Pod Identity agent, which supplies the backend's S3 credentials.
+    - to:
+        - ipBlock: {cidr: 169.254.170.23/32}
+      ports:
+        - {protocol: TCP, port: 80}
     - ports:
         - {protocol: TCP, port: 4566}
       to:
@@ -176,6 +182,11 @@ spec:
       ports:
         - {port: s3, protocol: TCP}
   egress:
+    # EKS Pod Identity agent, which supplies the backend's S3 credentials.
+    - to:
+        - ipBlock: {cidr: 169.254.170.23/32}
+      ports:
+        - {protocol: TCP, port: 80}
     - ports:
         - {protocol: TCP, port: 4566}
       to:

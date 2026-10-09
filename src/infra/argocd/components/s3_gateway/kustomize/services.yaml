@@ -19,6 +19,26 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  name: s3-gateway-legacy-research-data-local
+  namespace: s3-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/component: legacy-research-gateway
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/part-of: data-plane
+spec:
+  selector:
+    app.kubernetes.io/name: s3-gateway
+    app.kubernetes.io/component: local-rclone
+    app.kubernetes.io/instance: legacy-research-data
+  ports:
+    - {name: s3, port: 8080, protocol: TCP, targetPort: s3}
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: s3-gateway-org-workspace-backups-local
   namespace: s3-system
   annotations:
@@ -52,25 +72,5 @@ spec:
   selector:
     app.kubernetes.io/name: s3-gateway
     app.kubernetes.io/component: cross-region-stats-rclone
-  ports:
-    - {name: s3, port: 8080, protocol: TCP, targetPort: s3}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: s3-gateway-global-replicator-cross-region
-  namespace: s3-system
-  annotations:
-    argocd.argoproj.io/sync-wave: "-1"
-  labels:
-    app.kubernetes.io/component: cross-region-storage-replicator
-    app.kubernetes.io/managed-by: argocd
-    app.kubernetes.io/name: s3-gateway
-    app.kubernetes.io/part-of: data-plane
-spec:
-  selector:
-    app.kubernetes.io/name: s3-gateway
-    app.kubernetes.io/component: cross-region-rclone
-    app.kubernetes.io/instance: global-replicator
   ports:
     - {name: s3, port: 8080, protocol: TCP, targetPort: s3}

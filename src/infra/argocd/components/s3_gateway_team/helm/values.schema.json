@@ -2,15 +2,44 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["authAdapter", "identity", "provider", "targetCell", "team", "topology"],
+  "required": [
+    "authAdapter",
+    "globalStorage",
+    "identity",
+    "provider",
+    "targetCell",
+    "team",
+    "topology",
+    "workspaceGrant"
+  ],
   "properties": {
     "team": { "type": "string", "maxLength": 58, "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
     "provider": { "enum": ["aws", "floci", "gcp"] },
     "authAdapter": { "enum": ["aws", "gcp", "kubernetes"] },
+    "clusterDomain": { "type": "string" },
+    "crossRegionListener": { "type": "string" },
+    "domain": { "type": "string" },
+    "globalStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bucketPrefix", "bucketSuffix", "endpoint", "provider"],
+      "properties": {
+        "bucketPrefix": { "type": "string" },
+        "bucketSuffix": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "provider": { "type": "string" }
+      }
+    },
+    "readers": {
+      "enum": ["all", "members"]
+    },
     "identity": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "readerRoleArn": { "type": "string", "pattern": "^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$" },
+        "readerServiceAccount": { "type": "string" },
+        "readerServiceAccountEmail": { "type": "string", "format": "email" },
         "roleArn": { "type": "string", "pattern": "^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$" },
         "serviceAccount": { "type": "string" },
         "serviceAccountEmail": { "type": "string", "format": "email" }
@@ -23,7 +52,6 @@
     },
     "topology": {
       "type": "object",
-      "required": ["cells", "version"],
       "properties": {
         "version": { "const": 1 },
         "cells": {
@@ -47,9 +75,60 @@
           }
         }
       }
+    },
+    "workspaceGrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "members": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "readerRecordName": {
+          "type": "string"
+        },
+        "recordName": {
+          "type": "string"
+        }
+      }
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "topology": {
+            "type": "object",
+            "minProperties": 1
+          }
+        },
+        "required": ["topology"]
+      },
+      "then": {
+        "properties": {
+          "topology": {
+            "required": ["cells", "version"]
+          },
+          "workspaceGrant": {
+            "required": ["recordName"],
+            "properties": {
+              "readerRecordName": {
+                "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+                "minLength": 1
+              },
+              "recordName": {
+                "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
     {
       "if": { "properties": { "provider": { "const": "aws" } } },
       "then": {

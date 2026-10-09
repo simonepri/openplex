@@ -9,3 +9,15 @@ topology:
   version: 1
   cells:
     - {name: cell-eaws-lh1, virtualName: eaws-lh1}
+globalStorage:
+  bucketPrefix: ctrl-eaws-lh1-global
+  bucketSuffix: "000000000000"
+  endpoint: http://172.19.0.2:4566
+  provider: Other
+readers: all
+workspaceGrant:
+  members:
+    - 33333333-3333-4333-8333-333333333333
+    - 44444444-4444-4444-8444-444444444444
+  recordName: cell-eaws-lh1-s3-team-fixture-team
+  readerRecordName: cell-eaws-lh1-s3-team-fixture-team-reader

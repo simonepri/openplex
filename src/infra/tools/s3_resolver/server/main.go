@@ -37,10 +37,11 @@ type CellConfig struct {
 	Buckets            map[string]CellBucket `json:"buckets"`
 }
 
-// GlobalConfig defines global replication topology.
+// GlobalConfig defines global storage topology.
 type GlobalConfig struct {
-	WriterCell   string   `json:"writerCell"`
-	ReplicaCells []string `json:"replicaCells"`
+	Endpoint     string `json:"endpoint,omitempty"`
+	BucketPrefix string `json:"bucketPrefix,omitempty"`
+	BucketSuffix string `json:"bucketSuffix,omitempty"`
 }
 
 // TopologyConfig defines the entire cluster storage topology.
@@ -438,6 +439,26 @@ func parseVirtualURI(rawURI string) (*ParsedURI, error) {
 	}
 
 	trimmed := strings.TrimPrefix(rawURI, "s3://")
+	if trimmed == "global/meta" {
+		return &ParsedURI{
+			VirtualCell: "global",
+			Class:       "meta",
+			Team:        "",
+			Path:        "",
+			IsGlobal:    true,
+		}, nil
+	}
+	if strings.HasPrefix(trimmed, "global/meta/") {
+		path := strings.TrimPrefix(trimmed, "global/meta/")
+		return &ParsedURI{
+			VirtualCell: "global",
+			Class:       "meta",
+			Team:        "",
+			Path:        path,
+			IsGlobal:    true,
+		}, nil
+	}
+
 	parts := strings.SplitN(trimmed, "/", 4)
 	if len(parts) < 3 {
 		return nil, fmt.Errorf("invalid virtual S3 URI format, expected s3://<cell>/<class>/<team>/<path>: %s", rawURI)
@@ -479,33 +500,41 @@ func findCell(cfg *TopologyConfig, nameOrVirtual string) *CellConfig {
 	return nil
 }
 
-func resolveGlobalURI(cfg *TopologyConfig, localCell *CellConfig, parsed *ParsedURI) (*ResolutionResponse, int, error) {
-	writerCellName := cfg.Global.WriterCell
-	if writerCellName == "" {
-		writerCellName = cfg.TargetCell
-	}
-	targetCell := findCell(cfg, writerCellName)
-	if targetCell == nil {
-		targetCell = localCell
+func resolveGlobalURI(cfg *TopologyConfig, caller *CallerIdentity, parsed *ParsedURI) (*ResolutionResponse, int, error) {
+	if cfg.Global.Endpoint == "" || cfg.Global.BucketPrefix == "" || cfg.Global.BucketSuffix == "" {
+		return nil, http.StatusInternalServerError, errors.New("global storage is not configured")
 	}
 
-	bucketCfg, ok := targetCell.Buckets[parsed.Class]
-	if !ok {
-		return nil, http.StatusBadRequest, fmt.Errorf("storage class %q not declared in cell %s", parsed.Class, targetCell.Name)
+	var team string
+	if parsed.Class == "meta" {
+		if caller == nil || caller.Class != "team" || caller.Team == "" {
+			return nil, http.StatusForbidden, errors.New("only team callers may access global meta storage")
+		}
+		team = caller.Team
+	} else {
+		team = parsed.Team
+		if team == "" {
+			return nil, http.StatusBadRequest, errors.New("cannot determine team for global URI")
+		}
+		if caller != nil && caller.Class == "team" && caller.Team != "" && caller.Team != parsed.Team {
+			return nil, http.StatusForbidden, fmt.Errorf("caller from team %q cannot access prefix for team %q", caller.Team, parsed.Team)
+		}
 	}
 
-	key := fmt.Sprintf("home/%s/%s", parsed.Team, parsed.Path)
-	if parsed.Path == "" {
-		key = fmt.Sprintf("home/%s", parsed.Team)
+	key := parsed.Class
+	if parsed.Path != "" {
+		key = fmt.Sprintf("%s/%s", parsed.Class, parsed.Path)
 	}
+
+	bucket := fmt.Sprintf("%s-%s-%s", cfg.Global.BucketPrefix, team, cfg.Global.BucketSuffix)
 
 	return &ResolutionResponse{
 		Mode:        "direct",
-		URI:         fmt.Sprintf("s3://%s/%s", bucketCfg.Name, key),
-		Bucket:      bucketCfg.Name,
+		URI:         fmt.Sprintf("s3://%s/%s", bucket, key),
+		Bucket:      bucket,
 		Key:         key,
-		EndpointURL: getEndpointURL(targetCell),
-		Region:      targetCell.Region,
+		EndpointURL: cfg.Global.Endpoint,
+		Region:      "auto",
 		Auth: AuthInfo{
 			Type: "ambient_workload_identity",
 		},
@@ -570,8 +599,8 @@ func resolveCellURI(caller *CallerIdentity, localCell, targetCell *CellConfig, p
 }
 
 func resolveURI(cfg *TopologyConfig, caller *CallerIdentity, parsed *ParsedURI) (*ResolutionResponse, int, error) {
-	if caller.Class == "team" && caller.Team != "" && caller.Team != parsed.Team {
-		return nil, http.StatusForbidden, fmt.Errorf("caller from team %q cannot access prefix for team %q", caller.Team, parsed.Team)
+	if parsed.IsGlobal {
+		return resolveGlobalURI(cfg, caller, parsed)
 	}
 
 	localCell := findCell(cfg, cfg.TargetCell)
@@ -579,8 +608,8 @@ func resolveURI(cfg *TopologyConfig, caller *CallerIdentity, parsed *ParsedURI) 
 		return nil, http.StatusInternalServerError, fmt.Errorf("local target cell %q not found in topology", cfg.TargetCell)
 	}
 
-	if parsed.IsGlobal {
-		return resolveGlobalURI(cfg, localCell, parsed)
+	if caller != nil && caller.Class == "team" && caller.Team != "" && caller.Team != parsed.Team {
+		return nil, http.StatusForbidden, fmt.Errorf("caller from team %q cannot access prefix for team %q", caller.Team, parsed.Team)
 	}
 
 	targetCell := findCell(cfg, parsed.VirtualCell)
