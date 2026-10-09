@@ -20,7 +20,7 @@ spec:
     jsonSpec: |-
       {
         "schemaVersion": "v6",
-        "image": "",
+        "image": "/assets/Logos/s3",
         "name": "object-storage",
         "tags": [
           {"key": "category", "value": "storage"}
@@ -28,7 +28,7 @@ spec:
         "spec": {
           "display": {
             "name": "Object Storage",
-            "description": "Daily object storage rollups; use the dropdowns to navigate cells, days, and folder prefixes."
+            "description": "Daily object storage rollups; use the dropdowns to navigate cells, days, and folder prefixes up to 50 levels deep."
           },
           "variables": [
             {
@@ -42,7 +42,7 @@ spec:
                 "plugin": {
                   "kind": "signoz/QueryVariable",
                   "spec": {
-                    "queryValue": "SELECT cell FROM (SELECT DISTINCT cell FROM storage_stats.storage_prefix_daily FINAL UNION ALL SELECT '(no inventory yet)' AS cell WHERE NOT EXISTS (SELECT 1 FROM storage_stats.storage_prefix_daily FINAL LIMIT 1)) ORDER BY cell"
+                    "queryValue": "SELECT cell FROM (SELECT DISTINCT cell FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN ('ctrl-aws-usw2', 'ctrl-aws-use1') UNION ALL SELECT '(no inventory yet)' AS cell WHERE NOT EXISTS (SELECT 1 FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN ('ctrl-aws-usw2', 'ctrl-aws-use1') LIMIT 1)) ORDER BY cell"
                   }
                 }
               }
@@ -66,7 +66,7 @@ spec:
                 "plugin": {
                   "kind": "signoz/QueryVariable",
                   "spec": {
-                    "queryValue": "SELECT day FROM (SELECT DISTINCT toString(day) AS day FROM storage_stats.storage_prefix_daily FINAL UNION ALL SELECT '(no inventory yet)' AS day WHERE NOT EXISTS (SELECT 1 FROM storage_stats.storage_prefix_daily FINAL LIMIT 1)) ORDER BY day DESC"
+                    "queryValue": "SELECT day FROM (SELECT DISTINCT toString(day) AS day FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN ('ctrl-aws-usw2', 'ctrl-aws-use1') UNION ALL SELECT '(no inventory yet)' AS day WHERE NOT EXISTS (SELECT 1 FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN ('ctrl-aws-usw2', 'ctrl-aws-use1') LIMIT 1)) ORDER BY day DESC"
                   }
                 }
               }
@@ -103,7 +103,7 @@ spec:
                         "kind": "signoz/ClickHouseSQL",
                         "spec": {
                           "name": "A",
-                          "query": "SELECT toDateTime(day) AS ts, sum(total_bytes) AS value FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN $cell AND (empty($prefix) OR startsWith(prefix, $prefix)) GROUP BY day ORDER BY day"
+                          "query": "WITH trimRight($prefix, '/') AS normalized_prefix SELECT toDateTime(day) AS ts, sum(total_bytes) AS value FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN ('ctrl-aws-usw2', 'ctrl-aws-use1') AND cell IN $cell AND ((empty(normalized_prefix) AND prefix_depth IN (0, 1)) OR (NOT empty(normalized_prefix) AND ((prefix_depth = 0 AND startsWith(prefix, normalized_prefix)) OR (prefix_depth > 0 AND prefix = normalized_prefix) OR (length(splitByChar('/', normalized_prefix)) <= 2 AND prefix_depth = 1 AND startsWith(prefix, concat(normalized_prefix, '/'))))) GROUP BY day ORDER BY day"
                         }
                       }
                     }
@@ -141,7 +141,7 @@ spec:
                         "kind": "signoz/ClickHouseSQL",
                         "spec": {
                           "name": "A",
-                          "query": "SELECT toDateTime(day) AS ts, sum(object_count) AS value FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN $cell AND (empty($prefix) OR startsWith(prefix, $prefix)) GROUP BY day ORDER BY day"
+                          "query": "WITH trimRight($prefix, '/') AS normalized_prefix SELECT toDateTime(day) AS ts, sum(object_count) AS value FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN ('ctrl-aws-usw2', 'ctrl-aws-use1') AND cell IN $cell AND ((empty(normalized_prefix) AND prefix_depth IN (0, 1)) OR (NOT empty(normalized_prefix) AND ((prefix_depth = 0 AND startsWith(prefix, normalized_prefix)) OR (prefix_depth > 0 AND prefix = normalized_prefix) OR (length(splitByChar('/', normalized_prefix)) <= 2 AND prefix_depth = 1 AND startsWith(prefix, concat(normalized_prefix, '/'))))) GROUP BY day ORDER BY day"
                         }
                       }
                     }
@@ -154,7 +154,7 @@ spec:
               "spec": {
                 "display": {
                   "name": "Folder navigation",
-                  "description": "Dynamic hierarchy navigation under prefix; copy folder name into $prefix to drill down"
+                  "description": "Browse one level at a time under s3/<cell>; $prefix accepts folder paths with or without a trailing slash."
                 },
                 "plugin": {
                   "kind": "signoz/TablePanel",
@@ -178,7 +178,7 @@ spec:
                         "kind": "signoz/ClickHouseSQL",
                         "spec": {
                           "name": "A",
-                          "query": "SELECT cell, if(empty($prefix), concat(splitByChar('/', prefix)[1], '/'), concat($prefix, splitByChar('/', substring(prefix, length($prefix) + 1))[1], '/')) AS folder, sum(object_count) AS object_count, sum(total_bytes) AS total_bytes FROM storage_stats.storage_prefix_daily FINAL WHERE toString(day) = if(empty($selected_day) OR $selected_day = '(no inventory yet)', (SELECT toString(max(day)) FROM storage_stats.storage_prefix_daily FINAL), $selected_day) AND cell IN $cell AND (empty($prefix) OR startsWith(prefix, $prefix)) AND (empty($prefix) OR prefix != $prefix) GROUP BY cell, folder ORDER BY cell ASC, total_bytes DESC LIMIT 500"
+                          "query": "WITH trimRight($prefix, '/') AS normalized_prefix, greatest(1, length(splitByChar('/', normalized_prefix)) - 1) AS child_depth, selected_rows AS (SELECT cell, prefix, prefix_depth, object_count, total_bytes FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN ('ctrl-aws-usw2', 'ctrl-aws-use1') AND toString(day) = if(empty($selected_day) OR $selected_day = '(no inventory yet)', (SELECT toString(max(day)) FROM storage_stats.storage_prefix_daily FINAL WHERE cell IN ('ctrl-aws-usw2', 'ctrl-aws-use1')), $selected_day) AND cell IN $cell AND (prefix_depth = child_depth OR prefix_depth = 0)) SELECT concat(parent_prefix, splitByChar('/', substring(prefix, length(parent_prefix) + 1))[1], '/') AS folder, sum(object_count) AS object_count, sum(total_bytes) AS total_bytes FROM (SELECT cell, prefix, object_count, total_bytes, prefix_depth, if(empty(normalized_prefix) OR length(splitByChar('/', normalized_prefix)) <= 2, concat('s3/', replaceRegexpOne(cell, '^ctrl-', ''), '/'), concat(normalized_prefix, '/')) AS parent_prefix FROM selected_rows) WHERE startsWith(prefix, parent_prefix) AND prefix != normalized_prefix GROUP BY folder ORDER BY folder ASC LIMIT 500"
                         }
                       }
                     }

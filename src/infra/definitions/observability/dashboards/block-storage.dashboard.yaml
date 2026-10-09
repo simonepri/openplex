@@ -19,7 +19,7 @@ spec:
     jsonSpec: |-
       {
         "schemaVersion": "v6",
-        "image": "",
+        "image": "/assets/Logos/vm",
         "name": "block-storage",
         "tags": [
           {"key": "category", "value": "storage"}

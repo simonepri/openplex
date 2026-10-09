@@ -19,7 +19,7 @@ spec:
     jsonSpec: |-
       {
         "schemaVersion": "v6",
-        "image": "",
+        "image": "/assets/Logos/http-monitoring",
         "name": "synthetic-monitoring",
         "tags": [
           {
