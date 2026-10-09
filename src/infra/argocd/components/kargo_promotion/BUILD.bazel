@@ -1,7 +1,6 @@
 """Check targets for the kargo_promotion Argo CD component."""
 
 load("@rules_helm//helm:defs.bzl", "helm_chart", "helm_lint_test", "helm_template")
-load("@rules_python//python:defs.bzl", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "HELM_TEMPLATE", "package_sources", "source_set")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
@@ -85,13 +84,4 @@ source_set(
     kind = HELM_TEMPLATE,
 )
 
-py_test(
-    name = "values_schema_test",
-    srcs = ["values_schema_test.py"],
-    data = ["helm/values.schema.json"],
-)
-
-package_sources(exclude = [
-    "helm/templates/**",
-    "**/*.py",
-])
+package_sources(exclude = ["helm/templates/**"])

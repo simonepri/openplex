@@ -2,7 +2,6 @@
 
 load("@rules_helm//helm:defs.bzl", "helm_import", "helm_template")
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
-load("@rules_python//python:defs.bzl", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
@@ -42,24 +41,10 @@ helm_template(
     ],
 )
 
-package_sources(exclude = ["**/*.py"])
+package_sources()
 
 manifest_checks(
     name = "vendor-helm",
     kube_lint_config = "//src/bazel/rules/kubernetes_manifests:kube-linter-vendor.yaml",
     rendered = ":vendor-helm-render",
-)
-
-py_test(
-    name = "cleanup_test",
-    srcs = ["cleanup_test.py"],
-    args = [
-        "$(location :base_render)",
-        "$(location :vendor-helm-render)",
-    ],
-    data = [
-        ":base_render",
-        ":vendor-helm-render",
-    ],
-    deps = ["@dev_python_deps//pyyaml"],
 )

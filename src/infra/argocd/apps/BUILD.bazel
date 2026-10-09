@@ -13,9 +13,14 @@ source_set(
 )
 
 exports_files(
-    ["cells.yaml"],
+    [
+        "cells.yaml",
+        "ctrl.yaml",
+    ],
     visibility = ["//visibility:public"],
 )
+
+# gazelle:python_extension disabled
 
 package_sources(exclude = [
     "cells.yaml",
@@ -24,45 +29,93 @@ package_sources(exclude = [
     "teams.yaml",
 ])
 
+# Rendered kustomize bases of every component the fleet ApplicationSets deploy.
+KUSTOMIZE_RENDERS = [
+    # keep-sorted start
+    "//src/infra/argocd/components/acme:base_render",
+    "//src/infra/argocd/components/atlantis:base_render",
+    "//src/infra/argocd/components/barman_cloud:base_render",
+    "//src/infra/argocd/components/buildbuddy:base_render",
+    "//src/infra/argocd/components/buildbuddy_cache:base_render",
+    "//src/infra/argocd/components/buildbuddy_enterprise_cache_proxy:base_render",
+    "//src/infra/argocd/components/buildbuddy_runtime:base_render",
+    "//src/infra/argocd/components/cert_manager:base_render",
+    "//src/infra/argocd/components/clickhouse:base_render",
+    "//src/infra/argocd/components/clickhouse_coordinator:base_render",
+    "//src/infra/argocd/components/clickhouse_operator:base_render",
+    "//src/infra/argocd/components/cloud_telemetry:base_render",
+    "//src/infra/argocd/components/cloudnative_pg:base_render",
+    "//src/infra/argocd/components/cluster_access:base_render",
+    "//src/infra/argocd/components/coder:base_render",
+    "//src/infra/argocd/components/csi_rclone:base_render",
+    "//src/infra/argocd/components/descheduler:base_render",
+    "//src/infra/argocd/components/dex:base_render",
+    "//src/infra/argocd/components/dragonfly_manager:base_render",
+    "//src/infra/argocd/components/dragonfly_peer:base_render",
+    "//src/infra/argocd/components/external_dns:base_render",
+    "//src/infra/argocd/components/external_secrets:base_render",
+    "//src/infra/argocd/components/falco:base_render",
+    "//src/infra/argocd/components/gpu_operator:base_render",
+    "//src/infra/argocd/components/headlamp:base_render",
+    "//src/infra/argocd/components/homer:base_render",
+    "//src/infra/argocd/components/k8s_cleaner:base_render",
+    "//src/infra/argocd/components/kargo:base_render",
+    "//src/infra/argocd/components/karpenter_gcp:base_render",
+    "//src/infra/argocd/components/keda:base_render",
+    "//src/infra/argocd/components/kube_oidc_proxy:base_render",
+    "//src/infra/argocd/components/kuberay:base_render",
+    "//src/infra/argocd/components/kuberhealthy:base_render",
+    "//src/infra/argocd/components/kueue:base_render",
+    "//src/infra/argocd/components/kyverno:base_render",
+    "//src/infra/argocd/components/local_storage_inventory_producer:base_render",
+    "//src/infra/argocd/components/node_problem_detector:base_render",
+    "//src/infra/argocd/components/obi:base_render",
+    "//src/infra/argocd/components/opencost:base_render",
+    "//src/infra/argocd/components/otel_collector:base_render",
+    "//src/infra/argocd/components/parca:base_render",
+    "//src/infra/argocd/components/parca_agent:base_render",
+    "//src/infra/argocd/components/prometheus_api_bridge:base_render",
+    "//src/infra/argocd/components/prowler:base_render",
+    "//src/infra/argocd/components/pvc_autoresizer:base_render",
+    "//src/infra/argocd/components/rawfile_localpv:base_render",
+    "//src/infra/argocd/components/s3_gateway:base_render",
+    "//src/infra/argocd/components/scheduling_priorities:base_render",
+    "//src/infra/argocd/components/signoz:base_render",
+    "//src/infra/argocd/components/trivy_operator:base_render",
+    "//src/infra/argocd/components/trivy_server:base_render",
+    "//src/infra/argocd/components/trust_manager:base_render",
+    "//src/infra/argocd/components/valkey_operator:base_render",
+    "//src/infra/argocd/components/velero_ui:base_render",
+    "//src/infra/argocd/components/vpa:base_render",
+    # keep-sorted end
+]
+
 py_test(
-    name = "profiles_test",
-    srcs = ["profiles_test.py"],
+    name = "ownership_test",
+    srcs = ["ownership_test.py"],
     args = [
-        "$(locations @rules_helm//helm:current_toolchain)",
-        "$(location //src/infra/argocd/components/dragonfly_peer:helm/client-image.yaml)",
-        "$(location //src/infra/argocd/components/dragonfly_manager:vendor-helm-render)",
-        "$(location //src/infra/argocd/components/dragonfly_peer:vendor-helm-render)",
-        "$(location //src/infra/images:infrastructure-images.json)",
-        "$(location //src/infra/argocd/components/clickhouse:base_render)",
-        "$(location //src/infra/argocd/components/coder:kustomize/template-reconciler.k8s.yaml)",
-        "$(location //src/infra/argocd/components/local_runtime_tls:helm_render)",
-        "$(location //src/infra/argocd/components/vpa:helm/values.yaml)",
-        "$(location @vendor_helm_vpa//:vertical-pod-autoscaler)",
-        "$(location //src/infra/argocd/components/routing_registry:helm_render-local-cell)",
-        "$(location //src/examples/svelte_web:manifest)",
-        "$(locations @rules_gitops//kustomize:resolved_toolchain)",
-        "$(location profiles.yaml)",
         "$(location ctrl.yaml)",
         "$(location cells.yaml)",
+    ] + ["$(location %s)" % render for render in KUSTOMIZE_RENDERS],
+    data = [
+        "cells.yaml",
+        "ctrl.yaml",
+    ] + KUSTOMIZE_RENDERS,
+    deps = ["@dev_python_deps//pyyaml"],
+)
+
+py_test(
+    name = "unvendored_chart_version_test",
+    srcs = ["unvendored_chart_version_test.py"],
+    args = [
+        "$(location ctrl.yaml)",
+        "$(location cells.yaml)",
+        "$(location //src/bazel/module_deps:vendor_helm_charts.MODULE.bazel)",
     ],
     data = [
         "cells.yaml",
         "ctrl.yaml",
-        "profiles.yaml",
-        "teams.yaml",
-        "//src/examples/svelte_web:manifest",
-        "//src/infra/argocd/components/clickhouse:base_render",
-        "//src/infra/argocd/components/coder:kustomize/template-reconciler.k8s.yaml",
-        "//src/infra/argocd/components/dragonfly_manager:vendor-helm-render",
-        "//src/infra/argocd/components/dragonfly_peer:helm/client-image.yaml",
-        "//src/infra/argocd/components/dragonfly_peer:vendor-helm-render",
-        "//src/infra/argocd/components/local_runtime_tls:helm_render",
-        "//src/infra/argocd/components/routing_registry:helm_render-local-cell",
-        "//src/infra/argocd/components/vpa:helm/values.yaml",
-        "//src/infra/images:infrastructure-images.json",
-        "@rules_gitops//kustomize:resolved_toolchain",
-        "@rules_helm//helm:current_toolchain",
-        "@vendor_helm_vpa//:vertical-pod-autoscaler",
+        "//src/bazel/module_deps:vendor_helm_charts.MODULE.bazel",
     ],
     deps = ["@dev_python_deps//pyyaml"],
 )

@@ -2,7 +2,7 @@
 
 image:
   repository: buildbuddy.bbcr.io/public/buildbuddy-executor-enterprise
-  tag: enterprise-v2.307.0
+  tag: enterprise-v2.307.0@sha256:d3f4bcb2e1ba763e5c02bbf3335b66548ef0f70e0e3a9494a4685a0a6173e4ac
   imagePullPolicy: IfNotPresent
 
 service:
@@ -11,8 +11,12 @@ service:
   internalMetricsPort: 9090
 
 replicas: 1
-enable_oci: true
 
+serviceAccount:
+  name: buildbuddy-executor
+extraPodAnnotations:
+  ignore-check.kube-linter.io/read-secret-from-env-var: >-
+    BuildBuddy executor loads API key from Secret via environment.
 extraEnvVars:
   - name: EXECUTOR_API_KEY
     valueFrom:
@@ -24,6 +28,7 @@ config:
   executor:
     app_target: grpcs://remote.buildbuddy.io:443
     default_isolation_type: oci
+    enable_oci: true
     local_cache_directory: /buildbuddy/filecache/
     local_cache_size_bytes: 50000000000
     root_directory: /buildbuddy/remotebuilds/

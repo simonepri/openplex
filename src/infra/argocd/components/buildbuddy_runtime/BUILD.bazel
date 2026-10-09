@@ -1,6 +1,5 @@
-"""Defines build and check targets for the valkey_operator Argo CD component."""
+"""Check targets for the buildbuddy_runtime Argo CD component."""
 
-load("@rules_helm//helm:defs.bzl", "helm_template")
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
@@ -22,23 +21,4 @@ manifest_checks(
     rendered = ":base_render",
 )
 
-helm_template(
-    name = "vendor-helm-render",
-    chart = "@vendor_helm_valkey_operator//:valkey-operator",
-    opts = [
-        "--include-crds",
-        "--namespace",
-        "manifest-checks",
-    ],
-    values = [
-        "helm/values.yaml",
-    ],
-)
-
 package_sources()
-
-manifest_checks(
-    name = "vendor-helm",
-    kube_lint_config = "//src/bazel/rules/kubernetes_manifests:kube-linter-vendor.yaml",
-    rendered = ":vendor-helm-render",
-)

@@ -1,0 +1,79 @@
+# Configures descheduler deployment, leader election, intervals, eviction caps, and image digest.
+
+kind: Deployment
+replicas: 2
+replicaCount: 2
+leaderElection:
+  enabled: true
+deschedulingInterval: 10m
+
+image:
+  repository: registry.k8s.io/descheduler/descheduler
+  tag: "v0.37.0@sha256:88deef34ff5c85cb69676d7073dd641bd5c35b156bc1ef4a35ca8fbf9644da98"
+  pullPolicy: IfNotPresent
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  privileged: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+podAnnotations:
+  automount-service-account-token: "true"
+
+serviceAccount:
+  create: true
+  annotations:
+    automount-service-account-token: "true"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+service:
+  enabled: true
+serviceMonitor:
+  enabled: false
+cmdOptions:
+  v: 3
+deschedulerPolicy:
+  maxNoOfPodsToEvictPerNode: 2
+  maxNoOfPodsToEvictTotal: 10
+  profiles:
+    - name: default
+      pluginConfig:
+        - name: DefaultEvictor
+          args:
+            nodeFit: true
+            priorityThreshold:
+              value: 30
+        - name: RemovePodsViolatingInterPodAntiAffinity
+        - name: LowNodeUtilization
+          args:
+            targetThresholds:
+              cpu: 50
+              memory: 50
+              pods: 50
+            thresholds:
+              cpu: 20
+              memory: 20
+              pods: 20
+      plugins:
+        balance:
+          enabled:
+            - LowNodeUtilization
+        deschedule:
+          enabled:
+            - RemovePodsViolatingInterPodAntiAffinity

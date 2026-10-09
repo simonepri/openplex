@@ -1,9 +1,9 @@
-# Kustomize base for BuildBuddy Enterprise Cache Proxy companion resources.
+# Composes descheduler namespace, network isolation, and eviction policies.
 
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   # keep-sorted start
-  - external-secrets.yaml
+  - namespace.yaml
   - network-policy.yaml
   # keep-sorted end

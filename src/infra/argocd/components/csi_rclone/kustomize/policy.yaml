@@ -1,3 +1,48 @@
+# Injects write integrity environment variables into Rclone CSI node plugin pods,
+# skipping post-upload ETag validation on KMS buckets while ensuring multipart Content-MD5 checks.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: rclone-csi-mount-write-integrity
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  admission: true
+  background: false
+  emitWarning: false
+  validationFailureAction: Audit
+  webhookConfiguration:
+    failurePolicy: Ignore
+    timeoutSeconds: 5
+  rules:
+    - name: set-write-integrity-env
+      skipBackgroundRequests: true
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [csi-rclone-system]
+              operations: [CREATE, UPDATE]
+              selector:
+                matchLabels:
+                  app: rclone-csi-node
+      mutate:
+        patchStrategicMerge:
+          spec:
+            containers:
+              - name: rclone
+                env:
+                  # With cutoff 0 every upload is a multipart upload whose parts carry
+                  # Content-MD5, which the S3 gateway verifies (BadDigest), so skipping
+                  # the post-upload ETag comparison loses no integrity check.
+                  - name: RCLONE_IGNORE_CHECKSUM
+                    value: "true"
+                  - name: RCLONE_STREAMING_UPLOAD_CUTOFF
+                    value: "0"
+---
 # ValidatingAdmissionPolicy restricting Rclone CSI pods to approved node storage capabilities.
 
 apiVersion: admissionregistration.k8s.io/v1
@@ -90,7 +135,7 @@ spec:
         size(variables.registrarContainers[0].volumeMounts) == 2 && variables.registrarContainers[0].volumeMounts[0].name == 'plugin-dir' && variables.registrarContainers[0].volumeMounts[0].mountPath == '/csi' && !has(variables.registrarContainers[0].volumeMounts[0].mountPropagation) && !has(variables.registrarContainers[0].volumeMounts[0].subPath) && variables.registrarContainers[0].volumeMounts[1].name == 'registration-dir' && variables.registrarContainers[0].volumeMounts[1].mountPath == '/registration' && !has(variables.registrarContainers[0].volumeMounts[1].mountPropagation) && !has(variables.registrarContainers[0].volumeMounts[1].subPath) && (!has(variables.registrarContainers[0].volumeDevices) || size(variables.registrarContainers[0].volumeDevices) == 0)
       message: The Rclone CSI registrar must match its pinned command, lifecycle, and mount profile.
     - expression: >-
-        size(variables.rcloneContainers) == 1 && variables.rcloneContainers[0].image.matches('^ghcr[.]io/veloxpack/csi-driver-rclone:v[0-9.]+@sha256:[0-9a-f]{64}$') && variables.rcloneContainers[0].imagePullPolicy == 'IfNotPresent' && (!has(variables.rcloneContainers[0].command) || size(variables.rcloneContainers[0].command) == 0) && size(variables.rcloneContainers[0].args) == 3 && variables.rcloneContainers[0].args[0] == '-v=2' && variables.rcloneContainers[0].args[1] == '--nodeid=$(NODE_ID)' && variables.rcloneContainers[0].args[2] == '--endpoint=$(CSI_ENDPOINT)' && size(variables.rcloneContainers[0].env) == 2 && variables.rcloneContainers[0].env[0].name == 'NODE_ID' && variables.rcloneContainers[0].env[0].valueFrom.fieldRef.fieldPath == 'spec.nodeName' && variables.rcloneContainers[0].env[1].name == 'CSI_ENDPOINT' && variables.rcloneContainers[0].env[1].value == 'unix:///csi/csi.sock' && (!has(variables.rcloneContainers[0].envFrom) || size(variables.rcloneContainers[0].envFrom) == 0) && !has(variables.rcloneContainers[0].lifecycle) && has(variables.rcloneContainers[0].livenessProbe.httpGet) && !has(variables.rcloneContainers[0].livenessProbe.exec) && variables.rcloneContainers[0].livenessProbe.httpGet.host == 'localhost' && variables.rcloneContainers[0].livenessProbe.httpGet.path == '/healthz' && int(variables.rcloneContainers[0].livenessProbe.httpGet.port) == 29653 && !has(variables.rcloneContainers[0].readinessProbe) && !has(variables.rcloneContainers[0].startupProbe) && (!has(variables.rcloneContainers[0].ports) || size(variables.rcloneContainers[0].ports) == 0) && variables.rcloneContainers[0].securityContext.privileged && variables.rcloneContainers[0].securityContext.allowPrivilegeEscalation && !has(variables.rcloneContainers[0].securityContext.procMount) && !has(variables.rcloneContainers[0].securityContext.seccompProfile) && size(variables.rcloneContainers[0].securityContext.capabilities.add) == 1 && variables.rcloneContainers[0].securityContext.capabilities.add[0] == 'SYS_ADMIN' && size(variables.rcloneContainers[0].securityContext.capabilities.drop) == 1 && variables.rcloneContainers[0].securityContext.capabilities.drop[0] == 'ALL' && size(variables.rcloneContainers[0].volumeMounts) == 2 && variables.rcloneContainers[0].volumeMounts[0].name == 'pods-mount-dir' && variables.rcloneContainers[0].volumeMounts[0].mountPath == '/var/lib/kubelet/pods' && variables.rcloneContainers[0].volumeMounts[0].mountPropagation == 'Bidirectional' && !has(variables.rcloneContainers[0].volumeMounts[0].subPath) && variables.rcloneContainers[0].volumeMounts[1].name == 'plugin-dir' && variables.rcloneContainers[0].volumeMounts[1].mountPath == '/csi' && !has(variables.rcloneContainers[0].volumeMounts[1].mountPropagation) && !has(variables.rcloneContainers[0].volumeMounts[1].subPath) && (!has(variables.rcloneContainers[0].volumeDevices) || size(variables.rcloneContainers[0].volumeDevices) == 0)
+        size(variables.rcloneContainers) == 1 && variables.rcloneContainers[0].image.matches('^ghcr[.]io/veloxpack/csi-driver-rclone:v[0-9.]+@sha256:[0-9a-f]{64}$') && variables.rcloneContainers[0].imagePullPolicy == 'IfNotPresent' && (!has(variables.rcloneContainers[0].command) || size(variables.rcloneContainers[0].command) == 0) && size(variables.rcloneContainers[0].args) == 3 && variables.rcloneContainers[0].args[0] == '-v=2' && variables.rcloneContainers[0].args[1] == '--nodeid=$(NODE_ID)' && variables.rcloneContainers[0].args[2] == '--endpoint=$(CSI_ENDPOINT)' && size(variables.rcloneContainers[0].env) == 4 && variables.rcloneContainers[0].env.exists(e, e.name == 'NODE_ID' && has(e.valueFrom) && e.valueFrom.fieldRef.fieldPath == 'spec.nodeName') && variables.rcloneContainers[0].env.exists(e, e.name == 'CSI_ENDPOINT' && has(e.value) && e.value == 'unix:///csi/csi.sock') && variables.rcloneContainers[0].env.exists(e, e.name == 'RCLONE_IGNORE_CHECKSUM' && has(e.value) && e.value == 'true') && variables.rcloneContainers[0].env.exists(e, e.name == 'RCLONE_STREAMING_UPLOAD_CUTOFF' && has(e.value) && e.value == '0') && (!has(variables.rcloneContainers[0].envFrom) || size(variables.rcloneContainers[0].envFrom) == 0) && !has(variables.rcloneContainers[0].lifecycle) && has(variables.rcloneContainers[0].livenessProbe.httpGet) && !has(variables.rcloneContainers[0].livenessProbe.exec) && variables.rcloneContainers[0].livenessProbe.httpGet.host == 'localhost' && variables.rcloneContainers[0].livenessProbe.httpGet.path == '/healthz' && int(variables.rcloneContainers[0].livenessProbe.httpGet.port) == 29653 && !has(variables.rcloneContainers[0].readinessProbe) && !has(variables.rcloneContainers[0].startupProbe) && (!has(variables.rcloneContainers[0].ports) || size(variables.rcloneContainers[0].ports) == 0) && variables.rcloneContainers[0].securityContext.privileged && variables.rcloneContainers[0].securityContext.allowPrivilegeEscalation && !has(variables.rcloneContainers[0].securityContext.procMount) && !has(variables.rcloneContainers[0].securityContext.seccompProfile) && size(variables.rcloneContainers[0].securityContext.capabilities.add) == 1 && variables.rcloneContainers[0].securityContext.capabilities.add[0] == 'SYS_ADMIN' && size(variables.rcloneContainers[0].securityContext.capabilities.drop) == 1 && variables.rcloneContainers[0].securityContext.capabilities.drop[0] == 'ALL' && size(variables.rcloneContainers[0].volumeMounts) == 2 && variables.rcloneContainers[0].volumeMounts[0].name == 'pods-mount-dir' && variables.rcloneContainers[0].volumeMounts[0].mountPath == '/var/lib/kubelet/pods' && variables.rcloneContainers[0].volumeMounts[0].mountPropagation == 'Bidirectional' && !has(variables.rcloneContainers[0].volumeMounts[0].subPath) && variables.rcloneContainers[0].volumeMounts[1].name == 'plugin-dir' && variables.rcloneContainers[0].volumeMounts[1].mountPath == '/csi' && !has(variables.rcloneContainers[0].volumeMounts[1].mountPropagation) && !has(variables.rcloneContainers[0].volumeMounts[1].subPath) && (!has(variables.rcloneContainers[0].volumeDevices) || size(variables.rcloneContainers[0].volumeDevices) == 0)
       message: The privileged Rclone CSI driver must match its pinned command, probe, and mount profile.
     - expression: >-
         size(object.spec.volumes) == 4 && size(variables.podsVolumes) == 1 && variables.podsVolumes[0].hostPath.path == '/var/lib/kubelet/pods' && variables.podsVolumes[0].hostPath.type == 'Directory' && size(variables.pluginVolumes) == 1 && variables.pluginVolumes[0].hostPath.path ==

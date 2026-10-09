@@ -21,6 +21,9 @@ spec:
               app.kubernetes.io/name: coder-workspace
         - namespaceSelector:
             matchLabels:
+              app.kubernetes.io/part-of: coder-workspaces
+        - namespaceSelector:
+            matchLabels:
               app.kubernetes.io/part-of: team-lane
         - podSelector:
             matchLabels:

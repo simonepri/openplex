@@ -21,7 +21,6 @@ rules:
       - application-oidc
       - argocd-github-webhook
       - atlantis-github-app
-      - atlantis-runtime-environment
       - buildbuddy-auth
       - coder-automation-token
       - coder-snapshot-oauth

@@ -42,6 +42,7 @@ parameters:
 allowVolumeExpansion: false
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
+{{- if .Capabilities.APIVersions.Has "snapshot.storage.k8s.io/v1" }}
 ---
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshotClass
@@ -58,4 +59,5 @@ parameters:
   tagSpecification_4: snapshot-namespace={{ "{{ .VolumeSnapshotNamespace }}" }}
   tagSpecification_5: snapshot-name={{ "{{ .VolumeSnapshotName }}" }}
   tagSpecification_6: snapshot-content={{ "{{ .VolumeSnapshotContentName }}" }}
+{{- end }}
 {{- end }}

@@ -71,19 +71,8 @@ spec:
             {{- if $gcpProjectId }}
             gcpProjectId: {{ $gcpProjectId | toJson }}
             {{- end }}
-            {{- $gcpProjectNumber := index $annotations "gcp-project-number" }}
-            {{- if $gcpProjectNumber }}
-            gcpProjectNumber: {{ $gcpProjectNumber | toJson }}
-            {{- end }}
             {{- if $ecrRegistry }}
             ecrRegistry: {{ $ecrRegistry | toJson }}
-            delivery:
-              originRepositories:
-                src/examples/batch_cron: {{ printf "%s/src/examples/batch_cron" $ecrRegistry | toJson }}
-                src/examples/ray_data: {{ printf "%s/src/examples/ray_data" $ecrRegistry | toJson }}
-                src/examples/ray_serve: {{ printf "%s/src/examples/ray_serve" $ecrRegistry | toJson }}
-                src/examples/ray_train: {{ printf "%s/src/examples/ray_train" $ecrRegistry | toJson }}
-                src/examples/svelte_web: {{ printf "%s/src/examples/svelte_web" $ecrRegistry | toJson }}
             {{- end }}
             registeredClusters:
             {{- range .clusters }}
@@ -107,9 +96,10 @@ spec:
               quota: {{ .quota | toJson }}
               dev_secrets: {{ dig "dev_secrets" (list) . | toJson }}
               promotion: {{ dig "promotion" "manual" . | toJson }}
-              workspaces: {{ dig "workspaces" true . | toJson }}
               archive: {{ dig "archive" false . | toJson }}
               members: {{ dig "members" (list) . | toJson }}
+              readers: {{ dig "readers" "all" . | toJson }}
+              submitters: {{ dig "submitters" "members" . | toJson }}
               capabilities: {{ dig "capabilities" (dict) . | toJson }}
       syncPolicy:
         automated:

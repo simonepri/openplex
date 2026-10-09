@@ -3,7 +3,7 @@
 image:
   imagePullPolicy: IfNotPresent
   repository: buildbuddy.bbcr.io/public/buildbuddy-proxy-enterprise
-  tag: enterprise-v2.307.0
+  tag: enterprise-v2.307.0@sha256:99c2e87d30b1950117292dcfec61b274aeeb3607c1290458b0d0aba5b4e2e97a
 replicas: 3
 cacheTarget: "grpcs://remote.buildbuddy.io:443"
 resources:
@@ -30,6 +30,23 @@ persistence:
 config:
   cache:
     max_size_bytes: 400000000000
+securityContext:
+  fsGroup: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+extraPodAnnotations:
+  # Peer discovery lists cache-proxy pods through the Kubernetes API.
+  automount-service-account-token: "true"
+  ignore-check.kube-linter.io/read-secret-from-env-var: >-
+    BuildBuddy proxy loads cloud API key from Secret via environment.
 extraEnvVars:
   - name: CACHE_PROXY_API_KEY
     valueFrom:

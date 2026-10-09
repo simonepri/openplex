@@ -11,6 +11,32 @@ profiles:
       barman-cloud:
         helmValues:
           replicaCount: 1
+      buildbuddy:
+        patches:
+          - target:
+              group: postgresql.cnpg.io
+              kind: Cluster
+              name: buildbuddy-postgres
+            patch: |
+              - op: replace
+                path: /spec/instances
+                value: 1
+              - op: replace
+                path: /spec/enablePDB
+                value: false
+      buildbuddy-cache:
+        patches:
+          - target:
+              group: postgresql.cnpg.io
+              kind: Cluster
+              name: buildbuddy-cache-postgres
+            patch: |
+              - op: replace
+                path: /spec/instances
+                value: 1
+              - op: replace
+                path: /spec/enablePDB
+                value: false
       buildbuddy-enterprise-cache-proxy:
         helmValues:
           replicas: 1
@@ -23,7 +49,7 @@ profiles:
             limits:
               cpu: 1
               memory: 1Gi
-      buildbuddy-executor:
+      buildbuddy-executor-cpu:
         helmValues:
           replicas: 1
           resources:
@@ -194,10 +220,40 @@ profiles:
           additionalArgs:
             - --leader-elect=false
           replicaCount: 1
+      coder:
+        patches:
+          - target:
+              group: postgresql.cnpg.io
+              kind: Cluster
+              name: coder-postgres
+            patch: |
+              - op: replace
+                path: /spec/instances
+                value: 1
+              - op: replace
+                path: /spec/enablePDB
+                value: false
+      descheduler:
+        helmValues:
+          leaderElection:
+            enabled: false
+          replicas: 1
       dragonfly-manager:
         helmValues:
           manager:
             replicas: 1
+        patches:
+          - target:
+              group: postgresql.cnpg.io
+              kind: Cluster
+              name: dragonfly-postgres
+            patch: |
+              - op: replace
+                path: /spec/instances
+                value: 1
+              - op: replace
+                path: /spec/enablePDB
+                value: false
       dragonfly-peer:
         helmValues:
           scheduler:
@@ -447,6 +503,17 @@ profiles:
                   timeout: 30s
         patches:
           - target:
+              group: postgresql.cnpg.io
+              kind: Cluster
+              name: signoz-postgres
+            patch: |
+              - op: replace
+                path: /spec/instances
+                value: 1
+              - op: replace
+                path: /spec/enablePDB
+                value: false
+          - target:
               group: keda.sh
               kind: ScaledObject
               name: signoz-otel-collector
@@ -588,7 +655,7 @@ profiles:
             limits:
               cpu: "4"
               memory: 16Gi
-      buildbuddy-executor:
+      buildbuddy-executor-cpu:
         helmValues:
           replicas: 1
           resources:
@@ -624,9 +691,42 @@ profiles:
           podDisruptionBudget:
             enabled: true
             minAvailable: 1
+      clickhouse:
+        patches:
+          - target:
+              group: batch
+              kind: CronJob
+              name: signoz-clickhouse-storage-stats-rollup
+            patch: |
+              - op: replace
+                path: /spec/jobTemplate/spec/template/spec/containers/0/resources/requests/cpu
+                value: "2"
+              - op: replace
+                path: /spec/jobTemplate/spec/template/spec/containers/0/resources/requests/memory
+                value: 32Gi
+              - op: add
+                path: /spec/jobTemplate/spec/template/spec/containers/0/resources/requests/ephemeral-storage
+                value: 100Gi
+              - op: replace
+                path: /spec/jobTemplate/spec/template/spec/containers/0/resources/limits/cpu
+                value: "4"
+              - op: replace
+                path: /spec/jobTemplate/spec/template/spec/containers/0/resources/limits/memory
+                value: 40Gi
+              - op: add
+                path: /spec/jobTemplate/spec/template/spec/containers/0/resources/limits/ephemeral-storage
+                value: 140Gi
+              - op: replace
+                path: /spec/jobTemplate/spec/template/spec/volumes/2/emptyDir/sizeLimit
+                value: 140Gi
       cloudnative-pg:
         helmValues:
           replicaCount: 2
+      descheduler:
+        helmValues:
+          leaderElection:
+            enabled: true
+          replicas: 2
       dragonfly-manager:
         helmValues:
           manager:

@@ -76,7 +76,7 @@ signoz:
   image:
     registry: docker.io
     repository: signoz/signoz
-    tag: v0.144.0@sha256:8890bd16bae9c6819fe5f15a6c4737da65f2aea514af40b1b27ca02232caa7fc
+    tag: v0.145.0@sha256:1301f2df51f01ba4227dfd5a8281e61d10aa09b771d2b20a30027bc68dba993d
   priorityClassName: cluster-operators
   annotations:
     vpa.autoscaling.k8s.io/enabled: "custom"
@@ -100,7 +100,7 @@ signoz:
     seccompProfile: {type: RuntimeDefault}
   resources:
     requests: {cpu: 250m, memory: 512Mi}
-    limits: {cpu: "1", memory: 2Gi}
+    limits: {cpu: "8", memory: 2Gi}
 otelCollector:
   affinity:
     podAntiAffinity:

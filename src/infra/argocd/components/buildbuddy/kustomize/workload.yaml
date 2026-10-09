@@ -76,7 +76,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: buildbuddy
-          image: gcr.io/flame-public/buildbuddy-app-onprem:v2.312.0@sha256:43a4c9b02f96b3272ee84572ec2405ac73b88382c3a7afa17639f24730d534a0
+          image: gcr.io/flame-public/buildbuddy-app-onprem:v2.313.0@sha256:4b90f658b19e8cc6b4e389f37c76ee93f72dd74ca880c67b88e5f8bd1982d920
           args: [--config_file=/etc/buildbuddy/config.yaml]
           env:
             - name: BUILDBUDDY_DATABASE_URL

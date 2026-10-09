@@ -82,7 +82,7 @@ spec:
           Type=oneshot
           RemainAfterExit=yes
           TimeoutStartSec=600
-          ExecStart=/usr/bin/bash -c 'until ctr version >/dev/null 2>&1; do sleep 1; done; REGISTRY="000000000000.dkr.ecr.region.amazonaws.com"; REGION="$$(echo "$$REGISTRY" | cut -d. -f4)"; TOKEN="$$(aws ecr get-login-password --region "$$REGION")"; for img in "$$REGISTRY/mirror/busybox:1.37.0" "$$REGISTRY/mirror/dragonflyoss/client:v1.5.7"; do ctr -n k8s.io image pull --snapshotter stargz --user "AWS:$$TOKEN" "$$img"; done'
+          ExecStart=/usr/bin/bash -c 'until ctr version >/dev/null 2>&1; do sleep 1; done; REGISTRY="000000000000.dkr.ecr.region.amazonaws.com"; REGION="$$(echo "$$REGISTRY" | cut -d. -f4)"; TOKEN="$$(aws ecr get-login-password --region "$$REGION")"; for img in "$$REGISTRY/mirror/busybox:1.38.0@sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0" "$$REGISTRY/src/third_party/dragonflyoss/client:upstream-3904607@sha256:ecb877a7e658c7d76b1318b4266ecb1f2e264f8c5bcb44ffa7045b87a887a856"; do ctr -n k8s.io image pull --snapshotter stargz --user "AWS:$$TOKEN" "$$img"; done'
 
           [Install]
           WantedBy=multi-user.target

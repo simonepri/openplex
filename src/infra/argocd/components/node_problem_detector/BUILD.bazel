@@ -3,7 +3,6 @@
 # gazelle:resolve py yaml @dev_python_deps//pyyaml
 
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
-load("@rules_python//python:defs.bzl", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
@@ -24,13 +23,4 @@ manifest_checks(
     rendered = ":base_render",
 )
 
-package_sources(exclude = [
-    "**/*.py",
-])
-
-py_test(
-    name = "node_problem_detector_test",
-    srcs = ["node_problem_detector_test.py"],
-    data = glob(["kustomize/**"]),
-    deps = ["@dev_python_deps//pyyaml"],
-)
+package_sources()

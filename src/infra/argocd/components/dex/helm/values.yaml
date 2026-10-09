@@ -17,7 +17,7 @@ https: {enabled: false}
 image:
   # LINT.IfChange(dex-kubernetes-storage-crds)
   repository: ghcr.io/dexidp/dex
-  tag: master@sha256:5753ac2b285805dee4f57bb198e8bf55c1531cf8a62ef16d9cb903bcaf40b2b2
+  tag: master@sha256:0ae7ade1bdf1c83f7f7ccb1935912ac4c116e3e8ecc7e7503b30bab77e7c896c
   # LINT.ThenChange(//src/infra/argocd/components/dex/kustomize/storage-crds.yaml:dex-kubernetes-storage-crds)
 rbac:
   createClusterScoped: false

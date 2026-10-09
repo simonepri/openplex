@@ -30,6 +30,7 @@ parameters:
 allowVolumeExpansion: false
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
+{{- if .Capabilities.APIVersions.Has "snapshot.storage.k8s.io/v1" }}
 ---
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshotClass
@@ -39,4 +40,5 @@ metadata:
     snapshot.storage.kubernetes.io/is-default-class: "true"
 driver: pd.csi.storage.gke.io
 deletionPolicy: Retain
+{{- end }}
 {{- end }}

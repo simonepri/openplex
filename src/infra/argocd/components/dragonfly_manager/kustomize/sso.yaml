@@ -30,7 +30,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: bridge
-          image: docker.io/cluster/dragonfly-sso@sha256:4232376de19a6b1b7288654478c0a30234bf0419409ed9c284dd856735e08a67
+          image: placeholder.invalid/src/infra/tools/dragonfly_sso:inventory
           imagePullPolicy: IfNotPresent
           env:
             - {name: CELL_ID, value: invalid}

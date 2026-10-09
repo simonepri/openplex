@@ -2,9 +2,9 @@
 
 # Reading BuildBuddy Results
 
-Use the `bb` CLI from [BuildBuddy](https://github.com/buildbuddy-io/buildbuddy) to read CI logs and failed tests, and the BuildBuddy API to read timing profiles. Both work from inside the repository, where mise provides `bb` and `mise run init` has stored your login.
+Use the `bb` CLI from [BuildBuddy](https://github.com/buildbuddy-io/buildbuddy) to read CI logs and failed tests, and the BuildBuddy API to read timing profiles. Both work from inside the repository, where mise provides `bb` and `mise run login` has stored your login.
 
-**Prerequisites:** `bb login --check` exits with 0; `mise run init` performs the login.
+**Prerequisites:** `bb login --check` exits with 0; `mise run login` performs the login (init still calls it).
 
 ## Choosing a BuildBuddy profile
 
@@ -14,22 +14,22 @@ Use the `bb` CLI from [BuildBuddy](https://github.com/buildbuddy-io/buildbuddy) 
 - `bb-cloud-proxy` extends `bb-cloud` and reads the cache through the in-cluster enterprise cache proxy; adding it on top of `bb-cloud` still counts as one flavor.
 - `bb-community` uses the in-cluster community BuildBuddy cache; each deployment sets its own build event service.
 
-Then pick at most one execution profile, which sends actions to remote executors. Neither combines with `bb-community`:
+Then pick an execution profile, which sends actions to remote executors. `bb-rbe-sh` refines `bb-rbe-cloud` with self-hosted platforms. Neither combines with `bb-community`:
 
 - `bb-rbe-cloud` runs actions on BuildBuddy cloud executors.
 - `bb-rbe-sh` runs actions on self-hosted executors through the `//src/bazel/runners:sh_cpu` and `:sh_gpu` platforms and turns on `--//src/bazel/runners:gpu_runners`.
 
 `ci` only tunes Bazel for CI machines and contacts no BuildBuddy service on its own. Configs whose names start with `_` are building blocks for the profiles above; never select them directly.
 
-The root `.bazelrc` selects no BuildBuddy profile by default; openplex leaves this choice to downstream repositories and developer overrides. Each site adds profiles on top of any root default, and `//src/bazel/profiles` rejects any site whose combined selection is invalid:
+The root `.bazelrc` selects `bb-cloud` and `bb-rbe-cloud` by default in this repository; openplex has no default. Bazel actions use BuildBuddy remote execution unless a later configuration or local strategy overrides it. Pass `--config=bb-local` to a Bazel command to run its actions locally, for example `bazel test --config=bb-local //...`. For task wrappers that launch nested Bazel commands, set `BAZELRC=src/bazel/profiles/local.bazelrc`; Bazel loads this environment-selected rc after the workspace rc ([Bazel rc file order](https://bazel.build/versions/9.2.0/run/bazelrc)). The `mise run fix`, `mise run test`, and `mise run build` tasks accept `--all` to run against the entire codebase, such as `mise run test -- --all`. Each site adds profiles on top of the default, and `//src/bazel/profiles` rejects any site whose combined selection is invalid:
 
-| Site | Adds | Effective selection |
+| Site | Adds | Effective selection in this repository |
 |---|---|---|
-| Laptop | `--config=bb-cloud` (optional) | `bb-cloud` |
-| `buildbuddy.yaml`, all actions | `--config=ci --config=bb-cloud` | `bb-cloud`, `ci` |
-| Coder, cell label `buildbuddy.io/mode: cloud` | `--config=bb-cloud`, or `--config=bb-cloud-proxy` with `buildbuddy.io/enterprise-proxy: enabled`; plus `--config=bb-rbe-sh` unless `buildbuddy.io/executors` is `none` | `bb-cloud`, optionally `bb-cloud-proxy` and `bb-rbe-sh` |
-| Coder, cell label `buildbuddy.io/mode: community` or unset | `--config=bb-community` | `bb-community` |
-| GitHub Actions CI | `--config=ci` | `ci` |
+| Laptop | nothing | `bb-cloud`, `bb-rbe-cloud` |
+| `buildbuddy.yaml`, all actions | `--config=ci --config=bb-cloud` | `bb-cloud`, `bb-rbe-cloud`, `ci` (CI clears the executor) |
+| Coder, cell label `buildbuddy.io/mode: cloud` | `--config=bb-cloud`, or `--config=bb-cloud-proxy` with `buildbuddy.io/enterprise-proxy: enabled`; plus `--config=bb-rbe-sh` unless `buildbuddy.io/executors` is `none` | `bb-cloud`, `bb-rbe-cloud`, optionally `bb-cloud-proxy` and `bb-rbe-sh`; `executors=none` clears the executor |
+| Coder, cell label `buildbuddy.io/mode: community` or unset | `--config=bb-community` | invalid on top of the `bb-cloud` default |
+| GitHub Actions CI (openplex) | `--config=ci` | `ci` |
 
 A test that needs a GPU opts in through the platform constraint, so it runs only where GPU runners exist and is skipped elsewhere:
 
@@ -98,4 +98,4 @@ The profile is a gzipped Chrome trace. Sort its `traceEvents` entries with `"ph"
 
 ## Keep the API key private
 
-`bb login` stores your personal API key in `.git/config` under `buildbuddy.api-key`. Plain `bazel` reads it from there through the credential helper in [`src/bazel/tools/buildbuddy`](../tools/buildbuddy), and the root `.bazelrc` selects no key by default, so the key never lands in a bazelrc file. Never print `.git/config` or the `buildbuddy` git config section; check the login with `bb login --check`.
+`bb login` stores your personal API key in `.git/config` under `buildbuddy.api-key`. Plain `bazel` reads it from there through the credential helper in [`src/bazel/tools/buildbuddy`](../tools/buildbuddy), and the root `.bazelrc` selects `bb-cloud`, so the key never lands in a bazelrc file. Never print `.git/config` or the `buildbuddy` git config section; check the login with `bb login --check`.

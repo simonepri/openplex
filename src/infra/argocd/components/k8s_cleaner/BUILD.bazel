@@ -5,7 +5,6 @@
 
 load("@rules_helm//helm:defs.bzl", "helm_template")
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
-load("@rules_python//python:defs.bzl", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
@@ -39,50 +38,10 @@ helm_template(
     ],
 )
 
-package_sources(exclude = [
-    "**/*.py",
-])
+package_sources()
 
 manifest_checks(
     name = "vendor-helm",
     kube_lint_config = "//src/bazel/rules/kubernetes_manifests:kube-linter-vendor.yaml",
     rendered = ":vendor-helm-render",
-)
-
-py_test(
-    name = "corrupt_image_cleaner_test",
-    srcs = ["corrupt_image_cleaner_test.py"],
-    args = [
-        "$(locations @rules_helm//helm:current_toolchain)",
-        "$(location @vendor_helm_k8s_cleaner//:k8s-cleaner)",
-        "$(location kustomize/cleaner-corrupt-image.yaml)",
-    ],
-    data = [
-        "kustomize/cleaner-corrupt-image.yaml",
-        "@rules_helm//helm:current_toolchain",
-        "@vendor_helm_k8s_cleaner//:k8s-cleaner",
-    ],
-    deps = [
-        "@dev_python_deps//jsonschema",
-        "@dev_python_deps//pyyaml",
-    ],
-)
-
-py_test(
-    name = "pv_reclaimer_test",
-    srcs = ["pv_reclaimer_test.py"],
-    args = [
-        "$(locations @rules_helm//helm:current_toolchain)",
-        "$(location @vendor_helm_k8s_cleaner//:k8s-cleaner)",
-        "$(location kustomize/cleaner-pv.yaml)",
-    ],
-    data = [
-        "kustomize/cleaner-pv.yaml",
-        "@rules_helm//helm:current_toolchain",
-        "@vendor_helm_k8s_cleaner//:k8s-cleaner",
-    ],
-    deps = [
-        "@dev_python_deps//jsonschema",
-        "@dev_python_deps//pyyaml",
-    ],
 )

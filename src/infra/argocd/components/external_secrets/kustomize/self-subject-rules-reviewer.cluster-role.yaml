@@ -1,6 +1,5 @@
 # Shared Local permission allowing Kubernetes-provider reader identities to prove their effective source-namespace access without granting any Secret access.
 
-# LINT.IfChange(team-dev-secrets-kubernetes-ssrr)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -12,4 +11,3 @@ rules:
   - apiGroups: [authorization.k8s.io]
     resources: [selfsubjectrulesreviews]
     verbs: [create]
-# LINT.ThenChange(//src/infra/argocd/components/team_namespace/helm/templates/dev_secrets.yaml:team-dev-secrets-kubernetes-ssrr)

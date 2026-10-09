@@ -2,7 +2,7 @@
 
 image:
   repository: ghcr.io/akuity/kargo
-  tag: v1.12.1@sha256:1fd3cb63d4f9a7148aec30d893b7e85edf3a55d02f69d406693ef176c1c9a44a
+  tag: v1.12.3@sha256:6ff570652faa61bd57b9f6e091199a3182031824bf3852c82ac30e13faf49400
 
 global:
   # Avoid the deprecated kargo-cluster-secrets compatibility namespace. The
@@ -54,7 +54,7 @@ api:
       value: /state/ca-bundle.crt
   initContainers:
     - name: ca-bundle
-      image: ghcr.io/akuity/kargo:v1.12.1@sha256:1fd3cb63d4f9a7148aec30d893b7e85edf3a55d02f69d406693ef176c1c9a44a
+      image: ghcr.io/akuity/kargo:v1.12.3@sha256:6ff570652faa61bd57b9f6e091199a3182031824bf3852c82ac30e13faf49400
       command: [/bin/sh, -ec]
       args:
         - cat /etc/ssl/certs/ca-certificates.crt /etc/local-ca/ca.crt > /state/ca-bundle.crt
@@ -131,7 +131,7 @@ controller:
       value: /state/ca-bundle.crt
   initContainers:
     - name: ca-bundle
-      image: ghcr.io/akuity/kargo:v1.12.1@sha256:1fd3cb63d4f9a7148aec30d893b7e85edf3a55d02f69d406693ef176c1c9a44a
+      image: ghcr.io/akuity/kargo:v1.12.3@sha256:6ff570652faa61bd57b9f6e091199a3182031824bf3852c82ac30e13faf49400
       command: [/bin/sh, -ec]
       args:
         - cat /etc/ssl/certs/ca-certificates.crt /etc/local-ca/ca.crt > /state/ca-bundle.crt

@@ -1,4 +1,4 @@
-# Kustomize base assembling BuildBuddy executor queues, secrets, policies, and PDB.
+# Kustomize base assembling BuildBuddy namespace, executor queues, secrets, policies, PDB, and executor ServiceAccount.
 
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -9,4 +9,5 @@ resources:
   - namespace.yaml
   - network-policy.yaml
   - pdb.yaml
+  - serviceaccount.yaml
   # keep-sorted end

@@ -1,4 +1,4 @@
-"""Defines build and check targets for the valkey_operator Argo CD component."""
+"""Defines build and check targets for the descheduler Argo CD component."""
 
 load("@rules_helm//helm:defs.bzl", "helm_template")
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
@@ -24,7 +24,7 @@ manifest_checks(
 
 helm_template(
     name = "vendor-helm-render",
-    chart = "@vendor_helm_valkey_operator//:valkey-operator",
+    chart = "@vendor_helm_descheduler//:descheduler",
     opts = [
         "--include-crds",
         "--namespace",

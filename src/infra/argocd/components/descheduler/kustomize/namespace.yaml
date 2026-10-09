@@ -1,9 +1,9 @@
-# Namespace hosting cell-wide BuildBuddy remote cache and its metadata database.
+# Defines namespace `descheduler-system` hosting the descheduler deployment.
 
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: buildbuddy
+  name: descheduler-system
   labels:
     app.kubernetes.io/managed-by: argocd
     app.kubernetes.io/part-of: cluster-runtime

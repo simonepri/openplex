@@ -59,12 +59,16 @@ networkPolicy:
             matchLabels: {kubernetes.io/metadata.name: keda-system}
           podSelector:
             matchLabels: {app.kubernetes.io/name: keda-operator}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: keda-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: keda-operator-metrics-apiserver}
       ports: [{protocol: TCP, port: 9090}]
 collection:
   mode: standalone
   image:
     repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
-    tag: 0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+    tag: 0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
   otlp:
     endpoint: http://otel-collector.otel-system.svc.cluster.local:4318
     insecure: true
@@ -77,16 +81,7 @@ collection:
         - targets: ['trivy-operator.trivy-system.svc:8080']
       metric_relabel_configs:
         - source_labels: [__name__]
-          regex: trivy_cluster_compliance|trivy_image_exposedsecrets|trivy_image_vulnerabilities
-          action: keep
-    - job_name: kubescape-operator
-      scrape_interval: 60s
-      metrics_path: /metrics
-      static_configs:
-        - targets: ['prometheus-exporter.kubescape-system.svc:8080']
-      metric_relabel_configs:
-        - source_labels: [__name__]
-          regex: kubescape_controls_total_cluster_critical|kubescape_controls_total_cluster_high|kubescape_controls_total_cluster_low|kubescape_controls_total_cluster_medium|kubescape_controls_total_namespace_critical|kubescape_controls_total_namespace_high|kubescape_controls_total_namespace_low|kubescape_controls_total_namespace_medium
+          regex: trivy_cluster_compliance|trivy_clusterrole_clusterrbacassessments|trivy_image_exposedsecrets|trivy_image_vulnerabilities|trivy_resource_configaudits|trivy_role_rbacassessments
           action: keep
   sources:
     cadvisor:
@@ -140,6 +135,7 @@ collection:
       enabled: true
       target: prometheus-api-bridge-kube-state-metrics.signoz.svc:8080
       metrics:
+        # keep-sorted start
         - kube_argocd_application_operation_phase
         - kube_cronjob_info
         - kube_cronjob_status_last_successful_time
@@ -161,11 +157,15 @@ collection:
         - kube_pod_container_status_last_terminated_reason
         - kube_pod_container_status_restarts_total
         - kube_pod_container_status_running
+        - kube_pod_info
         - kube_pod_labels
         - kube_pod_owner
+        - kube_pod_status_phase
+        - kube_service_info
         - kube_storageclass_info
         - kube_velero_backup_completion_timestamp
         - kube_velero_schedule_created
+        # keep-sorted end
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: "2", memory: 1Gi}
@@ -174,8 +174,13 @@ kube-state-metrics:
   fullnameOverride: prometheus-api-bridge-kube-state-metrics
   image:
     sha: sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1
-  collectors: [cronjobs, jobs, namespaces, nodes, persistentvolumeclaims, persistentvolumes, pods, storageclasses]
-  metricLabelsAllowlist: ["pods=[*]"]
+  collectors: [cronjobs, jobs, namespaces, nodes, persistentvolumeclaims, persistentvolumes, pods, services, storageclasses]
+  metricLabelsAllowlist:
+    # keep-sorted start
+    - namespaces=[team]
+    - nodes=[gpu-class,karpenter.sh/capacity-type,nvidia.com/gpu.product]
+    - pods=[*]
+    # keep-sorted end
   rbac:
     extraRules:
       - apiGroups: [argoproj.io]

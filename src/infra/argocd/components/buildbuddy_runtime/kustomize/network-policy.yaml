@@ -67,10 +67,6 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: buildbuddy-enterprise-cache-proxy
-        - namespaceSelector: {}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: buildbuddy-enterprise-cache-proxy
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: buildbuddy-cache

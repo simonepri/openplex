@@ -10,7 +10,6 @@ resources:
   # keep-sorted start
   - database.yaml
   - gateway-service.yaml
-  - namespace.yaml
   - network-policy.yaml
   - vpa.yaml
   - workload.yaml

@@ -19,7 +19,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/part-of: team-lane
+              app.kubernetes.io/part-of: coder-workspaces
           # LINT.IfChange(coder-workspace-infrastructure-identity)
           podSelector:
             matchLabels:
