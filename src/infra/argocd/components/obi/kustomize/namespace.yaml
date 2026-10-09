@@ -1,0 +1,17 @@
+# Defines the privileged namespace for OpenTelemetry eBPF Instrumentation (OBI) runtime sensors across cloud and control clusters.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: obi-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: cluster-runtime
+    cost-center: shared-infrastructure
+    environment: production
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/warn-version: latest

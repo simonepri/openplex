@@ -1,0 +1,90 @@
+# Configures base Helm values for OpenTelemetry eBPF Instrumentation (OBI) across control and cell clusters.
+
+image:
+  registry: ghcr.io
+  repository: open-telemetry/opentelemetry-ebpf-instrumentation/ebpf-instrument
+  tag: v0.14.0@sha256:0b063b9ec47e10dd4503ce1dc21f273acd3c85ffc9c135f0b753ee64de9c0819
+  digest: sha256:0b063b9ec47e10dd4503ce1dc21f273acd3c85ffc9c135f0b753ee64de9c0819
+
+# LINT.IfChange(obi-privilege-exception)
+nameOverride: obi
+fullnameOverride: obi
+namespaceOverride: obi-system
+
+preset: network
+privileged: true
+
+securityContext:
+  privileged: true
+
+podLabels: {}
+# LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/policies.yaml:obi-privilege-exception)
+
+# Default priority: on a full node OBI waits for room instead of evicting running workloads.
+priorityClassName: ""
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            # Cloud providers do not expose their managed control planes as
+            # workload nodes. Preserve that topology locally and keep the
+            # control-plane cgroups available to Kubernetes itself.
+            - key: node-role.kubernetes.io/control-plane
+              operator: DoesNotExist
+
+tolerations:
+  - operator: Exists
+
+nodeSelector:
+  kubernetes.io/os: linux
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# A pod waiting for room on a full node must not stall the rollout; a brief gap in flows is harmless.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 50%
+
+service:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
+
+contextPropagation:
+  enabled: false
+
+config:
+  create: true
+  data:
+    file_format: "1.0"
+    meter_provider:
+      readers:
+        - periodic:
+            interval: 60000
+            exporter:
+              otlp_http:
+                endpoint: "http://${HOST_IP}:4318"
+                encoding: protobuf
+                default_histogram_aggregation: explicit_bucket_histogram
+    extensions:
+      obi:
+        version: "2.0"
+        capture:
+          # Flows only: no process is instrumented, so OBI emits no spans and rewrites no traffic.
+          policy:
+            default_action: exclude
+          network:
+            capture:
+              enabled: true
+              # The chart's default filter hides every owner named kube*; a security view needs all of them.
+              filters: null

@@ -1,0 +1,174 @@
+# Configures base Helm values for the single-replica collector that ingests filtered cloud audit
+# and network logs into SigNoz. The ApplicationSet injects the cloud receiver, log sources,
+# cluster name and internal DNS suffixes for each cluster.
+
+mode: deployment
+replicaCount: 1
+# The receiver locks its checkpoint file, so a new pod can only start once the old one stops.
+rollout:
+  strategy: Recreate
+
+image:
+  repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
+  tag: 0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+
+serviceAccount:
+  create: false
+  name: cloud-telemetry
+
+# The image runs as 10001; fsGroup lets it write checkpoints to the volume.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+extraEnvs:
+  # keep-sorted start
+  - name: INTERNAL_DNS_SUFFIXES
+    value: ""
+  - name: K8S_CLUSTER_NAME
+    value: ""
+    # keep-sorted end
+
+extraVolumes:
+  - name: collector-storage
+    persistentVolumeClaim:
+      claimName: cloud-telemetry-storage
+
+extraVolumeMounts:
+  - name: collector-storage
+    mountPath: /var/lib/otelcol/file_storage
+
+config:
+  extensions:
+    file_storage:
+      directory: /var/lib/otelcol/file_storage
+    # Decodes Google Cloud Log Router entries for the Pub/Sub receiver.
+    googlecloudlogentry_encoding: {}
+    health_check:
+      endpoint: ${env:MY_POD_IP}:13133
+
+  # The ApplicationSet adds the cloud receiver (awscloudwatch or googlecloudpubsub)
+  # and lists it in the logs pipeline. Null entries remove the chart's defaults.
+  receivers:
+    # keep-sorted start
+    jaeger: null
+    otlp: null
+    prometheus: null
+    zipkin: null
+    # keep-sorted end
+
+  processors:
+    memory_limiter:
+      check_interval: 1s
+      limit_percentage: 75
+      spike_limit_percentage: 20
+    transform/parse:
+      # A failed statement would log one warning per record, and those logs return to SigNoz.
+      error_mode: silent
+      log_statements:
+        - context: log
+          statements:
+            - set(attributes["log.source"], "cloud-audit") where IsMatch(resource.attributes["cloudwatch.log.group.name"], "^/aws/cloudtrail/")
+            - set(attributes["log.source"], "kubernetes-audit") where IsMatch(resource.attributes["cloudwatch.log.group.name"], "^/aws/eks/")
+            - set(attributes["log.source"], "network-policy") where IsMatch(resource.attributes["cloudwatch.log.stream"], "^aws-network-policy-agent-audit")
+            - set(attributes["log.source"], "dns-query") where IsMatch(resource.attributes["cloudwatch.log.group.name"], "^/aws/route53/")
+            - set(attributes["log.source"], "network-flow") where IsMatch(resource.attributes["cloudwatch.log.group.name"], "^/aws/vpc/")
+            # CloudTrail, EKS audit and Route 53 resolver records are JSON; rules and dashboards query the fields lifted out of them.
+            - set(attributes["parsed"], ParseJSON(body)) where IsMatch(resource.attributes["cloudwatch.log.group.name"], "^/aws/(cloudtrail|eks|route53)/") and IsMatch(body, "^\\s*\\{")
+            - set(attributes["aws.event_name"], attributes["parsed"]["eventName"]) where attributes["log.source"] == "cloud-audit"
+            - set(attributes["aws.event_source"], attributes["parsed"]["eventSource"]) where attributes["log.source"] == "cloud-audit"
+            - set(attributes["aws.read_only"], attributes["parsed"]["readOnly"]) where attributes["log.source"] == "cloud-audit"
+            - set(attributes["aws.error_code"], attributes["parsed"]["errorCode"]) where attributes["log.source"] == "cloud-audit"
+            - set(attributes["aws.principal_arn"], attributes["parsed"]["userIdentity"]["arn"]) where attributes["log.source"] == "cloud-audit" and IsMap(attributes["parsed"]["userIdentity"])
+            - set(attributes["aws.source_ip"], attributes["parsed"]["sourceIPAddress"]) where attributes["log.source"] == "cloud-audit"
+            - set(attributes["aws.bucket_name"], attributes["parsed"]["requestParameters"]["bucketName"]) where attributes["log.source"] == "cloud-audit" and IsMap(attributes["parsed"]["requestParameters"])
+            - set(attributes["k8s.audit.verb"], attributes["parsed"]["verb"]) where attributes["log.source"] == "kubernetes-audit"
+            - set(attributes["k8s.audit.user"], attributes["parsed"]["user"]["username"]) where attributes["log.source"] == "kubernetes-audit" and IsMap(attributes["parsed"]["user"])
+            - set(attributes["k8s.audit.resource"], attributes["parsed"]["objectRef"]["resource"]) where attributes["log.source"] == "kubernetes-audit" and IsMap(attributes["parsed"]["objectRef"])
+            - set(attributes["k8s.audit.subresource"], attributes["parsed"]["objectRef"]["subresource"]) where attributes["log.source"] == "kubernetes-audit" and IsMap(attributes["parsed"]["objectRef"])
+            - set(attributes["k8s.audit.namespace"], attributes["parsed"]["objectRef"]["namespace"]) where attributes["log.source"] == "kubernetes-audit" and IsMap(attributes["parsed"]["objectRef"])
+            - set(attributes["k8s.audit.name"], attributes["parsed"]["objectRef"]["name"]) where attributes["log.source"] == "kubernetes-audit" and IsMap(attributes["parsed"]["objectRef"])
+            - set(attributes["dns.query_name"], attributes["parsed"]["query_name"]) where attributes["log.source"] == "dns-query"
+            - set(attributes["dns.query_type"], attributes["parsed"]["query_type"]) where attributes["log.source"] == "dns-query"
+            - set(attributes["dns.rcode"], attributes["parsed"]["rcode"]) where attributes["log.source"] == "dns-query"
+            # Google Cloud entries name their format in a scope attribute; GKE audit entries carry the k8s_cluster resource type.
+            - set(attributes["log.source"], "cloud-audit") where instrumentation_scope.attributes["encoding.format"] == "gcp.auditlog"
+            - set(attributes["log.source"], "kubernetes-audit") where instrumentation_scope.attributes["encoding.format"] == "gcp.auditlog" and resource.attributes["gcp.resource_type"] == "k8s_cluster"
+            - set(attributes["log.source"], "dns-query") where instrumentation_scope.attributes["encoding.format"] == "gcp.dns"
+            - set(attributes["log.source"], "network-flow") where instrumentation_scope.attributes["encoding.format"] == "gcp.vpcflow"
+            - set(attributes["dns.query_name"], attributes["dns.question.name"]) where instrumentation_scope.attributes["encoding.format"] == "gcp.dns"
+            - set(attributes["dns.query_type"], attributes["dns.question.type"]) where instrumentation_scope.attributes["encoding.format"] == "gcp.dns"
+            - set(attributes["dns.rcode"], attributes["dns.response_code"]) where instrumentation_scope.attributes["encoding.format"] == "gcp.dns"
+            # Google Cloud flow logs record only allowed connections.
+            - set(attributes["flow_action"], "ACCEPT") where instrumentation_scope.attributes["encoding.format"] == "gcp.vpcflow"
+            - set(attributes["flow_srcaddr"], attributes["source.address"]) where instrumentation_scope.attributes["encoding.format"] == "gcp.vpcflow"
+            - set(attributes["flow_dstaddr"], attributes["destination.address"]) where instrumentation_scope.attributes["encoding.format"] == "gcp.vpcflow"
+            - set(attributes["flow_srcport"], Format("%v", [attributes["source.port"]])) where instrumentation_scope.attributes["encoding.format"] == "gcp.vpcflow" and attributes["source.port"] != nil
+            - set(attributes["flow_dstport"], Format("%v", [attributes["destination.port"]])) where instrumentation_scope.attributes["encoding.format"] == "gcp.vpcflow" and attributes["destination.port"] != nil
+            # The raw record stays in the body.
+            - delete_key(attributes, "parsed")
+            # VPC flow logs use the default space-separated record format.
+            - merge_maps(attributes, ExtractPatterns(body, "^(?P<flow_version>\\S+) (?P<flow_account_id>\\S+) (?P<flow_interface_id>\\S+) (?P<flow_srcaddr>\\S+) (?P<flow_dstaddr>\\S+) (?P<flow_srcport>\\S+) (?P<flow_dstport>\\S+) (?P<flow_protocol>\\S+) (?P<flow_packets>\\S+) (?P<flow_bytes>\\S+) (?P<flow_start>\\S+) (?P<flow_end>\\S+) (?P<flow_action>\\S+) (?P<flow_log_status>\\S+)$"), "upsert") where IsMatch(resource.attributes["cloudwatch.log.group.name"], "^/aws/vpc/")
+            # Network policy denial logs use semicolon-separated key-value pairs.
+            - 'merge_maps(attributes, ExtractPatterns(body, "^Node: (?P<node>[^;]+);SIP: (?P<src_ip>[^;]+);SPORT: (?P<src_port>[^;]+);DIP: (?P<dst_ip>[^;]+);DPORT: (?P<dst_port>[^;]+);PROTOCOL: (?P<protocol>[^;]+);PolicyVerdict: (?P<verdict>[^;]+);Tier:?[ ]*(?P<tier>[^;]*?)[ ]*$"), "upsert") where attributes["log.source"] == "network-policy"'
+        # One collector reads every cluster's log groups, so each record takes its cluster from the log group name:
+        # /aws/eks/<cluster>/, /aws/vpc/<cluster>-vpc/ and /aws/route53/resolver-queries/<cluster>-vpc.
+        - context: resource
+          statements:
+            - merge_maps(attributes, ExtractPatterns(attributes["cloudwatch.log.group.name"], "^/aws/eks/(?P<log_cluster>[^/]+)/"), "upsert") where IsMatch(attributes["cloudwatch.log.group.name"], "^/aws/eks/")
+            - merge_maps(attributes, ExtractPatterns(attributes["cloudwatch.log.group.name"], "^/aws/vpc/(?P<log_cluster>[^/]+)-vpc/"), "upsert") where IsMatch(attributes["cloudwatch.log.group.name"], "^/aws/vpc/")
+            - merge_maps(attributes, ExtractPatterns(attributes["cloudwatch.log.group.name"], "^/aws/route53/resolver-queries/(?P<log_cluster>[^/]+)-vpc$"), "upsert") where IsMatch(attributes["cloudwatch.log.group.name"], "^/aws/route53/")
+            - set(attributes["k8s.cluster.name"], attributes["log_cluster"]) where attributes["log_cluster"] != nil
+            - delete_key(attributes, "log_cluster")
+    filter/noise:
+      error_mode: ignore
+      logs:
+        log_record:
+          # Routine reads by control-plane components and system service accounts; secret reads stay.
+          - attributes["log.source"] == "kubernetes-audit" and IsMatch(attributes["k8s.audit.verb"], "^(get|list|watch)$") and IsMatch(attributes["k8s.audit.user"], "^(system:(node:|kube-controller-manager|kube-scheduler|apiserver|serviceaccount:(kube-system|argocd|kyverno|external-secrets-system|cert-manager-system):)|eks:)") and attributes["k8s.audit.resource"] != "secrets"
+          # Lookups of internal names; the ApplicationSet provides the suffix alternation.
+          - attributes["log.source"] == "dns-query" and IsMatch(attributes["dns.query_name"], "(^|\\.)(${env:INTERNAL_DNS_SUFFIXES})\\.?$")
+          # Capture windows in which an interface carried no traffic.
+          - attributes["log.source"] == "network-flow" and attributes["flow_log_status"] == "NODATA"
+          # Accepted flows between private addresses; rejected and external flows stay.
+          - attributes["log.source"] == "network-flow" and attributes["flow_action"] == "ACCEPT" and IsMatch(attributes["flow_srcaddr"], "^(10\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.|192\\.168\\.)") and IsMatch(attributes["flow_dstaddr"], "^(10\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.|192\\.168\\.)")
+          # Network policy verdicts other than denials; the agent also publishes accepts at debug log level.
+          - attributes["log.source"] == "network-policy" and attributes["verdict"] != "DENY"
+    resource/cluster:
+      attributes:
+        # keep-sorted start
+        # Records that name their own cluster keep it; everything else belongs to the collector's cluster.
+        - {key: k8s.cluster.name, value: "${env:K8S_CLUSTER_NAME}", action: insert}
+        - {key: service.name, value: cloud-telemetry, action: upsert,}
+        # keep-sorted end
+    # Audit records are large; bigger batches exceed the SigNoz request body limit.
+    batch:
+      send_batch_size: 1024
+      send_batch_max_size: 1024
+      timeout: 5s
+
+  exporters:
+    debug: null
+    otlphttp/signoz:
+      endpoint: http://signoz-otel-collector.signoz.svc.cluster.local:4318
+
+  service:
+    extensions: [file_storage, googlecloudlogentry_encoding, health_check]
+    pipelines:
+      metrics: null
+      traces: null
+      logs:
+        receivers: []
+        processors: [memory_limiter, transform/parse, filter/noise, resource/cluster, batch]
+        exporters: [otlphttp/signoz]

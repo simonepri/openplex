@@ -1,0 +1,13 @@
+# Composes cloud telemetry companion manifests and policies in the otel-system namespace owned by otel-collector.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: otel-system
+resources:
+  # keep-sorted start
+  - network-policy.yaml
+  - pdb.yaml
+  - pvc.yaml
+  - serviceaccount.yaml
+  - vpa.yaml
+  # keep-sorted end

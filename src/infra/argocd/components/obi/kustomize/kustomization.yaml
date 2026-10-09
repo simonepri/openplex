@@ -1,0 +1,10 @@
+# Kustomize entrypoint for OBI eBPF instrumentation component, defining privileged namespace, network policy, and vertical pod autoscaler.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # keep-sorted start
+  - namespace.yaml
+  - network-policy.yaml
+  - vpa.yaml
+  # keep-sorted end

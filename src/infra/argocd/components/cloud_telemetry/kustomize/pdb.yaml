@@ -1,0 +1,18 @@
+# Disruption budget for the cloud-telemetry collector Deployment.
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cloud-telemetry
+  namespace: otel-system
+  labels:
+    app.kubernetes.io/component: collector
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: cloud-telemetry
+    app.kubernetes.io/part-of: opentelemetry
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloud-telemetry
