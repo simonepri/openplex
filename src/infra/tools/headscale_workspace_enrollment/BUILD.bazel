@@ -2,7 +2,7 @@
 
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_load", "oci_push")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_push")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
@@ -32,14 +32,11 @@ go_library(
     name = "headscale_workspace_enrollment_lib",
     srcs = [
         "coder_authenticator.go",
-        "lineage_claim.go",
         "main.go",
         "owner_binding.go",
         "preauth_key_lifecycle.go",
         "runtime_listener.go",
         "service_daemons.go",
-        "snapshot_claim.go",
-        "snapshot_principal.go",
         "workspace_agent_registration.go",
     ],
     importpath = "go.invalid/internal/tools/headscale_workspace_enrollment",
@@ -56,12 +53,10 @@ go_binary(
 go_test(
     name = "headscale_workspace_enrollment_test",
     srcs = [
-        "lineage_claim_test.go",
         "main_test.go",
         "owner_binding_test.go",
         "preauth_key_lifecycle_test.go",
         "runtime_listener_test.go",
-        "snapshot_claim_test.go",
         "workspace_agent_registration_test.go",
     ],
     embed = [":headscale_workspace_enrollment_lib"],
@@ -118,14 +113,6 @@ oci_image_index(
     ],
 )
 
-oci_load(
-    name = "preload",
-    format = "oci",
-    image = ":image_multiarch",
-    repo_tags = ["docker.io/infra/headscale-workspace-enrollment:v0.29.3-r6"],
-    tags = ["manual"],
-)
-
 oci_push(
     name = "push",
     image = ":image_multiarch",
@@ -137,12 +124,6 @@ oci_workload_publish(
     image = ":image_multiarch",
     publication_mode = "digest",
     workload_name = "ws-enrollment",
-)
-
-filegroup(
-    name = "preload_archive",
-    srcs = [":preload"],
-    output_group = "tarball",
 )
 
 package_sources()

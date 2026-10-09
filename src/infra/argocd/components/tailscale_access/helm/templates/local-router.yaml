@@ -3,9 +3,6 @@
 {{- if eq .Values.mode "local-router" }}
 {{- include "tailscale-access.validate" . -}}
 {{- $routerHostname := printf "%s-services" .Values.clusterName -}}
-{{- if ne .Values.local.runtimeForwardTarget "" -}}
-{{- $routerHostname = printf "%s-runtime-services" .Values.clusterName -}}
-{{- end -}}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -42,20 +39,6 @@ spec:
       remoteRef:
         key: {{ .Values.local.recordName }}
         property: authkey
-{{- if ne .Values.local.runtimeForwardTarget "" }}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: runtime-serve
-  namespace: tailscale-system
-  labels:
-    app.kubernetes.io/managed-by: argocd
-    app.kubernetes.io/name: tailscale-subnet-router
-data:
-  serve.json: |
-    {"TCP":{"8444":{"TCPForward":{{ .Values.local.runtimeForwardTarget | quote }}}}}
-{{- end }}
 {{- if .Values.egress.enabled }}
 {{- $egressServiceName := ternary "active-ctrl-private-access" "active-cell-private-access" (hasPrefix "cell-" .Values.clusterName) }}
 ---
@@ -227,6 +210,9 @@ spec:
     spec:
       automountServiceAccountToken: false
       priorityClassName: cluster-operators
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: sysctls
           image: {{ printf "%s:%s@%s" .Values.image.repository .Values.image.tag .Values.image.digest }}
@@ -256,9 +242,6 @@ spec:
             - {name: TS_KUBE_SECRET, value: ""}
             - {name: SSL_CERT_FILE, value: /etc/local-ca/ca.crt}
             - {name: TS_EXTRA_ARGS, value: {{ printf "--advertise-tags= %s--login-server=%s" (ternary "--accept-routes=true " "" .Values.egress.enabled) .Values.local.loginServer | quote }}}
-{{- if ne .Values.local.runtimeForwardTarget "" }}
-            - {name: TS_SERVE_CONFIG, value: /etc/tailscale-serve/serve.json}
-{{- end }}
           readinessProbe:
             exec:
               command:
@@ -285,9 +268,6 @@ spec:
             - {name: state, mountPath: /var/lib/tailscale}
             - {name: tmp, mountPath: /tmp}
             - {name: tun, mountPath: /dev/net/tun}
-{{- if ne .Values.local.runtimeForwardTarget "" }}
-            - {name: serve, mountPath: /etc/tailscale-serve, readOnly: true}
-{{- end }}
 {{- if .Values.egress.enabled }}
         - name: private-egress
           image: docker.io/envoyproxy/envoy:distroless-v1.39.0@sha256:7877ad87afd7459e1bd2a077ff601fec7c93aeecd62e71664560d96328c62cf4
@@ -322,11 +302,6 @@ spec:
           emptyDir: {}
         - name: tun
           hostPath: {path: /dev/net/tun, type: CharDevice}
-{{- if ne .Values.local.runtimeForwardTarget "" }}
-        - name: serve
-          configMap:
-            name: runtime-serve
-{{- end }}
 {{- if .Values.egress.enabled }}
         - name: private-egress
           configMap:

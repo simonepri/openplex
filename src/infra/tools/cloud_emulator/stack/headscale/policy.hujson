@@ -46,11 +46,6 @@
     },
     // LINT.ThenChange(//src/bazel/checks/network_exposure/check_network_exposure.py:local-private-dns-member-access)
     {
-      "src": ["autogroup:member", "tag:workspace"],
-      "dst": ["tag:subnet-router"],
-      "ip": ["tcp:8444"],
-    },
-    {
       "src": ["tag:k8s-egress"],
       "dst": ["172.31.0.11/32", "172.31.16.11/32"],
       "ip": ["tcp:443"],

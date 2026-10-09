@@ -14,6 +14,21 @@ operatorConfig:
     digest: sha256:3c8958c42fb3c46068e8553e11b944f2133b4671d4f36c86adc11f206746bf34
   podAnnotations:
     automount-service-account-token: "true"
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
 
 proxyConfig:
   image:

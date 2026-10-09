@@ -14,9 +14,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
-from infra.tools.cloud_emulator import runtime
+from infra.tools.cloud_emulator.engine import compose, readiness
 
-# LINT.IfChange(router-auth-key-contract)
 ROUTER_TAGS = frozenset(("tag:k8s-egress", "tag:subnet-router"))
 KEY_ID = "headscale-preauth-key-id"
 KEY_EXPIRY = "headscale-preauth-expiration-epoch"
@@ -24,16 +23,15 @@ KEY_DIGEST = "headscale-preauth-key-sha256"
 KEY_LIFETIME = "720h"
 ROTATION_LEAD_SECONDS = 86400
 AUTH_KEY = re.compile(r"hskey-auth-([A-Za-z0-9_-]{12})-[A-Za-z0-9_-]{64}")
-# LINT.ThenChange(//src/infra/tools/headscale_key_producer/main.go:router-auth-key-contract)
 
 
 def reconcile(root: Path, *, timeout: int = 600) -> None:
     """Publish a reusable router key before GitOps waits for Tailnet-dependent workloads."""
-    manifest = runtime.load_local_deployment(root)
-    control = runtime.control_cluster_record(manifest)
-    contexts = runtime.cluster_contexts(manifest)
+    manifest = compose.load_local_deployment(root)
+    control = readiness.control_cluster_record(manifest)
+    contexts = readiness.cluster_contexts(manifest)
     record_name = f"headscale-preauth-{control}"
-    fleet = runtime.configuration(root)
+    fleet = compose.configuration(root)
     if not fleet.headscale_container:
         raise RuntimeError("Local router enrollment requires the managed Headscale service")
     command = ["docker", "exec", fleet.headscale_container, "headscale", "preauthkeys"]
@@ -222,7 +220,7 @@ def _kubectl(context: str, *, namespace: str = "secret-records") -> list[str]:
 
 def _run(arguments: list[str], *, stdin: str | None = None) -> str:
     try:
-        return runtime.run(arguments, stdin=stdin, timeout=20).stdout
+        return compose.run(arguments, stdin=stdin, timeout=20).stdout
     except (RuntimeError, subprocess.SubprocessError):
         # CLI failures can contain Secret data; only the operation's failure crosses this boundary.
         raise RuntimeError("Local router enrollment command failed") from None

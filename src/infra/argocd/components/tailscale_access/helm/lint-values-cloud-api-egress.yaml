@@ -25,7 +25,6 @@ local:
   loginServer: https://headscale.invalid
   authSecretName: headscale-preauth
   recordName: ""
-  runtimeForwardTarget: ""
   secretStoreName: local-secret-records
 image:
   repository: ghcr.io/tailscale/tailscale

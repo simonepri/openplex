@@ -76,7 +76,7 @@ type workspaceAgentMetadata struct {
 	IsRoot          *bool  `json:"isRoot,omitempty"`
 	Machine         string `json:"machine"`
 	OwnerID         string `json:"ownerId"`
-	Team            string `json:"team"`
+	Team            string `json:"team,omitempty"`
 	WorkspaceID     string `json:"workspaceId"`
 	WorkspaceName   string `json:"workspaceName"`
 	WorkspaceVolume string `json:"workspaceVolume"`
@@ -211,7 +211,7 @@ func validWorkspaceAgentIdentifiers(metadata workspaceAgentMetadata) bool {
 	return userID.MatchString(metadata.BuildID) && userID.MatchString(metadata.OwnerID) &&
 		userID.MatchString(metadata.WorkspaceID) && label.MatchString(metadata.Cell) &&
 		incarnationName.MatchString(metadata.Incarnation) && lineageName.MatchString(metadata.Lineage) &&
-		label.MatchString(metadata.Machine) && label.MatchString(metadata.Team) &&
+		label.MatchString(metadata.Machine) && (metadata.Team == "" || label.MatchString(metadata.Team)) &&
 		label.MatchString(metadata.WorkspaceName) && metadata.WorkspaceVolume == "/var/lib/workspace"
 }
 
@@ -263,6 +263,9 @@ func equalWorkspaceAgentBinding(a, b workspaceAgentBinding) bool {
 func ownerMatchesRegistration(owner coderUser, request workspaceAgentRegistrationRequest) bool {
 	if owner.ID != request.OwnerID {
 		return false
+	}
+	if request.Team == "" {
+		return true
 	}
 	wantedGroup := "team:" + request.Team
 	for _, group := range owner.Groups {

@@ -379,6 +379,71 @@ func TestWorkspaceAgentRegistrationHandlerReturnsEmptyAcceptedResponse(t *testin
 	registry.pendingMu.Unlock()
 }
 
+func TestWorkspaceAgentRegistrationHandlerWithoutTeamReturnsEmptyAcceptedResponse(t *testing.T) {
+	request := validWorkspaceAgentRegistration()
+	request.Team = ""
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &mutableWorkspaceReader{current: registrationWorkspace(request, "starting", "running")}
+	registry := testWorkspaceAgentRegistry(t, reader, &fixedAgentValidator{})
+	registry.finalizeTimeout = 20 * time.Millisecond
+	path := filepath.Join(t.TempDir(), "owners.json")
+	if err := writeBindings(path, []binding{{
+		Issuer: "https://dex.example", Subject: "subject", PreferredUsername: "ldap", OwnerID: fixtureUserID,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	s := server{
+		agentRegistry: registry, bindingPath: path, bindingsMu: &sync.Mutex{},
+		ownerAuth: fixedOwnerAuthenticator{owner: coderUser{
+			ID: fixtureUserID, Email: "ldap@example.com", Groups: nil,
+			Issuer: "https://dex.example", Subject: "subject", PreferredUsername: "ldap",
+		}},
+		provisionerAuth: fixedProvisionerReviewer{},
+	}
+	httpRequest := httptest.NewRequest(http.MethodPost, registrationPath, strings.NewReader(string(body)))
+	httpRequest.Header.Set("Authorization", "Bearer provisioner-token")
+	httpRequest.Header.Set("Coder-Session-Token", "owner-session")
+	response := httptest.NewRecorder()
+	s.registerWorkspaceAgent(response, httpRequest)
+	if response.Code != http.StatusAccepted || response.Body.Len() != 0 {
+		t.Fatalf("registration response = %d %q", response.Code, response.Body.String())
+	}
+	registry.pendingMu.Lock()
+	registry.pending[request.WorkspaceID].cancel()
+	registry.pendingMu.Unlock()
+}
+
+func TestOwnerMatchesRegistration(t *testing.T) {
+	owner := coderUser{
+		ID: fixtureUserID,
+		Groups: []string{"team:examples"},
+	}
+
+	if !ownerMatchesRegistration(owner, workspaceAgentRegistrationRequest{OwnerID: fixtureUserID, Team: "examples"}) {
+		t.Fatal("expected owner to match registration with valid team")
+	}
+
+	if !ownerMatchesRegistration(owner, workspaceAgentRegistrationRequest{OwnerID: fixtureUserID, Team: ""}) {
+		t.Fatal("expected owner to match registration with empty team")
+	}
+
+	ownerWithoutGroups := coderUser{ID: fixtureUserID}
+	if !ownerMatchesRegistration(ownerWithoutGroups, workspaceAgentRegistrationRequest{OwnerID: fixtureUserID, Team: ""}) {
+		t.Fatal("expected owner without groups to match registration with empty team")
+	}
+
+	if ownerMatchesRegistration(owner, workspaceAgentRegistrationRequest{OwnerID: fixtureUserID, Team: "other"}) {
+		t.Fatal("expected owner to reject registration with foreign team")
+	}
+
+	if ownerMatchesRegistration(owner, workspaceAgentRegistrationRequest{OwnerID: "other-user", Team: "examples"}) {
+		t.Fatal("expected mismatching owner ID to reject registration")
+	}
+}
+
 func TestKubernetesTokenReviewerRequiresExactAudienceAndServiceAccount(t *testing.T) {
 	credentialPath := filepath.Join(t.TempDir(), "token")
 	if err := os.WriteFile(credentialPath, []byte("reviewer-token\n"), 0600); err != nil {

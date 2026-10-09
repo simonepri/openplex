@@ -234,8 +234,7 @@ func TestBindingPersistsOnlyImmutableIdentityAndRejectsReplay(t *testing.T) {
 	res := httptest.NewRecorder()
 	s.bind(res, request())
 	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"attested":"true"`) ||
-		!strings.Contains(res.Body.String(), `"preferred_username":"ldap_user"`) ||
-		!strings.Contains(res.Body.String(), `"principal_id":"`+snapshotPrincipalID("https://dex.example", "dex-subject")+`"`) {
+		!strings.Contains(res.Body.String(), `"preferred_username":"ldap_user"`) {
 		t.Fatalf("unexpected binding response: %d %s", res.Code, res.Body.String())
 	}
 	stored, err := os.ReadFile(path)
@@ -285,8 +284,7 @@ func TestResolveRequiresBoundOIDCClaims(t *testing.T) {
 	req.Header.Set("Coder-Session-Token", "owner-session-token")
 	res := httptest.NewRecorder()
 	s.resolve(res, req)
-	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"preferred_username":"ldap_user"`) ||
-		!strings.Contains(res.Body.String(), `"principal_id":"`+snapshotPrincipalID(bound.Issuer, bound.Subject)+`"`) {
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"preferred_username":"ldap_user"`) {
 		t.Fatalf("unexpected resolve response: %d %s", res.Code, res.Body.String())
 	}
 

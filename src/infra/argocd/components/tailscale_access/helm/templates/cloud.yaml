@@ -52,6 +52,9 @@ spec:
       labels:
         app.kubernetes.io/name: tailscale-subnet-router
       priorityClassName: cluster-operators
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       tailscaleContainer:
         resources:
           requests: {cpu: 100m, memory: 128Mi}
@@ -82,6 +85,9 @@ spec:
         app.kubernetes.io/component: private-egress
         app.kubernetes.io/name: tailscale-egress-proxy
       priorityClassName: cluster-operators
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       tailscaleContainer:
         resources:
           requests: {cpu: 100m, memory: 128Mi}
@@ -201,6 +207,9 @@ spec:
         app.kubernetes.io/component: kubernetes-api-egress
         app.kubernetes.io/name: tailscale-kubernetes-api-egress
       priorityClassName: cluster-operators
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       tailscaleContainer:
         resources:
           requests: {cpu: 100m, memory: 128Mi}

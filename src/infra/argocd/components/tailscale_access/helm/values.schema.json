@@ -83,10 +83,6 @@
           "type": "string",
           "pattern": "^(|headscale-preauth-(?:cell|ctrl)-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)$"
         },
-        "runtimeForwardTarget": {
-          "type": "string",
-          "pattern": "^(|headscale-workspace-runtime\\.headscale\\.svc\\.cluster\\.local:8444)$"
-        },
         "secretStoreName": { "type": "string", "pattern": "^(|local-secret-records)$" }
       }
     },
@@ -113,7 +109,6 @@
               "authSecretName",
               "caConfigMapName",
               "recordName",
-              "runtimeForwardTarget",
               "secretStoreName"
             ],
             "properties": {

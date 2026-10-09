@@ -5,6 +5,7 @@ output "record" {
   value       = module.interface.record
 }
 
+
 output "operator_oauth_secret_name" {
   description = "Name of the Secrets Manager secret containing operator OAuth credentials."
   value       = try(aws_secretsmanager_secret.operator_oauth[0].name, null)

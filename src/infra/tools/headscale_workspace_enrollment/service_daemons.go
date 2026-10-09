@@ -58,18 +58,11 @@ func runPrivateBroker() {
 	if err != nil {
 		panic(err)
 	}
-	started := time.Now()
 	agentRegistry := newWorkspaceAgentRegistry(coderAuth, client)
 	s := server{
-		authenticator:       agentRegistry,
-		agentRegistry:       agentRegistry,
-		bindingPath:         "/var/lib/workspace-enrollment/workspace-owner-bindings.json",
-		lineagePath:         "/var/lib/workspace-enrollment/workspace-lineage-claims.json",
-		snapshotRootKey:     mustSnapshotRootKey("SNAPSHOT_ROOT_KEY"),
-		snapshotNow:         time.Now,
-		lineageWallNow:      time.Now,
-		lineageMonotonicNow: time.Now,
-		lineageStarted:      started,
+		authenticator: agentRegistry,
+		agentRegistry: agentRegistry,
+		bindingPath:   "/var/lib/workspace-enrollment/workspace-owner-bindings.json",
 		verifier: oidcVerifier{
 			issuer:   mustEnv("OIDC_ISSUER"),
 			audience: mustEnv("OIDC_AUDIENCE"),
@@ -78,24 +71,16 @@ func runPrivateBroker() {
 		},
 		ownerAuth: coderAuth,
 		provisionerAuth: kubernetesTokenReviewer{
-			client: kubernetesClient, credentialPath: "/var/run/secrets/registration-kubernetes-api/token",
-			endpoint: "https://kubernetes.default.svc",
+			client:         kubernetesClient,
+			credentialPath: "/var/run/secrets/registration-kubernetes-api/token",
+			endpoint:       "https://kubernetes.default.svc",
 		},
 		registrationLimiter: &registrationRateLimiter{},
 		bindingsMu:          &sync.Mutex{},
-		lineagesMu:          &sync.Mutex{},
-		lineageDeadlines:    map[string]time.Time{},
 	}
 	certificate := "/etc/headscale-broker-tls/tls.crt"
 	privateKey := "/etc/headscale-broker-tls/tls.key"
-	serverErrors := make(chan error, 2)
-	go func() {
-		serverErrors <- boundedHTTPServerAt("0.0.0.0:8443", registrationMux(s)).ListenAndServeTLS(certificate, privateKey)
-	}()
-	go func() {
-		serverErrors <- boundedHTTPServerAt("0.0.0.0:8444", runtimeMux(s, newWorkspaceAPILimiter(agentRegistry))).ListenAndServeTLS(certificate, privateKey)
-	}()
-	panic(<-serverErrors)
+	panic(boundedHTTPServerAt("0.0.0.0:8443", registrationMux(s)).ListenAndServeTLS(certificate, privateKey))
 }
 
 func publicMux(s server) http.Handler {
@@ -115,7 +100,7 @@ func publicMuxWithUpstreams(s server, headscale, coordinator http.Handler) http.
 	mux.Handle("/v1/enroll", workspaceAPI.limit(coordinator))
 	mux.Handle("/v1/register", workspaceAPI.limit(coordinator))
 	mux.Handle("/v1/revoke", workspaceAPI.limit(coordinator))
-	for _, privatePath := range []string{"/v1/bind", "/v1/resolve", registrationPath, "/v1/snapshots/", "/v1/lineages/"} {
+	for _, privatePath := range []string{"/v1/bind", "/v1/resolve", registrationPath} {
 		mux.HandleFunc(privatePath, http.NotFound)
 	}
 	mux.Handle("/", headscale)
@@ -143,17 +128,3 @@ func registrationMux(s server) http.Handler {
 	mux.HandleFunc("POST "+registrationPath, s.registerWorkspaceAgent)
 	return mux
 }
-
-func runtimeMux(s server, limiter *workspaceAPILimiter) http.Handler {
-	api := http.NewServeMux()
-	api.HandleFunc("POST /v1/snapshots/repository", s.snapshotRepository)
-	api.HandleFunc("POST /v1/snapshots/sign", s.signSnapshot)
-	api.HandleFunc("POST /v1/lineages/acquire", s.acquireLineage)
-	api.HandleFunc("POST /v1/lineages/renew", s.renewLineage)
-	api.HandleFunc("POST /v1/lineages/release", s.releaseLineage)
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", health)
-	mux.Handle("/v1/", limiter.limit(api))
-	return mux
-}
-

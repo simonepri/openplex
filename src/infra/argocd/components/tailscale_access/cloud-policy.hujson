@@ -53,5 +53,14 @@
       ],
       "ip": ["tcp:443"],
     },
+    {
+      "src": ["autogroup:member"],
+      "dst": [
+%{ for cidr in cell_service_cidrs ~}
+        "${cidr}",
+%{ endfor ~}
+      ],
+      "ip": ["tcp:22"],
+    },
   ],
 }

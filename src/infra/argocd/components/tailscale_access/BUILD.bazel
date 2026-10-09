@@ -1,7 +1,6 @@
 """Defines build and check targets for the tailscale_access Argo CD component."""
 
 load("@rules_helm//helm:defs.bzl", "helm_chart", "helm_lint_test", "helm_template")
-load("@rules_python//python:defs.bzl", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "HELM_TEMPLATE", "package_sources", "source_set")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
@@ -125,21 +124,4 @@ source_set(
     kind = HELM_TEMPLATE,
 )
 
-package_sources(exclude = [
-    "helm/templates/**",
-    "**/*.py",
-])
-
-py_test(
-    name = "local_router_test",
-    srcs = ["local_router_test.py"],
-    args = [
-        "$(location :helm_render-local)",
-        "$(location :helm_render-local-egress)",
-    ],
-    data = [
-        ":helm_render-local",
-        ":helm_render-local-egress",
-    ],
-    deps = ["@dev_python_deps//pyyaml"],
-)
+package_sources(exclude = ["helm/templates/**"])

@@ -17,7 +17,6 @@ local:
   authSecretName: headscale-preauth
   caConfigMapName: cluster-local-ca
   recordName: ""
-  runtimeForwardTarget: ""
   secretStoreName: local-secret-records
 image:
   repository: ghcr.io/tailscale/tailscale

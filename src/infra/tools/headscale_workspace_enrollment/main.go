@@ -44,10 +44,13 @@ const (
 )
 
 var (
-	dnsNameLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
-	label        = regexp.MustCompile(`^[a-z][a-z0-9-]{1,61}[a-z0-9]$`)
-	loginName    = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
-	userID       = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	dnsNameLabel     = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+	incarnationName  = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
+	label            = regexp.MustCompile(`^[a-z][a-z0-9-]{1,61}[a-z0-9]$`)
+	lineageName      = regexp.MustCompile(`^(?:[0-9a-f-]{36}-[0-9]{10,}|[a-z][a-z0-9-]{1,61}[a-z0-9]|[0-9a-f]{40})$`)
+	loginName        = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+	snapshotSelector = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	userID           = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 )
 
 type request struct {
@@ -126,20 +129,12 @@ type server struct {
 	domain              string
 	dnsPath             string
 	bindingPath         string
-	lineagePath         string
-	snapshotRootKey     []byte
-	snapshotNow         func() time.Time
-	lineageWallNow      func() time.Time
-	lineageMonotonicNow func() time.Time
-	lineageStarted      time.Time
 	verifier            tokenVerifier
 	ownerAuth           ownerAuthenticator
 	provisionerAuth     provisionerTokenReviewer
 	registrationLimiter *registrationRateLimiter
 	bindingsMu          *sync.Mutex
 	dnsMu               *sync.Mutex
-	lineagesMu          *sync.Mutex
-	lineageDeadlines    map[string]time.Time
 }
 
 func main() {
@@ -247,7 +242,6 @@ func (s server) bind(w http.ResponseWriter, r *http.Request) {
 		"attested":           "true",
 		"email":              owner.Email,
 		"id":                 bound.OwnerID,
-		"principal_id":       snapshotPrincipalID(bound.Issuer, bound.Subject),
 		"preferred_username": bound.PreferredUsername,
 	})
 }
@@ -272,7 +266,6 @@ func (s server) resolve(w http.ResponseWriter, r *http.Request) {
 		"attested":           "true",
 		"email":              owner.Email,
 		"id":                 bound.OwnerID,
-		"principal_id":       snapshotPrincipalID(bound.Issuer, bound.Subject),
 		"preferred_username": bound.PreferredUsername,
 	})
 }
@@ -482,6 +475,37 @@ func (s server) revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func decodeStrictJSON(reader io.Reader, destination any) error {
+	decoder := json.NewDecoder(io.LimitReader(reader, maxBody))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return errors.New("request contains trailing JSON")
+	}
+	return nil
+}
+
+func (s server) authenticateAgent(ctx context.Context, authorization string) (identity, error) {
+	token := strings.TrimPrefix(authorization, "Bearer ")
+	if token == "" {
+		return identity{}, errors.New("missing agent token")
+	}
+	id, err := s.authenticator.authenticate(ctx, token)
+	if err != nil || !userID.MatchString(id.SubjectID) {
+		return identity{}, errors.New("invalid agent identity")
+	}
+	bound, err := s.bindingForOwner(id.SubjectID)
+	if err != nil || !loginName.MatchString(bound.PreferredUsername) {
+		return identity{}, errors.New("identity is not bound")
+	}
+	id.OIDCIssuer = bound.Issuer
+	id.OIDCSubject = bound.Subject
+	id.IdPUsername = bound.PreferredUsername
+	return id, nil
 }
 
 func (s server) authorize(r *http.Request) (identity, request, error) {

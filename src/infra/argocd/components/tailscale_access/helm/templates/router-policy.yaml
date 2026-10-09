@@ -188,42 +188,6 @@ spec:
               - key: "{{ "{{" }} length(request.object.spec.containers[0].volumeMounts[?name == 'serve']) }}"
                 operator: NotEquals
                 value: 0
-    - name: require-reviewed-tailscale-router-serve-extension
-      skipBackgroundRequests: true
-      match:
-        any:
-          - resources:
-              kinds: [Pod]
-              namespaces: [tailscale-system]
-              operations: [CREATE, UPDATE]
-              selector:
-                matchLabels:
-                  app.kubernetes.io/name: tailscale-subnet-router
-      preconditions:
-        all:
-          - key: '{{ "{{" }} length(request.object.spec.volumes[?name == "serve"]) }}'
-            operator: Equals
-            value: 1
-      validate:
-        allowExistingViolations: true
-        message: The local Tailscale ctrl router must retain its reviewed Serve configuration.
-        deny:
-          conditions:
-            any:
-              - key: "{{ "{{" }} request.object.spec.volumes[?name == 'serve'].configMap.name | [0] }}"
-                operator: NotEquals
-                value: runtime-serve
-              - key: '{{ "{{" }} length(request.object.spec.containers[0].volumeMounts) }}'
-                operator: NotEquals
-                value: 6
-              - key: >-
-                  {{ "{{" }} request.object.spec.containers[0].volumeMounts[?name == 'serve'].mountPath | [0] }}
-                operator: NotEquals
-                value: /etc/tailscale-serve
-              - key: >-
-                  {{ "{{" }} request.object.spec.containers[0].volumeMounts[?name == 'serve'].readOnly | [0] }}
-                operator: NotEquals
-                value: true
     - name: require-reviewed-tailscale-router-private-egress-extension
       skipBackgroundRequests: true
       match:

@@ -41,12 +41,12 @@ class HeadscaleKeysTest(unittest.TestCase):
         self.refreshes: list[str] = []
         self.enterContext(
             patch.object(
-                headscale_keys.runtime,
+                headscale_keys.compose,
                 "configuration",
                 return_value=Mock(headscale_container="fixture-headscale"),
             )
         )
-        self.enterContext(patch.object(headscale_keys.runtime, "run", side_effect=self.command))
+        self.enterContext(patch.object(headscale_keys.compose, "run", side_effect=self.command))
         self.enterContext(patch.object(headscale_keys.time, "time", return_value=1_000_000))
         self.enterContext(patch.object(headscale_keys.time, "sleep"))
 
@@ -206,7 +206,7 @@ class HeadscaleKeysTest(unittest.TestCase):
             headscale_keys.reconcile(self.root)
         self.assertEqual(self.records, before)
         with patch.object(
-            headscale_keys.runtime, "run", side_effect=RuntimeError(self.created["key"])
+            headscale_keys.compose, "run", side_effect=RuntimeError(self.created["key"])
         ):
             with self.assertRaisesRegex(
                 RuntimeError, "Local router enrollment command failed"

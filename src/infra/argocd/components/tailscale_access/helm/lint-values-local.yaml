@@ -12,7 +12,6 @@ local:
   loginServer: https://headscale.c.corp.local.internal
   authSecretName: headscale-preauth
   recordName: headscale-preauth-ctrl-eaws-lh1
-  runtimeForwardTarget: ""
   secretStoreName: local-secret-records
 image:
   repository: ghcr.io/tailscale/tailscale
