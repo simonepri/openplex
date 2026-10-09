@@ -104,7 +104,7 @@ spec:
                   app.kubernetes.io/instance: signoz
           containers:
             - name: clickhouse-keeper
-              image: docker.io/clickhouse/clickhouse-keeper:26.9.10@sha256:6a99067eed5e2334dcac2bab898b0cf993b032f10e68c5ab751286d5bd6a201a
+              image: docker.io/clickhouse/clickhouse-keeper:26.9.12@sha256:fcf2ca2dddbda74bd169016eb0aa81909659e55bfeeb6f50733d67b15a8d1d91
               imagePullPolicy: IfNotPresent
               resources:
                 requests: {cpu: "1", memory: 1Gi}

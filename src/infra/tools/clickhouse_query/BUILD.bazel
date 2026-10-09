@@ -1,0 +1,34 @@
+"""Builds read-only ClickHouse and SigNoz query tooling."""
+
+# gazelle:resolve py infra.tools.clickhouse_query.query //src/infra/tools/clickhouse_query:query
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "query",
+    # keep
+    srcs = ["query.py"],
+    imports = ["../../.."],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "clickhouse_query",
+    srcs = ["query.py"],
+    imports = ["../../.."],
+    main = "query.py",
+    visibility = ["//visibility:public"],
+    deps = [":query"],
+)
+
+py_test(
+    name = "query_test",
+    srcs = ["query_test.py"],
+    imports = ["../../.."],
+    deps = ["//src/infra/tools/clickhouse_query:query"],
+)
+
+package_sources()

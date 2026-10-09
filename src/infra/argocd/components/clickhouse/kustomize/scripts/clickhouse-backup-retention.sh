@@ -62,6 +62,22 @@ list_manifest_objects() {
   esac
 }
 
+# A retried Job recomputes completedAt, so only the other fields must match the
+# manifest an earlier attempt already published.
+same_manifest() {
+  python3 - "$1" "$2" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as first, open(sys.argv[2], encoding="utf-8") as second:
+    new, existing = json.load(first), json.load(second)
+new.pop("completedAt", None)
+existing.pop("completedAt", None)
+if new != existing:
+    sys.exit(f"completion manifest {sys.argv[2]} differs from the backup just taken")
+PY
+}
+
 read_manifest() {
   key="$1"
   case "${RETENTION_PROVIDER}" in
@@ -138,7 +154,7 @@ print(json.dumps({
 PY
   # shellcheck disable=SC2310
   if read_manifest "${manifest_key}" >/tmp/existing-manifest.json 2>/dev/null; then
-    cmp /tmp/clickhouse-manifest.json /tmp/existing-manifest.json
+    same_manifest /tmp/clickhouse-manifest.json /tmp/existing-manifest.json
     return
   fi
   # shellcheck disable=SC2310
@@ -146,7 +162,7 @@ PY
     return
   fi
   read_manifest "${manifest_key}" >/tmp/existing-manifest.json
-  cmp /tmp/clickhouse-manifest.json /tmp/existing-manifest.json
+  same_manifest /tmp/clickhouse-manifest.json /tmp/existing-manifest.json
 }
 
 case "${BACKUP_KEEP_CHAINS}" in

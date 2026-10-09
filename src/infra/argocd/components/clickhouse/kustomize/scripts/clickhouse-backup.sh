@@ -75,7 +75,19 @@ for signal in "${signals[@]}"; do
     query="BACKUP DATABASE \`${database}\` ON CLUSTER \`${BACKUP_CLUSTER}\` TO ${destination} SETTINGS base_backup = ${base}"
   fi
 
-  client --query "${query}"
+  # shellcheck disable=SC2310
+  if ! error="$(client --query "${query}" 2>&1 >/dev/null)"; then
+    if [[ ${day_of_week} -ne 7 && ${error} == *BACKUP_NOT_FOUND* ]]; then
+      # The week's Sunday full backup is missing, so start the chain now under its name.
+      backup_name="${database}-${base_date}-full"
+      destination="$(backup_target "${database}/${backup_name}")"
+      client --query "BACKUP DATABASE \`${database}\` ON CLUSTER \`${BACKUP_CLUSTER}\` TO ${destination}"
+    elif [[ ${error} != *BACKUP_ALREADY_EXISTS* ]]; then
+      # BACKUP_ALREADY_EXISTS means an earlier attempt of this Job completed the backup.
+      echo "${error}" >&2
+      exit 1
+    fi
+  fi
   completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf '%s|%s|%s\n' "${database}" "${backup_name}" "${completed_at}" >>/tmp/clickhouse-completed
 done

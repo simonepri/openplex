@@ -29,7 +29,14 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
-      activeDeadlineSeconds: 1800
+      podFailurePolicy:
+        rules:
+          - action: FailJob
+            onExitCodes:
+              containerName: rollup
+              operator: In
+              values: [75]
+      activeDeadlineSeconds: 14400
       template:
         metadata:
           labels:
@@ -38,6 +45,7 @@ spec:
             app.kubernetes.io/component: storage-stats-rollup
             app.kubernetes.io/part-of: signoz
         spec:
+          serviceAccountName: signoz-clickhouse
           restartPolicy: Never
           automountServiceAccountToken: false
           securityContext:
@@ -47,7 +55,7 @@ spec:
             seccompProfile: {type: RuntimeDefault}
           containers:
             - name: rollup
-              image: docker.io/clickhouse/clickhouse-server:26.9.10@sha256:b01d1d45df540e487396838dd1397550215a07a8998aa6ac3b50b39802d62701
+              image: docker.io/clickhouse/clickhouse-server:26.9.12@sha256:5d6b622bbb109f40d12333187e44ae80864cf72aa71ae9a4704a53496615e941
               imagePullPolicy: IfNotPresent
               envFrom:
                 - configMapRef:
@@ -62,8 +70,8 @@ spec:
                       key: password
               command: [/bin/bash, /scripts/storage-stats-rollup.sh]
               resources:
-                requests: {cpu: 50m, memory: 128Mi}
-                limits: {cpu: 500m, memory: 512Mi}
+                requests: {cpu: 50m, memory: 512Mi}
+                limits: {cpu: 500m, memory: 2Gi}
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities: {drop: [ALL]}
