@@ -1,8 +1,0 @@
-# Empty defaults for coder-workspace-secret-store chart; configured by team ApplicationSet.
-
-enabled: false
-namespace: ""
-provider: ""
-storeName: ""
-authAdapter: ""
-auth: {}

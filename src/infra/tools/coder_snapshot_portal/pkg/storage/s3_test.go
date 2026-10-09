@@ -52,11 +52,10 @@ func TestS3StoreGetSnapshot(t *testing.T) {
 	defer server.Close()
 
 	store, err := NewS3Store(S3Config{
-		Endpoint:        server.URL,
-		Bucket:          "my-bucket",
-		Region:          "us-east-1",
-		AccessKeyID:     "AKIAEXAMPLE",
-		SecretAccessKey: "secret-key-test",
+		Endpoint:    server.URL,
+		Buckets:     []string{"my-bucket"},
+		Region:      "us-east-1",
+		Credentials: StaticCredentials{AccessKeyID: "AKIAEXAMPLE", SecretAccessKey: "secret-key-test"},
 	})
 	if err != nil {
 		t.Fatalf("failed to create S3Store: %v", err)
@@ -111,7 +110,7 @@ func TestS3StoreUnsignedRequests(t *testing.T) {
 	// No credentials configured
 	store, err := NewS3Store(S3Config{
 		Endpoint: server.URL,
-		Bucket:   "my-bucket",
+		Buckets:  []string{"my-bucket"},
 	})
 	if err != nil {
 		t.Fatalf("failed to create S3Store: %v", err)
@@ -188,7 +187,7 @@ func TestS3StoreListUserSnapshotsPagination(t *testing.T) {
 
 	store, err := NewS3Store(S3Config{
 		Endpoint: server.URL,
-		Bucket:   "my-bucket",
+		Buckets:  []string{"my-bucket"},
 	})
 	if err != nil {
 		t.Fatalf("failed to create S3Store: %v", err)
@@ -208,7 +207,7 @@ func TestS3StoreListUserSnapshotsPagination(t *testing.T) {
 func TestS3StoreValidationAndSecurity(t *testing.T) {
 	store, _ := NewS3Store(S3Config{
 		Endpoint: "http://localhost:9000",
-		Bucket:   "my-bucket",
+		Buckets:  []string{"my-bucket"},
 	})
 	ctx := context.Background()
 
@@ -266,7 +265,7 @@ func TestS3StoreErrorHandling(t *testing.T) {
 
 	store, _ := NewS3Store(S3Config{
 		Endpoint: server.URL,
-		Bucket:   "my-bucket",
+		Buckets:  []string{"my-bucket"},
 	})
 	ctx := context.Background()
 
@@ -297,7 +296,7 @@ func TestS3StoreListNotFoundGraceful(t *testing.T) {
 
 	store, err := NewS3Store(S3Config{
 		Endpoint: server.URL,
-		Bucket:   "nonexistent-bucket",
+		Buckets:  []string{"nonexistent-bucket"},
 	})
 	if err != nil {
 		t.Fatalf("failed to create S3Store: %v", err)
@@ -358,7 +357,7 @@ func TestMemoryStore(t *testing.T) {
 	}
 }
 
-func TestS3StoreDiscoversSnapshotsUnderBackupsDev(t *testing.T) {
+func TestS3StoreFindsSnapshotsUnderUserBackups(t *testing.T) {
 	manifest := &model.SnapshotManifest{
 		Schema:          3,
 		Selector:        "snap-dev-123",
@@ -375,7 +374,6 @@ func TestS3StoreDiscoversSnapshotsUnderBackupsDev(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("list-type") == "2" {
 			prefix := r.URL.Query().Get("prefix")
-			delimiter := r.URL.Query().Get("delimiter")
 			w.Header().Set("Content-Type", "application/xml")
 
 			if prefix == "owners/test-user/snapshots/" {
@@ -389,27 +387,14 @@ func TestS3StoreDiscoversSnapshotsUnderBackupsDev(t *testing.T) {
 				return
 			}
 
-			if prefix == "backups/dev/" && delimiter == "/" {
-				// Discovers team prefix
+			if prefix == "backups/dev/users/test-user/repos/owners/test-user/snapshots/" {
 				fmt.Fprint(w, `
 <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
     <Name>my-bucket</Name>
-    <Prefix>backups/dev/</Prefix>
-    <CommonPrefixes>
-        <Prefix>backups/dev/examples/</Prefix>
-    </CommonPrefixes>
-</ListBucketResult>`)
-				return
-			}
-
-			if prefix == "backups/dev/examples/repos/test-user/owners/test-user/snapshots/" {
-				fmt.Fprint(w, `
-<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-    <Name>my-bucket</Name>
-    <Prefix>backups/dev/examples/repos/test-user/owners/test-user/snapshots/</Prefix>
+    <Prefix>backups/dev/users/test-user/repos/owners/test-user/snapshots/</Prefix>
     <IsTruncated>false</IsTruncated>
     <Contents>
-        <Key>backups/dev/examples/repos/test-user/owners/test-user/snapshots/snap-dev-123.json</Key>
+        <Key>backups/dev/users/test-user/repos/owners/test-user/snapshots/snap-dev-123.json</Key>
         <Size>512</Size>
     </Contents>
 </ListBucketResult>`)
@@ -425,7 +410,7 @@ func TestS3StoreDiscoversSnapshotsUnderBackupsDev(t *testing.T) {
 			return
 		}
 
-		if r.URL.Path == "/my-bucket/backups/dev/examples/repos/test-user/owners/test-user/snapshots/snap-dev-123.json" {
+		if r.URL.Path == "/my-bucket/backups/dev/users/test-user/repos/owners/test-user/snapshots/snap-dev-123.json" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(manifestBytes)
@@ -438,7 +423,7 @@ func TestS3StoreDiscoversSnapshotsUnderBackupsDev(t *testing.T) {
 
 	store, err := NewS3Store(S3Config{
 		Endpoint: server.URL,
-		Bucket:   "my-bucket",
+		Buckets:  []string{"my-bucket"},
 	})
 	if err != nil {
 		t.Fatalf("failed to create S3Store: %v", err)
@@ -446,7 +431,7 @@ func TestS3StoreDiscoversSnapshotsUnderBackupsDev(t *testing.T) {
 
 	ctx := context.Background()
 
-	// ListUserSnapshots should discover snap-dev-123 under backups/dev/examples/
+	// ListUserSnapshots should find snap-dev-123 under backups/dev/users/test-user/repos/
 	snapshots, err := store.ListUserSnapshots(ctx, "test-user")
 	if err != nil {
 		t.Fatalf("ListUserSnapshots failed: %v", err)
@@ -468,3 +453,314 @@ func TestS3StoreDiscoversSnapshotsUnderBackupsDev(t *testing.T) {
 	}
 }
 
+func TestS3StoreEmptyBucketsValidation(t *testing.T) {
+	_, err := NewS3Store(S3Config{
+		Endpoint: "http://localhost:9000",
+		Buckets:  nil,
+	})
+	if err == nil {
+		t.Fatal("expected error for nil Buckets, got nil")
+	}
+
+	_, err = NewS3Store(S3Config{
+		Endpoint: "http://localhost:9000",
+		Buckets:  []string{"", "  "},
+	})
+	if err == nil {
+		t.Fatal("expected error for empty Buckets slice, got nil")
+	}
+}
+
+func TestS3StoreMultiBucketListingAndMerging(t *testing.T) {
+	snap1 := &model.SnapshotManifest{
+		Schema:          3,
+		Selector:        "snap-1",
+		Display:         "cell-1 snap 1",
+		Timestamp:       1000,
+		SizeBytes:       1024,
+		KopiaSnapshotID: "k-1",
+	}
+	snap2 := &model.SnapshotManifest{
+		Schema:          3,
+		Selector:        "snap-2",
+		Display:         "cell-2 snap 2",
+		Timestamp:       2000,
+		SizeBytes:       2048,
+		KopiaSnapshotID: "k-2",
+	}
+	snapCommonOlder := &model.SnapshotManifest{
+		Schema:          3,
+		Selector:        "snap-common",
+		Display:         "common older",
+		Timestamp:       2500,
+		SizeBytes:       3000,
+		KopiaSnapshotID: "k-c-old",
+	}
+	snapCommonNewer := &model.SnapshotManifest{
+		Schema:          3,
+		Selector:        "snap-common",
+		Display:         "common newer",
+		Timestamp:       3000,
+		SizeBytes:       3500,
+		KopiaSnapshotID: "k-c-new",
+	}
+
+	snap1Bytes, _ := json.Marshal(snap1)
+	snap2Bytes, _ := json.Marshal(snap2)
+	snapCommonOlderBytes, _ := json.Marshal(snapCommonOlder)
+	snapCommonNewerBytes, _ := json.Marshal(snapCommonNewer)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("list-type") == "2" {
+			prefix := r.URL.Query().Get("prefix")
+			w.Header().Set("Content-Type", "application/xml")
+
+			if strings.HasPrefix(r.URL.Path, "/cell-1-backups/") && prefix == "owners/user-multi/snapshots/" {
+				fmt.Fprint(w, `
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Name>cell-1-backups</Name>
+    <Prefix>owners/user-multi/snapshots/</Prefix>
+    <IsTruncated>false</IsTruncated>
+    <Contents>
+        <Key>owners/user-multi/snapshots/snap-1.json</Key>
+        <Size>100</Size>
+    </Contents>
+    <Contents>
+        <Key>owners/user-multi/snapshots/snap-common.json</Key>
+        <Size>200</Size>
+    </Contents>
+</ListBucketResult>`)
+				return
+			}
+
+			if strings.HasPrefix(r.URL.Path, "/cell-2-backups/") && prefix == "owners/user-multi/snapshots/" {
+				fmt.Fprint(w, `
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Name>cell-2-backups</Name>
+    <Prefix>owners/user-multi/snapshots/</Prefix>
+    <IsTruncated>false</IsTruncated>
+    <Contents>
+        <Key>owners/user-multi/snapshots/snap-2.json</Key>
+        <Size>150</Size>
+    </Contents>
+    <Contents>
+        <Key>owners/user-multi/snapshots/snap-common.json</Key>
+        <Size>250</Size>
+    </Contents>
+</ListBucketResult>`)
+				return
+			}
+
+			fmt.Fprint(w, `<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><IsTruncated>false</IsTruncated></ListBucketResult>`)
+			return
+		}
+
+		switch r.URL.Path {
+		case "/cell-1-backups/owners/user-multi/snapshots/snap-1.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(snap1Bytes)
+		case "/cell-1-backups/owners/user-multi/snapshots/snap-common.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(snapCommonNewerBytes)
+		case "/cell-2-backups/owners/user-multi/snapshots/snap-2.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(snap2Bytes)
+		case "/cell-2-backups/owners/user-multi/snapshots/snap-common.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(snapCommonOlderBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	store, err := NewS3Store(S3Config{
+		Endpoint: server.URL,
+		Buckets:  []string{"cell-1-backups", "cell-2-backups"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create S3Store: %v", err)
+	}
+
+	ctx := context.Background()
+	results, err := store.ListUserSnapshots(ctx, "user-multi")
+	if err != nil {
+		t.Fatalf("ListUserSnapshots failed: %v", err)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("expected 3 distinct snapshots merged across 2 buckets, got %d", len(results))
+	}
+
+	bySelector := make(map[string]*model.SnapshotManifest)
+	for _, snap := range results {
+		bySelector[snap.Selector] = snap
+	}
+
+	if bySelector["snap-1"] == nil || bySelector["snap-2"] == nil || bySelector["snap-common"] == nil {
+		t.Fatalf("missing expected selectors in merged results: %+v", bySelector)
+	}
+
+	// The newer manifest for snap-common (timestamp 3000) should be retained
+	if bySelector["snap-common"].Display != "common newer" {
+		t.Errorf("expected newer version 'common newer', got %q", bySelector["snap-common"].Display)
+	}
+}
+
+func TestS3StoreMultiBucketSelectorLookup(t *testing.T) {
+	snapCell1 := &model.SnapshotManifest{
+		Schema:   3,
+		Selector: "snap-cell1",
+		Display:  "from cell 1",
+	}
+	snapCell2 := &model.SnapshotManifest{
+		Schema:   3,
+		Selector: "snap-cell2",
+		Display:  "from cell 2",
+	}
+
+	snapCell1Bytes, _ := json.Marshal(snapCell1)
+	snapCell2Bytes, _ := json.Marshal(snapCell2)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/cell-1-backups/owners/user-lookup/snapshots/snap-cell1.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(snapCell1Bytes)
+		case "/cell-2-backups/owners/user-lookup/snapshots/snap-cell2.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(snapCell2Bytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	store, err := NewS3Store(S3Config{
+		Endpoint: server.URL,
+		Buckets:  []string{"cell-1-backups", "cell-2-backups"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create S3Store: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Find in bucket 1
+	got1, err := store.GetSnapshot(ctx, "user-lookup", "snap-cell1")
+	if err != nil {
+		t.Fatalf("failed to find snap-cell1: %v", err)
+	}
+	if got1.Display != "from cell 1" {
+		t.Errorf("expected display 'from cell 1', got %q", got1.Display)
+	}
+
+	// Find in bucket 2
+	got2, err := store.GetSnapshot(ctx, "user-lookup", "snap-cell2")
+	if err != nil {
+		t.Fatalf("failed to find snap-cell2: %v", err)
+	}
+	if got2.Display != "from cell 2" {
+		t.Errorf("expected display 'from cell 2', got %q", got2.Display)
+	}
+
+	// Non-existent snapshot across both buckets
+	_, err = store.GetSnapshot(ctx, "user-lookup", "snap-nonexistent")
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound for missing snapshot, got %v", err)
+	}
+}
+
+func TestS3StoreMultiBucketCandidatePrefixes(t *testing.T) {
+	snapPrimary := &model.SnapshotManifest{
+		Schema:   3,
+		Selector: "snap-root-primary",
+		Display:  "primary root",
+	}
+	snapSecondaryBackup := &model.SnapshotManifest{
+		Schema:   3,
+		Selector: "snap-dev-secondary",
+		Display:  "secondary dev backup",
+	}
+
+	snapPrimaryBytes, _ := json.Marshal(snapPrimary)
+	snapSecondaryBackupBytes, _ := json.Marshal(snapSecondaryBackup)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("list-type") == "2" {
+			prefix := r.URL.Query().Get("prefix")
+			w.Header().Set("Content-Type", "application/xml")
+
+			if strings.HasPrefix(r.URL.Path, "/cell-primary/") && prefix == "owners/user-cand/snapshots/" {
+				fmt.Fprint(w, `
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Name>cell-primary</Name>
+    <Prefix>owners/user-cand/snapshots/</Prefix>
+    <IsTruncated>false</IsTruncated>
+    <Contents>
+        <Key>owners/user-cand/snapshots/snap-root-primary.json</Key>
+        <Size>100</Size>
+    </Contents>
+</ListBucketResult>`)
+				return
+			}
+
+			if strings.HasPrefix(r.URL.Path, "/cell-secondary/") && prefix == "backups/dev/users/user-cand/repos/owners/user-cand/snapshots/" {
+				fmt.Fprint(w, `
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Name>cell-secondary</Name>
+    <Prefix>backups/dev/users/user-cand/repos/owners/user-cand/snapshots/</Prefix>
+    <IsTruncated>false</IsTruncated>
+    <Contents>
+        <Key>backups/dev/users/user-cand/repos/owners/user-cand/snapshots/snap-dev-secondary.json</Key>
+        <Size>200</Size>
+    </Contents>
+</ListBucketResult>`)
+				return
+			}
+
+			fmt.Fprint(w, `<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><IsTruncated>false</IsTruncated></ListBucketResult>`)
+			return
+		}
+
+		switch r.URL.Path {
+		case "/cell-primary/owners/user-cand/snapshots/snap-root-primary.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(snapPrimaryBytes)
+		case "/cell-secondary/backups/dev/users/user-cand/repos/owners/user-cand/snapshots/snap-dev-secondary.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(snapSecondaryBackupBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	store, err := NewS3Store(S3Config{
+		Endpoint: server.URL,
+		Buckets:  []string{"cell-primary", "cell-secondary"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create S3Store: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// ListUserSnapshots should discover both root in primary and candidate prefix in secondary
+	snapshots, err := store.ListUserSnapshots(ctx, "user-cand")
+	if err != nil {
+		t.Fatalf("ListUserSnapshots failed: %v", err)
+	}
+	if len(snapshots) != 2 {
+		t.Fatalf("expected 2 snapshots across primary and secondary buckets, got %d", len(snapshots))
+	}
+
+	// Lookup candidate snapshot in secondary bucket
+	got, err := store.GetSnapshot(ctx, "user-cand", "snap-dev-secondary")
+	if err != nil {
+		t.Fatalf("GetSnapshot failed: %v", err)
+	}
+	if got.Display != "secondary dev backup" {
+		t.Errorf("expected display 'secondary dev backup', got %q", got.Display)
+	}
+}

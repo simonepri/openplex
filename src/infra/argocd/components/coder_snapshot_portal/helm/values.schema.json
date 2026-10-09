@@ -10,13 +10,19 @@
       "additionalProperties": false,
       "required": ["hostname", "privateEgress"],
       "properties": {
-        "hostname": {
-          "type": "string",
-          "pattern": "^coder-snapshots\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$"
+        "accessDomain": {
+          "type": "string"
+        },
+        "aliasDomain": {
+          "type": "string"
         },
         "gatewayIPv4": {
           "type": "string",
           "format": "ipv4"
+        },
+        "hostname": {
+          "type": "string",
+          "pattern": "^coder-snapshots\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$"
         },
         "privateEgress": {
           "type": "object",
@@ -49,9 +55,13 @@
     "s3": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["bucket", "endpoint", "region"],
+      "required": ["buckets", "endpoint", "region"],
       "properties": {
-        "bucket": { "type": "string" },
+        "buckets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
         "endpoint": { "type": "string" },
         "region": { "type": "string" }
       }
@@ -86,13 +96,14 @@
     "image": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["digest", "pullPolicy", "repository"],
+      "required": ["pullPolicy", "repository"],
       "properties": {
         "repository": {
           "type": "string",
-          "pattern": "^(?:docker\\.io/cluster/coder-snapshot-portal|localhost:15100/000000000000/us-east-1/src/infra/tools/coder_snapshot_portal|[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/.+)$"
+          "pattern": "^(?:placeholder\\.invalid/src/infra/tools/coder_snapshot_portal|localhost:15100/000000000000/us-east-1/src/infra/tools/coder_snapshot_portal|[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/.+)$"
         },
         "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "tag": { "type": "string" },
         "pullPolicy": { "enum": ["IfNotPresent", "Never"] }
       }
     },

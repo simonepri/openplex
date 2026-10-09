@@ -1,0 +1,17 @@
+# Exercises an EKS cell whose workspaces push through Pod Identity, private ECR endpoints, and the in-cluster BuildBuddy cache.
+
+cell: cell-aws-usw2
+provider: aws
+region: us-west-2
+gcpProjectId: ""
+accessAliasDomain: c.example.invalid
+buildbuddy: {mode: community, enterpriseProxy: false, executors: none}
+origin:
+  registry: 999988887777.dkr.ecr.us-west-2.amazonaws.com
+  region: us-west-2
+  roleArn: arn:aws:iam::999988887777:role/cell-aws-usw2-workspace-ecr
+  privateHttpsCIDRs: [10.16.0.10/32, 10.16.64.10/32]
+  kubernetesApiCIDRs: [172.17.0.1/32]
+  registryCIDR: ""
+localGitCIDR: ""
+provisionerSubject: {apiGroup: rbac.authorization.k8s.io, kind: Group, name: 'cluster:coder-provisioners'}

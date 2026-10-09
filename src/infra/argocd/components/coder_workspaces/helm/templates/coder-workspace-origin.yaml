@@ -1,0 +1,20 @@
+{{- /* Publishes the cell-owned workload origin contract that the dev template verifies before provisioning. */ -}}
+
+{{- $origin := include "coder-workspaces.origin" . | fromJson -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coder-workspace-origin
+  namespace: {{ include "coder-workspaces.namespace" . }}
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+    app.kubernetes.io/name: coder-workspace-origin
+data:
+  authMode: {{ $origin.authMode | quote }}
+  cell: {{ .Values.cell | quote }}
+  originRegion: {{ .Values.origin.region | quote }}
+  originRegistry: {{ .Values.origin.registry | quote }}
+  provider: {{ $origin.provider | quote }}
+  roleArn: {{ .Values.origin.roleArn | quote }}
+  tokenAudience: {{ $origin.tokenAudience | quote }}
+  tokenFile: {{ $origin.tokenFile | quote }}

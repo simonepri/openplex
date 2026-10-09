@@ -1,0 +1,17 @@
+# Exercises a Floci cell whose workspaces push to the local origin registry and clone from the host git daemon.
+
+cell: cell-eaws-lh1
+provider: floci
+region: us-east-1
+gcpProjectId: ""
+accessAliasDomain: c.example.invalid
+buildbuddy: {mode: community, enterpriseProxy: false, executors: none}
+origin:
+  registry: origin-registry:5000/000000000000/us-east-1
+  region: us-east-1
+  roleArn: ""
+  privateHttpsCIDRs: []
+  kubernetesApiCIDRs: [172.19.255.11/32]
+  registryCIDR: 172.19.255.22/32
+localGitCIDR: 172.19.255.21/32
+provisionerSubject: {apiGroup: rbac.authorization.k8s.io, kind: Group, name: 'cluster:coder-provisioners'}

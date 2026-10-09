@@ -1,8 +1,0 @@
-# AWS Helm lint fixture validating workspace secret store rendering with AWS Secrets Manager.
-
-enabled: true
-namespace: team-examples-workspaces
-provider: aws
-storeName: org-workspace-backups-team-examples-workspaces
-auth:
-  aws: {region: us-west-2}

@@ -1,0 +1,46 @@
+{{- /* Provides the ClusterSecretStore for per-workspace S3 credentials in the workspaces namespace. */ -}}
+
+{{- $namespace := include "coder-workspaces.namespace" . -}}
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: {{ printf "workspace-s3-%s" $namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+spec:
+  conditions:
+    - namespaces:
+        - {{ $namespace }}
+  provider:
+{{- if eq .Values.provider "gcp" }}
+    gcpsm:
+      projectID: {{ .Values.gcpProjectId | quote }}
+      auth:
+        workloadIdentity:
+          clusterLocation: {{ .Values.region | quote }}
+          clusterName: {{ .Values.cell | quote }}
+          serviceAccountRef:
+            name: workspaces-s3
+            namespace: external-secrets-system
+{{- /* floci-divergence: Floci reads the gateway record from in-cluster secret-records instead of a cloud secret manager. */ -}}
+{{- else if eq .Values.provider "floci" }}
+    kubernetes:
+      remoteNamespace: secret-records
+      server:
+        url: https://kubernetes.default.svc
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          namespace: external-secrets-system
+          key: ca.crt
+      auth:
+        serviceAccount:
+          name: secret-record-reader
+          namespace: secret-records
+{{- else }}
+    aws:
+      service: SecretsManager
+      region: {{ .Values.region | quote }}
+{{- end }}

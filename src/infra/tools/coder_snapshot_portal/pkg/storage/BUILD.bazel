@@ -5,6 +5,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "storage",
     srcs = [
+        "credentials.go",
         "memory.go",
         "s3.go",
         "storage.go",
@@ -16,7 +17,10 @@ go_library(
 
 go_test(
     name = "storage_test",
-    srcs = ["s3_test.go"],
+    srcs = [
+        "credentials_test.go",
+        "s3_test.go",
+    ],
     embed = [":storage"],
     deps = ["//src/infra/tools/coder_snapshot_portal/pkg/model"],
 )

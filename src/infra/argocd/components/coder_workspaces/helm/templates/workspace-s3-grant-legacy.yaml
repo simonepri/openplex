@@ -1,0 +1,19 @@
+{{- /* Publishes the legacy S3 gateway grant for workspaces in this cell. */ -}}
+
+{{- $namespace := include "coder-workspaces.namespace" . -}}
+{{- /* floci-divergence: Floci reads the legacy record from in-cluster secret-records without cell prefix. */ -}}
+{{- $recordName := ternary "s3-legacy-research-data" (printf "%s-s3-legacy-research-data" .Values.cell) (eq .Values.provider "floci") -}}
+# LINT.IfChange(workspace-s3-grant-contract)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workspace-s3-grant-legacy
+  namespace: {{ $namespace }}
+  labels:
+    app.kubernetes.io/component: workspace-s3-grant
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: coder-workspaces
+data:
+  grant: legacy
+  recordName: {{ $recordName | quote }}
+# LINT.ThenChange(//src/infra/argocd/components/s3_gateway_team/helm/templates/workspace-grant.yaml:workspace-s3-grant-contract,//src/infra/argocd/components/kyverno/kustomize/workspace-s3-grant-policy.yaml:workspace-s3-grant-contract,//src/infra/definitions/workspaces/templates/dev/s3_access.tf:workspace-s3-grant-contract)

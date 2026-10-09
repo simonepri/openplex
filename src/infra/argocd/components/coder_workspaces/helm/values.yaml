@@ -1,0 +1,23 @@
+# Configures empty fail-closed defaults; the cell ApplicationSet supplies every value from the cluster registration.
+
+cell: ""
+provider: ""
+region: ""
+gcpProjectId: ""
+accessAliasDomain: ""
+buildbuddy:
+  mode: community
+  enterpriseProxy: false
+  executors: none
+origin:
+  registry: ""
+  region: ""
+  roleArn: ""
+  privateHttpsCIDRs: []
+  kubernetesApiCIDRs: []
+  registryCIDR: ""
+localGitCIDR: ""
+provisionerSubject:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: ""

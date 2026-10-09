@@ -11,7 +11,7 @@ flowchart TB
         CoderServer["Coder Server<br/>(Deployment: coder)"]
         
         subgraph Operator["coder-operator"]
-            Reconciler["Template Reconciler<br/>(GitOps PostSync Engine)"]
+            Reconciler["Template Reconciler<br/>(GitOps CronJob)"]
             Healer["Workspace Healer<br/>(Level-Triggered Loop)"]
         end
     end
@@ -22,23 +22,23 @@ flowchart TB
         PostgresDB[("PostgreSQL DB<br/>(Coder State)")]
     end
 
-    subgraph TeamCells["Worker Cells (cell-*)"]
-        subgraph TeamNamespace["Team Namespace (team-<slug>-workspaces)"]
+    subgraph WorkerCells["Worker Cells (cell-*)"]
+        subgraph WorkspacesNamespace["Shared Workspaces Namespace (workspaces)"]
             KueueQueue["Kueue LocalQueue<br/>(ha queue)"]
             WorkspacePod["Workspace Pod<br/>(coder-<user>-<name>)"]
             HomePVC["PersistentVolumeClaim<br/>(coder-<user>-<name>-home)"]
         end
     end
 
-    ArgoCD -->|Triggers PostSync| Reconciler
+    ArgoCD -->|Deploys CronJob| Reconciler
     Reconciler -->|Fetches source| GitRepo
     Reconciler -->|Pins image digest| OCIRegistry
     Reconciler -->|Publishes & Promotes| CoderServer
     CoderServer <-->|Stores metadata| PostgresDB
-    CoderServer -->|Provisions via API| TeamCells
+    CoderServer -->|Provisions via API| WorkerCells
     
     Healer -->|Polls workspace & build states| CoderServer
-    Healer -->|Inspects Pods & Events| TeamNamespace
+    Healer -->|Inspects Pods & Events| WorkspacesNamespace
     Healer -->|Dispatches Cancel / Restart| CoderServer
     WorkspacePod --- HomePVC
 ```
@@ -52,13 +52,13 @@ This hands-on tutorial guides you through deploying the `coder-operator`, verify
 ### Prerequisites
 
 - Access to a Kubernetes cluster running Coder (e.g., local development cell or control plane).
-- `kubectl` configured with cluster administrator privileges or namespace administrative permissions in `coder` and team namespaces.
+- `kubectl` configured with cluster administrator privileges or namespace administrative permissions in the `coder` and `workspaces` namespaces.
 - `coder` CLI installed and authenticated with administrative privileges.
 - [Argo CD](https://github.com/argoproj/argo-cd) managing the `coder` component.
 
 ### Step 1: Deploy and Verify the Template Reconciler
 
-The Template Reconciler runs as an Argo CD `PostSync` hook or standalone batch job. When triggered, it checks out the workspace template definition, resolves container image tags to immutable digests, computes a content hash, and promotes the new version in Coder.
+The Template Reconciler runs as a CronJob every 2 minutes. On each run it checks out the workspace template definition, resolves container image tags to immutable digests, computes a content hash, and promotes the new version in Coder.
 
 Trigger the template reconciler job manually to verify template synchronization:
 
@@ -88,7 +88,7 @@ coder templates versions list dev --column name,status,active --output table
 
 ### Step 2: Run the Workspace Healer in Dry-Run Mode
 
-By default, the Workspace Healer executes in dry-run mode (`DRY_RUN=true`). In this mode, the reconciler inspects both the Coder API and the Kubernetes API across team namespaces, evaluates build states and pod health, but emits diagnostic findings without executing mutating operations (no pod deletions or build cancellations).
+By default, the Workspace Healer executes in dry-run mode (`DRY_RUN=true`). In this mode, the reconciler inspects both the Coder API and the Kubernetes API in the `workspaces` namespace, evaluates build states and pod health, but emits diagnostic findings without executing mutating operations (no pod deletions or build cancellations).
 
 Inspect the healer logs:
 
@@ -116,7 +116,7 @@ Simulate a stalled workspace where a workspace build is marked `running` by Code
 2. Once the workspace build starts, simulate a network boundary fault or delete the backing pod while severing Coder agent communication:
 
    ```bash
-   kubectl delete pod -n team-examples-workspaces -l coder.coder.com/workspace-name=test-healing-workspace --force --grace-period=0
+   kubectl delete pod -n workspaces -l coder.coder.com/workspace-name=test-healing-workspace --force --grace-period=0
    ```
 
 3. Observe the healer log:
@@ -167,7 +167,7 @@ Apply the configuration and follow the log stream. In dry-run mode, the healer w
 
 - Query all active workspaces via `GET /api/v2/workspaces`.
 - Query all active builds via `GET /api/v2/workspace-builds`.
-- Cross-reference corresponding Kubernetes Pods across configured team namespaces (`team-*-workspaces`).
+- Cross-reference corresponding Kubernetes Pods in the shared `workspaces` namespace.
 - Increment internal observation counters for consecutive misses.
 - Log exact remedial actions (`would_cancel`, `would_restart`, `would_delete_stuck_pod`) with diagnostic metadata.
 
@@ -209,16 +209,16 @@ If a workspace enters a hung state and the operator is running in dry-run mode o
    coder builds list <workspace-name>
    ```
 
-2. Check the backing Kubernetes pod status in the team namespace:
+2. Check the backing Kubernetes pod status in the `workspaces` namespace:
 
    ```bash
-   kubectl get pods -n team-<team-name>-workspaces -l coder.coder.com/workspace-name=<workspace-name> -o wide
+   kubectl get pods -n workspaces -l coder.coder.com/workspace-name=<workspace-name> -o wide
    ```
 
 3. Inspect pod events and container termination reasons:
 
    ```bash
-   kubectl describe pod -n team-<team-name>-workspaces -l coder.coder.com/workspace-name=<workspace-name>
+   kubectl describe pod -n workspaces -l coder.coder.com/workspace-name=<workspace-name>
    ```
 
 4. If the build is hung in in-flight status (`starting` or `stopping`) while the pod is terminated or CrashLooping:
@@ -237,7 +237,7 @@ If a workspace enters a hung state and the operator is running in dry-run mode o
 5. Reset the healer rolling-window limit for the workspace if it reached the maximum rate limit:
 
    ```bash
-   kubectl annotate pod -n team-<team-name>-workspaces -l coder.coder.com/workspace-name=<workspace-name> coder.openplex.io/healer-reset-window="$(date +%s)"
+   kubectl annotate pod -n workspaces -l coder.coder.com/workspace-name=<workspace-name> coder.openplex.io/healer-reset-window="$(date +%s)"
    ```
 
 ### How to Authorize and Rotate Template Publication Credentials
@@ -379,13 +379,13 @@ The Workspace Healer continuously evaluates the tuple $(\text{Coder Workspace St
 | `HEALER_WINDOW_DURATION_HOURS` | Integer | `6` | Duration of the rolling rate-limiting window in hours (`DEFAULT_ROLLING_WINDOW_SECONDS = 21600`). |
 | `HEALER_MAX_CONCURRENT_HEALS` | Integer | `5` | Maximum number of concurrent mutating heal operations permitted per fleet sweep run (`DEFAULT_MAX_FLEET_HEALS_PER_RUN`). |
 | `HEALER_STATE_CONFIGMAP_NAME` | String | `workspace-healer-state` | Name of the ConfigMap in namespace `coder` storing serialized workspace health state and heal timestamps (`state.json`). |
-| `TARGET_NAMESPACES` | String | `""` | Comma-separated list of team workspace namespaces to watch (empty defaults to scanning all matching `team-*-workspaces`). |
+| `TARGET_NAMESPACES` | String | `""` | Comma-separated list of workspace namespaces to watch (empty defaults to the shared `workspaces` namespace). |
 | `LOG_LEVEL` | String | `info` | Logging verbosity: `debug`, `info`, `warn`, `error`. |
 | `METRICS_PORT` | Integer | `8080` | Port exposing Prometheus operational metrics (`/metrics`) and health checks (`/healthz`). |
 
 ### RBAC Permissions Matrix
 
-The `coder-operator` enforces least-privilege role boundaries split between the control-plane namespace (`coder`) and team execution namespaces (`team-*-workspaces`).
+The `coder-operator` enforces least-privilege role boundaries split between the control-plane namespace (`coder`) and the shared workspace execution namespace (`workspaces`).
 
 #### 1. Control-Plane Namespace (`coder`) Permissions
 
@@ -414,34 +414,43 @@ rules:
     verbs: ["create", "patch"]
 ```
 
-#### 2. Team Workspace Namespaces (`team-*-workspaces`) Permissions
+#### 2. Shared Workspaces Namespace (`workspaces`) Permissions
+
+Every worker cell hosts all developer workspaces in one shared namespace, `workspaces`, labeled `app.kubernetes.io/part-of: coder-workspaces`. The cell-level `coder_workspaces` component creates the namespace, the `coder-workspace` ServiceAccount that workspace pods run as (`automountServiceAccountToken: false`), and the `coder-provisioner` Role and RoleBinding granting the cell's Coder provisioner subject the lifecycle access it needs to create workspace resources.
+
+Workspaces are owned by individual users, not teams. Until user-OIDC authorization lands, workspaces have no team-scoped access: they cannot submit jobs into team lanes, read team dev secrets, or mount team S3 buckets.
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
-  name: coder-operator-workspace-healer
+  name: coder-provisioner
+  namespace: workspaces
 rules:
-  # Inspecting Pod lifecycles, statuses, and executing pod remediation
+  # Managing workspace configuration, home volumes, and services
   - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "watch", "delete"]
-  # Inspecting container crash logs for diagnostic reason extraction
-  - apiGroups: [""]
-    resources: ["pods/log"]
-    verbs: ["get"]
-  # Observing PVC binding and attachment status to prevent unmount race conditions
-  - apiGroups: [""]
-    resources: ["persistentvolumeclaims"]
-    verbs: ["get", "list", "watch"]
-  # Observing Deployment status if workspaces are managed via Deployment controllers
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "watch"]
-  # Emitting healing notification events on the target workspace Pods
+    resources: ["configmaps", "persistentvolumeclaims", "services"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # Reading scheduling and startup events
   - apiGroups: [""]
     resources: ["events"]
-    verbs: ["create", "patch"]
+    verbs: ["list"]
+  # Observing workspace Pod lifecycles
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # Managing per-workspace secrets
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "delete", "get", "patch", "update"]
+  # Managing the workspace Deployment
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # Observing Kueue admission of workspace Pods
+  - apiGroups: ["kueue.x-k8s.io"]
+    resources: ["workloads"]
+    verbs: ["get", "list", "watch"]
 ```
 
 ### Network Boundaries & NetworkPolicy Reference
@@ -619,14 +628,14 @@ The `coder-operator` Workspace Healer adopts **level-triggered reconciliation**:
 
 - On every sweep cycle (default: every 30 seconds), the healer computes the entire system state from scratch.
 - It queries Coder's `/api/v2/workspaces` and `/api/v2/workspace-builds` endpoints.
-- It correlates each active build with the live state of Kubernetes Pods, PersistentVolumeClaims, and Kueue queue admission objects in the respective team namespace.
+- It correlates each active build with the live state of Kubernetes Pods, PersistentVolumeClaims, and Kueue queue admission objects in the shared `workspaces` namespace.
 - It makes decisions based on the *current level* of truth, ensuring that regardless of past network partitions or missed events, state eventually converges to desired health.
 
 ### The 180s Connection Timeout & Consecutive-Miss Heuristics
 
 A central challenge in automated workspace recovery is avoiding false positives during legitimate startup latency. In high-density clusters, scheduling a workspace pod involves several asynchronous phases:
 
-1. **Admission Phase**: Kueue evaluates the team's `ha` LocalQueue. If quota is constrained, the pod remains `Pending`.
+1. **Admission Phase**: Kueue evaluates the `ha` LocalQueue in the `workspaces` namespace. If quota is constrained, the pod remains `Pending`.
 2. **Provisioning Phase**: Karpenter provisions an EC2 or GCP compute instance, which requires 45 to 90 seconds.
 3. **Storage Attachment Phase**: Cloud block storage (EBS gp3 or Persistent Disk) attaches to the instance and is formatted/mounted by the CSI driver.
 4. **Image Pull & Container Startup**: Base container images, Tailscale sidecars, and backup proxies are initialized.
@@ -653,7 +662,7 @@ Automated remediation loops can amplify outages if left unrestricted. Two specif
 2. **Thundering Herds during Cluster Incidents**:
    - If a worker node crashes or an entire Availability Zone experiences networking issues, dozens of developer workspaces may disconnect simultaneously.
    - If the healer attempted to cancel and restart all affected workspaces at the same instant, the sudden influx of simultaneous builds would overwhelm the Coder API server, exhaust Kueue quotas, and overwhelm storage attachment controllers.
-   - **Protection: Max Fleet Concurrency Limit per Run**. The healer limits active remediation to `MAX_FLEET_HEALS_PER_RUN = 5` concurrent mutating operations per fleet sweep cycle (`evaluate_healing_rate_limits`). Healing operations are prioritized based on workspace age and team priority, spreading the recovery load evenly across successive evaluation intervals.
+   - **Protection: Max Fleet Concurrency Limit per Run**. The healer limits active remediation to `MAX_FLEET_HEALS_PER_RUN = 5` concurrent mutating operations per fleet sweep cycle (`evaluate_healing_rate_limits`). Healing operations are prioritized based on workspace age, spreading the recovery load evenly across successive evaluation intervals.
 
 ### Declarative Template GitOps Pipeline
 
@@ -661,7 +670,7 @@ The Template Reconciler enforces strict immutability and provenance tracking:
 
 ```mermaid
 flowchart TD
-    GitCommit["Git Revision Commit<br/>(src/infra/definitions/workspaces/templates/dev)"] --> ReconcilerJob["Template Reconciler Job<br/>(PostSync Hook)"]
+    GitCommit["Git Revision Commit<br/>(src/infra/definitions/workspaces/templates/dev)"] --> ReconcilerJob["Template Reconciler<br/>(CronJob)"]
     
     subgraph Pipeline["Three-Stage Reconciler Pipeline"]
         SourceInit["1. Source Container<br/>(Checkout declared Git revision)"]
@@ -688,6 +697,19 @@ flowchart TD
 3. **Decoupled User Impact**:
    - Promoting a new template version in Coder is completely non-disruptive to active developer environments.
    - Running workspaces continue operating uninterrupted. Developers receive an in-app banner notifying them that an updated template is available, which will be applied during their next scheduled or manual workspace restart.
+4. **Publication Trigger Mechanism (Periodic CronJob + Content Hashing)**:
+   - **Why Coder app diffs cannot trigger publication**: The Argo CD Application for Coder tracks `src/infra/argocd/components/coder/kustomize`. Updates to developer workspace templates (`src/infra/definitions/workspaces/templates/dev`) or shared modules (`src/infra/definitions/workspaces/modules`) occur outside the Coder component path, producing no git diff in the Argo CD application.
+   - **Level-triggered reconciliation via CronJob**: Rather than requiring synthetic commits or coupling Coder app diffs to workspace template source paths, template reconciliation runs via a Kubernetes `CronJob` (`coder-template-reconciler`) scheduled every 2 minutes (`*/2 * * * *`).
+   - **Zero-overhead idempotency**: The reconciler hashes all materialized template files (including transitive modules) and target inputs into `source_hash`. If Coder already contains a succeeded version matching `source_hash`, publication is skipped and the version is confirmed promoted. When any file in `templates/dev` or `modules` changes, `source_hash` changes, automatically triggering a new build and promotion.
+
+### Brokerless Snapshot Root Key Injection
+
+Developer workspace snapshots use brokerless client-side encryption. The Coder server provisions workspace templates using identity hooks that require access to the cluster's snapshot root key:
+
+- **Source of Truth**: The root key originates in cloud Secrets Manager (e.g. `${ctrl cluster}-workspace-snapshot-root` via `aws-secrets-manager` on cloud) or `local-secret-records` on Floci.
+- **Projection**: The ExternalSecret `workspace-snapshot-root` in namespace `coder` reads property `root_key` and creates Kubernetes Secret `workspace-snapshot-root`.
+- **Mount & Environment**: The Coder server pod mounts this secret read-only at `/etc/coder/workspace-snapshot-root/root_key` with volume name `workspace-snapshot-root` and injects `WORKSPACE_SNAPSHOT_ROOT_KEY_FILE=/etc/coder/workspace-snapshot-root/root_key`.
+- **Password Derivation**: During workspace builds, template identity hook `hooks/snapshot-repository-password.sh` reads this root key file to compute a deterministic HMAC-SHA256 repository password scoped to the workspace owner, eliminating intermediate credential broker services.
 
 ---
 
@@ -755,7 +777,7 @@ Transition from imperative environment configurations to declarative Kubernetes 
      targetNamespaces:
        selector:
          matchLabels:
-           example.com/team: "true"
+           app.kubernetes.io/part-of: coder-workspaces
      detection:
        agentConnectionTimeout: 180s
        consecutiveMissThreshold: 3

@@ -3,6 +3,8 @@
 cell: cell-example
 access:
   hostname: coder-snapshots.cell-example.example.invalid
+  accessDomain: ""
+  aliasDomain: ""
   gatewayIPv4: 172.31.0.11
   privateEgress:
     namespace: tailscale-system
@@ -12,7 +14,8 @@ coder:
   template: dev
   url: https://coder.example.invalid
 s3:
-  bucket: workspace-snapshots
+  buckets:
+    - workspace-snapshots
   endpoint: http://s3-gateway.s3-system.svc:8080
   region: ""
 certificate:
@@ -21,10 +24,8 @@ localCA:
   enabled: true
   configMapName: cluster-local-ca
 image:
-  repository: docker.io/cluster/coder-snapshot-portal
-  # LINT.IfChange(snapshot-portal-image)
-  digest: sha256:156d1b3edb4b5bb8bcc013d2fa500b4e3b3b9bccf92cd1ae03f8d7bc439ac089
-  # LINT.ThenChange(//src/infra/argocd/apps/ctrl.yaml:snapshot-portal-image)
+  repository: placeholder.invalid/src/infra/tools/coder_snapshot_portal
+  tag: inventory
   pullPolicy: IfNotPresent
 resources:
   requests: {cpu: 10m, memory: 16Mi}

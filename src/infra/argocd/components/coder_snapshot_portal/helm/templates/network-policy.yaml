@@ -78,6 +78,11 @@ spec:
               {{- toYaml .Values.access.privateEgress.podLabels | nindent 14 }}
       ports:
         - {protocol: TCP, port: {{ .Values.access.privateEgress.port }}}
+    # AWS Pod Identity agent endpoint
+    - to:
+        - ipBlock: {cidr: 169.254.170.23/32}
+      ports:
+        - {protocol: TCP, port: 80}
     # Floci S3 endpoint
     - to:
         - ipBlock:

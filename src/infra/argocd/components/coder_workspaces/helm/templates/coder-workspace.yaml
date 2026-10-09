@@ -1,0 +1,66 @@
+{{- /* Provides the workspace pod identity and the Role the cell's Coder provisioner uses to manage workspaces. */ -}}
+
+{{- $namespace := include "coder-workspaces.namespace" . -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: coder-workspace
+  namespace: {{ $namespace }}
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+    app.kubernetes.io/name: coder-workspace
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: coder-provisioner
+  namespace: {{ $namespace }}
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps, persistentvolumeclaims, services]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [list]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create, delete, get, patch, update]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [kueue.x-k8s.io]
+    resources: [workloads]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: coder-provisioner
+  namespace: {{ $namespace }}
+  annotations:
+    ignore-check.kube-linter.io/access-to-secrets: >-
+      Coder workspace provisioner requires workspace secret lifecycle access to provision user dev workspaces.
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+subjects:
+  {{- if eq .Values.provider "aws" }}
+  - kind: ServiceAccount
+    name: coder-provisioner
+    namespace: kube-system
+  {{- end }}
+  - apiGroup: {{ .Values.provisionerSubject.apiGroup }}
+    kind: {{ .Values.provisionerSubject.kind }}
+    name: {{ .Values.provisionerSubject.name | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: coder-provisioner

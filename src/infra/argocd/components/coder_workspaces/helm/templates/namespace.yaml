@@ -1,0 +1,21 @@
+{{- /* Creates the one shared namespace that hosts every user's Coder dev workspace on this cell. */ -}}
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "coder-workspaces.namespace" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+    # LINT.IfChange(workspace-buildbuddy-cell-label)
+    cell: {{ .Values.cell | quote }}
+    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/dev-secrets-policy.yaml:workspace-buildbuddy-cell-label)
+    environment: production
+    # LINT.IfChange(team-pod-security-profile)
+    kueue.x-k8s.io/managed: "true"
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/team-pod-security-policy.yaml:team-pod-security-profile)

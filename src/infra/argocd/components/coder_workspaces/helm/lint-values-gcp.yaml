@@ -1,0 +1,20 @@
+# Exercises a GKE cell whose workspaces push to cross-cloud ECR through web identity and use the BuildBuddy enterprise proxy.
+
+cell: cell-gcp-euw4
+provider: gcp
+region: europe-west4
+gcpProjectId: example-project
+accessAliasDomain: c.example.invalid
+buildbuddy: {mode: cloud, enterpriseProxy: true, executors: all}
+origin:
+  registry: 999988887777.dkr.ecr.us-west-2.amazonaws.com
+  region: us-west-2
+  roleArn: arn:aws:iam::999988887777:role/cell-gcp-euw4-workspace-ecr
+  privateHttpsCIDRs: []
+  kubernetesApiCIDRs: [172.17.32.1/32]
+  registryCIDR: ""
+localGitCIDR: ""
+provisionerSubject:
+  apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: coder-provisioner@example-project.iam.gserviceaccount.com

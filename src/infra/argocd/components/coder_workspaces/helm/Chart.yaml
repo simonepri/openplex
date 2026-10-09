@@ -1,0 +1,8 @@
+# Chart metadata for the cell-owned coder-workspaces chart. Each `<cell>-coder-workspaces` Application renders the shared `workspaces` namespace that hosts every user's Coder dev workspace.
+
+apiVersion: v2
+name: coder-workspaces
+description: Shared Coder dev workspace namespace with its identity, credential projections, network policies, and dev queue binding.
+type: application
+version: 0.1.0
+appVersion: 1.0.0

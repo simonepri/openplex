@@ -1,0 +1,11 @@
+{{- /* Binds workspace pods to the cell's shared dev ClusterQueue. */ -}}
+
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: ha
+  namespace: {{ include "coder-workspaces.namespace" . }}
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+spec:
+  clusterQueue: workspaces-ha

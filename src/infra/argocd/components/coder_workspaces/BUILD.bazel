@@ -1,4 +1,4 @@
-"""Check targets for the coder_workspace_secret_store Argo CD component."""
+"""Defines build and check targets for the coder_workspaces Argo CD component."""
 
 load("@rules_helm//helm:defs.bzl", "helm_chart", "helm_lint_test", "helm_template")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "HELM_TEMPLATE", "package_sources", "source_set")
@@ -51,25 +51,6 @@ helm_template(
 manifest_checks(
     name = "helm-floci",
     rendered = ":helm_render-floci",
-)
-
-helm_lint_test(
-    name = "helm-lint-floci-aws",
-    chart = ":chart",
-    opts = ["--strict"],
-    values = ["helm/lint-values-floci-aws.yaml"],
-)
-
-helm_template(
-    name = "helm_render-floci-aws",
-    chart = ":chart",
-    values = ["helm/lint-values-floci-aws.yaml"],
-    visibility = ["//visibility:public"],
-)
-
-manifest_checks(
-    name = "helm-floci-aws",
-    rendered = ":helm_render-floci-aws",
 )
 
 helm_lint_test(

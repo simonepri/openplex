@@ -9,6 +9,7 @@ coder:
 image:
   repository: localhost:15100/000000000000/us-east-1/src/infra/tools/coder_snapshot_portal
 s3:
-  bucket: coder-snapshots
+  buckets:
+    - coder-snapshots
   endpoint: http://172.19.0.2:4566
   region: us-east-1

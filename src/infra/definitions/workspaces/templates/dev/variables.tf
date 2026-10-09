@@ -1,7 +1,7 @@
-# Declares administrator-supplied input variables configuring cell domains, base images, and team namespaces.
+# Declares administrator-supplied input variables configuring cell domains, base images, and the workspaces namespace.
 
 variable "cell" {
-  description = "Cell whose team namespace, storage gateway, and backup lineage this template uses."
+  description = "Cell whose workspaces namespace, storage gateway, and backup lineage this template uses."
   type        = string
 
   validation {
@@ -34,6 +34,16 @@ variable "deployment_domain" {
   }
 }
 
+variable "coder_app_domain" {
+  description = "Coder wildcard domain without leading wildcard used for external workspace application and SSH routing."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)+$", var.coder_app_domain))
+    error_message = "coder_app_domain must be a lowercase DNS suffix."
+  }
+}
+
 variable "headscale_url" {
   description = "Private access-plane enrollment and Headscale HTTPS endpoint."
   type        = string
@@ -56,6 +66,17 @@ variable "ca_config_map_name" {
   }
 }
 
+variable "cell_ca_inventory" {
+  description = "JSON object mapping each registered cell to the base64-encoded PEM CA of its kube-oidc-proxy, so workspaces can reach every cell."
+  type        = string
+  default     = "{}"
+
+  validation {
+    condition     = can(tomap(jsondecode(var.cell_ca_inventory))) && alltrue([for ca in values(jsondecode(var.cell_ca_inventory)) : can(base64decode(ca))])
+    error_message = "cell_ca_inventory must be a JSON object of base64-encoded PEM CAs."
+  }
+}
+
 variable "control_plane_ca_base64" {
   description = "Base64-encoded PEM CA for control-plane HTTPS endpoints used by workspace agents and sidecars."
   type        = string
@@ -67,6 +88,12 @@ variable "control_plane_ca_base64" {
     ))
     error_message = "control_plane_ca_base64 must encode one PEM certificate."
   }
+}
+
+variable "control_plane_name" {
+  description = "Registered name of the control-plane cluster, whose kube-oidc-proxy every workspace kubeconfig includes."
+  type        = string
+  default     = ""
 }
 
 variable "repository_url" {
@@ -100,16 +127,6 @@ variable "storage_class_name" {
   validation {
     condition     = length(trimspace(var.storage_class_name)) > 0
     error_message = "storage_class_name must not be empty."
-  }
-}
-
-variable "team" {
-  description = "Registered team that owns the workspace namespace and storage prefix."
-  type        = string
-
-  validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,61}[a-z0-9]$", var.team))
-    error_message = "team must be a lowercase DNS label."
   }
 }
 
@@ -275,18 +292,9 @@ variable "workspace_virtual_name_inventory" {
   }
 }
 
-variable "workspace_namespace" {
-  description = "Existing team-scoped workspaces namespace in the selected cell."
-  type        = string
-
-  validation {
-    condition     = can(regex("^team-[a-z][a-z0-9]{1,30}-workspaces$", var.workspace_namespace))
-    error_message = "workspace_namespace must be a team-scoped workspaces namespace."
-  }
-}
 
 variable "workspace_service_account" {
-  description = "Existing team ServiceAccount used by workspace pods."
+  description = "Existing ServiceAccount in the workspaces namespace used by workspace pods."
   type        = string
 
   validation {

@@ -1,0 +1,81 @@
+{{- /* Projects the organization workspace-backup credential into the workspaces namespace through a store scoped to that namespace alone. */ -}}
+
+{{- $namespace := include "coder-workspaces.namespace" . -}}
+{{- /* floci-divergence: Floci reads the backup record from in-cluster secret-records instead of a cloud secret manager. */ -}}
+{{- $recordName := ternary "s3-org-workspace-backups" (printf "%s-s3-org-workspace-backups" .Values.cell) (eq .Values.provider "floci") -}}
+# LINT.IfChange(dev-workspace-secret-projection)
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: {{ printf "org-workspace-backups-%s" $namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+spec:
+  conditions:
+    - namespaces:
+        - {{ $namespace }}
+  provider:
+{{- if eq .Values.provider "gcp" }}
+    gcpsm:
+      projectID: {{ .Values.gcpProjectId | quote }}
+      auth:
+        workloadIdentity:
+          clusterLocation: {{ .Values.region | quote }}
+          clusterName: {{ .Values.cell | quote }}
+          serviceAccountRef:
+            name: org-workspace-backups
+            namespace: external-secrets-system
+{{- /* floci-divergence: Floci reads the backup record from in-cluster secret-records instead of a cloud secret manager. */ -}}
+{{- else if eq .Values.provider "floci" }}
+    kubernetes:
+      remoteNamespace: secret-records
+      server:
+        url: https://kubernetes.default.svc
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          namespace: external-secrets-system
+          key: ca.crt
+      auth:
+        serviceAccount:
+          name: secret-record-reader
+          namespace: secret-records
+{{- else }}
+    aws:
+      service: SecretsManager
+      region: {{ .Values.region | quote }}
+{{- end }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: workspace-backups
+  namespace: {{ $namespace }}
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ printf "org-workspace-backups-%s" $namespace }}
+  target:
+    name: workspace-backups
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      data:
+        access_key_id: {{`'{{ .access_key_id }}'`}}
+        secret_access_key: {{`'{{ .secret_access_key }}'`}}
+  data:
+    - secretKey: access_key_id
+      remoteRef:
+        key: {{ $recordName | quote }}
+        property: access_key_id
+    - secretKey: secret_access_key
+      remoteRef:
+        key: {{ $recordName | quote }}
+        property: secret_access_key
+# LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/dev-secrets-policy.yaml:dev-workspace-secret-projection,//src/infra/definitions/workspaces/templates/dev/deployment.tf:dev-workspace-secret-projection)

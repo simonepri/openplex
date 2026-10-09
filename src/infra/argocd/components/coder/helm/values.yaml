@@ -10,8 +10,6 @@ coder:
     - --max-token-lifetime=720h
     - --max-admin-token-lifetime=8760h
   replicaCount: 1
-  telemetry:
-    enable: false
   apps:
     enablePathBased: false
   image:
@@ -19,7 +17,7 @@ coder:
     tag: v2.37.3@sha256:a48f82c2c437e032ce3f6970b4e937a7900cad3c76956956955099465b45e542
   initContainers:
     - name: ca-bundle
-      image: ghcr.io/coder/coder:v2.37.2@sha256:a48f82c2c437e032ce3f6970b4e937a7900cad3c76956956955099465b45e542
+      image: ghcr.io/coder/coder:v2.38.0@sha256:38a4cfc548b096484d6d1743e5f1a5af18301ed9a7ffde5150663822f9887026
       command: [/bin/sh, -ec]
       args:
         - cat /etc/ssl/certs/ca-certificates.crt /etc/local-ca/ca.crt > /state/ca-bundle.crt
@@ -41,7 +39,7 @@ coder:
         - name: coder-tmp
           mountPath: /state
     - name: provisioner-auth
-      image: quay.io/argoproj/argocd:v3.5.3@sha256:dd3f47d5a5e4da563a7a398506e892481b358a7cec50abdf320c71aa55904bfa
+      image: quay.io/argoproj/argocd:v3.5.4@sha256:49dff79439bb38b1b942b19a113fe1fec7e6b6c671ddf9fe6a4a7c46bde0b77b
       command: [cp, /usr/local/bin/argocd-k8s-auth, /auth/argocd-k8s-auth]
       resources:
         requests: {cpu: 10m, memory: 16Mi}
@@ -60,6 +58,7 @@ coder:
   env:
     - {name: CODER_AI_GATEWAY_ENABLED, value: "false"}
     - {name: CODER_DANGEROUS_DISABLE_PATH_APPS, value: "true"}
+    - {name: CODER_DERP_SERVER_STUN_ADDRESSES, value: "stun.l.google.com:19302"}
     - {name: CODER_DISABLE_PASSWORD_AUTH, value: "true"}
     - {name: CODER_EXPERIMENTS, value: "oauth2"}
     - {name: CODER_OAUTH2_GITHUB_DEFAULT_PROVIDER_ENABLE, value: "false"}
@@ -68,12 +67,14 @@ coder:
     - {name: CODER_REDIRECT_TO_ACCESS_URL, value: "false"}
     - {name: CODER_PROXY_TRUSTED_ORIGINS, value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10"}
     - {name: CODER_PROXY_TRUSTED_HEADERS, value: "X-Forwarded-Proto,X-Forwarded-For,X-Forwarded-Host"}
+    - {name: CODER_TELEMETRY_ENABLE, value: "false"}
     - {name: CODER_WORKSPACE_AGENT_REGISTRATION_TOKEN_FILE, value: /var/run/cluster/workspace-agent-registration/token}
     - {name: CODER_WORKSPACE_AGENT_REGISTRATION_URL, value: 'https://headscale-workspace-registration.headscale.svc.cluster.local:8443/v1/workspace-agents/register'}
     - {name: SSL_CERT_DIR, value: /etc/local-ca}
     - {name: SSL_CERT_FILE, value: /tmp/ca-bundle.crt}
     - {name: TF_REGISTRY_CLIENT_TIMEOUT, value: "60"}
     - {name: TF_REGISTRY_DISCOVERY_RETRY, value: "5"}
+    - {name: WORKSPACE_SNAPSHOT_ROOT_KEY_FILE, value: /etc/coder/workspace-snapshot-root/root_key}
     - name: CODER_PG_CONNECTION_URL
       valueFrom:
         secretKeyRef:
@@ -151,6 +152,12 @@ coder:
     - name: coder-cell-kubeconfig
       secret:
         secretName: coder-cell-kubeconfig
+    - name: workspace-snapshot-root
+      secret:
+        secretName: workspace-snapshot-root
+        items:
+          - key: root_key
+            path: root_key
   volumeMounts:
     - name: coder-cache
       mountPath: /home/coder/.cache
@@ -167,6 +174,9 @@ coder:
       readOnly: true
     - name: coder-cell-kubeconfig
       mountPath: /var/run/coder/cell
+      readOnly: true
+    - name: workspace-snapshot-root
+      mountPath: /etc/coder/workspace-snapshot-root
       readOnly: true
   prometheus:
     enabled: false

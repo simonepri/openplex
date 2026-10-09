@@ -30,7 +30,7 @@ type portalOptions struct {
 	coderOAuthClientSecret string
 	coderOAuthRedirectURL  string
 	sessionSecret          string
-	s3Bucket               string
+	s3Buckets              []string
 	s3Endpoint             string
 	s3KeyPrefix            string
 	awsRegion              string
@@ -57,6 +57,7 @@ func getEnvBool(key string, fallback bool) bool {
 
 func parseOptions() portalOptions {
 	var opts portalOptions
+	var s3BucketsRaw string
 
 	flag.StringVar(&opts.port, "port", getEnv("PORT", "8080"), "HTTP port to listen on")
 	flag.StringVar(&opts.coderURL, "coder-url", getEnv("CODER_URL", "http://localhost:3000"), "Coder deployment base URL")
@@ -64,7 +65,7 @@ func parseOptions() portalOptions {
 	flag.StringVar(&opts.coderOAuthClientSecret, "coder-oauth-client-secret", getEnv("CODER_OAUTH_CLIENT_SECRET", ""), "Coder OAuth2 client secret")
 	flag.StringVar(&opts.coderOAuthRedirectURL, "coder-oauth-redirect-url", getEnv("CODER_OAUTH_REDIRECT_URL", ""), "Coder OAuth2 callback redirect URL")
 	flag.StringVar(&opts.sessionSecret, "session-secret", getEnv("SESSION_SECRET", ""), "HMAC secret key for browser sessions (at least 32 bytes)")
-	flag.StringVar(&opts.s3Bucket, "s3-bucket", getEnv("S3_BUCKET", ""), "S3 bucket name for snapshot manifests")
+	flag.StringVar(&s3BucketsRaw, "s3-buckets", getEnv("S3_BUCKETS", ""), "Comma-separated S3 bucket names for snapshot manifests")
 	flag.StringVar(&opts.s3Endpoint, "s3-endpoint", getEnv("S3_ENDPOINT", ""), "Optional custom S3 endpoint URL")
 	flag.StringVar(&opts.s3KeyPrefix, "s3-key-prefix", getEnv("S3_KEY_PREFIX", ""), "Optional S3 key prefix for snapshot manifests")
 	flag.StringVar(&opts.awsRegion, "aws-region", getEnv("AWS_REGION", "us-east-1"), "AWS region for S3 SigV4 signing")
@@ -74,6 +75,15 @@ func parseOptions() portalOptions {
 	flag.BoolVar(&opts.devMode, "dev-mode", getEnvBool("DEV_MODE", false), "Enable dev mode using in-memory store and mock data")
 
 	flag.Parse()
+
+	if s3BucketsRaw != "" {
+		for _, b := range strings.Split(s3BucketsRaw, ",") {
+			b = strings.TrimSpace(b)
+			if b != "" {
+				opts.s3Buckets = append(opts.s3Buckets, b)
+			}
+		}
+	}
 
 	if opts.coderOAuthRedirectURL == "" {
 		opts.coderOAuthRedirectURL = fmt.Sprintf("http://localhost:%s/oauth/callback", opts.port)
@@ -110,24 +120,39 @@ func initStorage(opts portalOptions, httpClient *http.Client) storage.SnapshotSt
 		return memStore
 	}
 
-	if opts.s3Bucket == "" {
-		log.Fatalf("S3_BUCKET is required when DEV_MODE is false")
+	if len(opts.s3Buckets) == 0 {
+		log.Fatalf("S3_BUCKETS is required when DEV_MODE is false")
 	}
 
 	s3Store, err := storage.NewS3Store(storage.S3Config{
-		Endpoint:        opts.s3Endpoint,
-		Bucket:          opts.s3Bucket,
-		Region:          opts.awsRegion,
-		AccessKeyID:     opts.awsAccessKeyID,
-		SecretAccessKey: opts.awsSecretAccessKey,
-		KeyPrefix:       opts.s3KeyPrefix,
-		HTTPClient:      httpClient,
+		Endpoint:    opts.s3Endpoint,
+		Buckets:     opts.s3Buckets,
+		Region:      opts.awsRegion,
+		Credentials: awsCredentials(opts, httpClient),
+		KeyPrefix:   opts.s3KeyPrefix,
+		HTTPClient:  httpClient,
 	})
 	if err != nil {
 		log.Fatalf("Failed to initialize S3Store: %v", err)
 	}
-	log.Printf("Using S3 snapshot store (bucket=%s, region=%s)", opts.s3Bucket, opts.awsRegion)
+	log.Printf("Using S3 snapshot store (buckets=%s, region=%s)", strings.Join(opts.s3Buckets, ","), opts.awsRegion)
 	return s3Store
+}
+
+// awsCredentials prefers explicit access keys and falls back to the container
+// credentials endpoint that EKS Pod Identity injects.
+func awsCredentials(opts portalOptions, httpClient *http.Client) storage.CredentialsProvider {
+	if opts.awsAccessKeyID != "" {
+		return storage.StaticCredentials{AccessKeyID: opts.awsAccessKeyID, SecretAccessKey: opts.awsSecretAccessKey}
+	}
+	if uri := os.Getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI"); uri != "" {
+		return &storage.ContainerCredentials{
+			URI:        uri,
+			TokenFile:  os.Getenv("AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE"),
+			HTTPClient: httpClient,
+		}
+	}
+	return nil
 }
 
 func initAuth(opts *portalOptions, httpClient *http.Client) (*auth.SessionManager, *auth.OAuthConfig) {

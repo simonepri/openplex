@@ -1,0 +1,34 @@
+{{- /* Generates the cell's BuildBuddy .bazelrc configuration for Coder workspaces. */ -}}
+
+{{- $bb := .Values.buildbuddy -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workspace-buildbuddy-config
+  namespace: {{ include "coder-workspaces.namespace" . }}
+  labels:
+{{ include "coder-workspaces.labels" . | nindent 4 }}
+data:
+  buildbuddy.bazelrc: |-
+    {{- if ne $bb.mode "cloud" }}
+    import /var/run/workspace/buildbuddy/credentials.bazelrc
+    {{- end }}
+    build --disk_cache=
+    {{- if eq $bb.mode "cloud" }}
+    {{- if $bb.enterpriseProxy }}
+    common --config=bb-cloud-proxy
+    {{- end }}
+    {{- if ne $bb.executors "none" }}
+    common --config=bb-rbe-sh
+    {{- else }}
+    build --remote_executor=
+    {{- end }}
+    {{- else }}
+    # floci-divergence: Floci clusters configure workspace CA bundle for local cert trust.
+    {{- if eq .Values.provider "floci" }}
+    build --tls_certificate=/tmp/workspace-ca-bundle.crt
+    {{- end }}
+    common --config=bb-community
+    common:bb-community --bes_backend=grpcs://buildbuddy-events.{{ .Values.accessAliasDomain }}:443
+    common:bb-community --bes_results_url=https://buildbuddy.{{ .Values.accessAliasDomain }}/invocation/
+    {{- end }}

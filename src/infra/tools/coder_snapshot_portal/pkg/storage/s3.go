@@ -31,15 +31,13 @@ var (
 
 // S3Config holds configuration options for S3 storage access.
 type S3Config struct {
-	Endpoint        string
-	Bucket          string
-	Region          string
-	AccessKeyID     string
-	SecretAccessKey string
-	SessionToken    string
-	UsePathStyle    bool
-	KeyPrefix       string
-	HTTPClient      *http.Client
+	Endpoint     string
+	Buckets      []string
+	Region       string
+	Credentials  CredentialsProvider
+	UsePathStyle bool
+	KeyPrefix    string
+	HTTPClient   *http.Client
 }
 
 // S3Store provides direct S3 storage access for snapshot manifests without external SDKs.
@@ -49,20 +47,20 @@ type S3Store struct {
 	httpClient *http.Client
 }
 
-type listObjectsV2Output struct {
-	XMLName               xml.Name       `xml:"ListBucketResult"`
-	Name                  string         `xml:"Name"`
-	Prefix                string         `xml:"Prefix"`
-	KeyCount              int            `xml:"KeyCount"`
-	MaxKeys               int            `xml:"MaxKeys"`
-	IsTruncated           bool           `xml:"IsTruncated"`
-	Contents              []s3Object     `xml:"Contents"`
-	CommonPrefixes        []commonPrefix `xml:"CommonPrefixes"`
-	NextContinuationToken string         `xml:"NextContinuationToken"`
+type objectLocation struct {
+	bucket string
+	key    string
 }
 
-type commonPrefix struct {
-	Prefix string `xml:"Prefix"`
+type listObjectsV2Output struct {
+	XMLName               xml.Name   `xml:"ListBucketResult"`
+	Name                  string     `xml:"Name"`
+	Prefix                string     `xml:"Prefix"`
+	KeyCount              int        `xml:"KeyCount"`
+	MaxKeys               int        `xml:"MaxKeys"`
+	IsTruncated           bool       `xml:"IsTruncated"`
+	Contents              []s3Object `xml:"Contents"`
+	NextContinuationToken string     `xml:"NextContinuationToken"`
 }
 
 type s3Object struct {
@@ -73,9 +71,17 @@ type s3Object struct {
 
 // NewS3Store initializes an S3Store with standard HTTP client and SigV4 signer.
 func NewS3Store(cfg S3Config) (*S3Store, error) {
-	if cfg.Bucket == "" {
-		return nil, fmt.Errorf("s3 bucket is required")
+	var buckets []string
+	for _, b := range cfg.Buckets {
+		b = strings.TrimSpace(b)
+		if b != "" {
+			buckets = append(buckets, b)
+		}
 	}
+	if len(buckets) == 0 {
+		return nil, fmt.Errorf("at least one s3 bucket is required")
+	}
+	cfg.Buckets = buckets
 
 	endpoint := cfg.Endpoint
 	if endpoint == "" {
@@ -106,7 +112,7 @@ func NewS3Store(cfg S3Config) (*S3Store, error) {
 }
 
 // candidatePrefixes returns all potential S3 key prefixes where user snapshots may reside.
-func (s *S3Store) candidatePrefixes(ctx context.Context, userID string) []string {
+func (s *S3Store) candidatePrefixes(userID string) []string {
 	seen := make(map[string]bool)
 	var prefixes []string
 
@@ -128,24 +134,19 @@ func (s *S3Store) candidatePrefixes(ctx context.Context, userID string) []string
 		add(fmt.Sprintf("%srepos/%s/snapshots/", p, userID))
 	}
 
-	// 3. Dynamically discover team backup prefixes under backups/dev/
-	teamOutput, err := s.listObjectsPage(ctx, "backups/dev/", "", "/")
-	if err == nil && teamOutput != nil {
-		for _, cp := range teamOutput.CommonPrefixes {
-			add(fmt.Sprintf("%srepos/%s/owners/%s/snapshots/", cp.Prefix, userID, userID))
-			add(fmt.Sprintf("%srepos/%s/snapshots/", cp.Prefix, userID))
-		}
-	}
+	// 3. User-scoped dev workspace backup repository
+	add(fmt.Sprintf("backups/dev/users/%s/repos/owners/%s/snapshots/", userID, userID))
+	add(fmt.Sprintf("backups/dev/users/%s/repos/snapshots/", userID))
 
 	return prefixes
 }
 
-func (s *S3Store) listKeysForPrefix(ctx context.Context, prefix string) ([]string, error) {
+func (s *S3Store) listKeysForPrefix(ctx context.Context, bucket, prefix string) ([]string, error) {
 	var keys []string
 	continuationToken := ""
 
 	for {
-		output, err := s.listObjectsPage(ctx, prefix, continuationToken, "")
+		output, err := s.listObjectsPage(ctx, bucket, prefix, continuationToken)
 		if err != nil {
 			return nil, fmt.Errorf("list objects failed: %w", err)
 		}
@@ -164,48 +165,82 @@ func (s *S3Store) listKeysForPrefix(ctx context.Context, prefix string) ([]strin
 	return keys, nil
 }
 
-// ListUserSnapshots queries all snapshot manifests for a user under owners/{userID}/snapshots/*.json
-// and discovered backup prefixes.
+func (s *S3Store) listBucketKeys(ctx context.Context, bucket, userID string) ([]string, error) {
+	rootPrefix := fmt.Sprintf("owners/%s/snapshots/", userID)
+	keys, err := s.listKeysForPrefix(ctx, bucket, rootPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(keys) == 0 {
+		seenKeys := make(map[string]bool)
+		for _, prefix := range s.candidatePrefixes(userID) {
+			if prefix == rootPrefix {
+				continue
+			}
+			pKeys, err := s.listKeysForPrefix(ctx, bucket, prefix)
+			if err != nil {
+				return nil, err
+			}
+			for _, k := range pKeys {
+				if !seenKeys[k] {
+					seenKeys[k] = true
+					keys = append(keys, k)
+				}
+			}
+		}
+	}
+	return keys, nil
+}
+
+// ListUserSnapshots queries all snapshot manifests for a user across all configured S3 buckets,
+// merging results and deduplicating by snapshot selector.
 func (s *S3Store) ListUserSnapshots(ctx context.Context, userID string) ([]*model.SnapshotManifest, error) {
 	if err := validateUserID(userID); err != nil {
 		return nil, err
 	}
 
-	// Always try root prefix first
-	rootPrefix := fmt.Sprintf("owners/%s/snapshots/", userID)
-	allKeys, err := s.listKeysForPrefix(ctx, rootPrefix)
+	type bucketResult struct {
+		bucket string
+		keys   []string
+		err    error
+	}
+
+	resultsCh := make(chan bucketResult, len(s.cfg.Buckets))
+	var wg sync.WaitGroup
+
+	for _, bucket := range s.cfg.Buckets {
+		wg.Add(1)
+		go func(b string) {
+			defer wg.Done()
+			keys, err := s.listBucketKeys(ctx, b, userID)
+			resultsCh <- bucketResult{bucket: b, keys: keys, err: err}
+		}(bucket)
+	}
+
+	wg.Wait()
+	close(resultsCh)
+
+	var allLocations []objectLocation
+	for res := range resultsCh {
+		if res.err != nil {
+			return nil, res.err
+		}
+		for _, k := range res.keys {
+			allLocations = append(allLocations, objectLocation{bucket: res.bucket, key: k})
+		}
+	}
+
+	manifests, err := s.fetchManifestsConcurrently(ctx, allLocations)
 	if err != nil {
 		return nil, err
 	}
 
-	// If root prefix yielded no snapshots, check configured and discovered prefixes
-	if len(allKeys) == 0 {
-		seenKeys := make(map[string]bool)
-		for _, k := range allKeys {
-			seenKeys[k] = true
-		}
-
-		for _, prefix := range s.candidatePrefixes(ctx, userID) {
-			if prefix == rootPrefix {
-				continue
-			}
-			keys, err := s.listKeysForPrefix(ctx, prefix)
-			if err != nil {
-				return nil, err
-			}
-			for _, k := range keys {
-				if !seenKeys[k] {
-					seenKeys[k] = true
-					allKeys = append(allKeys, k)
-				}
-			}
-		}
-	}
-
-	manifests, err := s.fetchManifestsConcurrently(ctx, allKeys)
-	if err != nil {
-		return nil, err
-	}
+	// Sort manifests newest first to deterministically select the latest snapshot manifest
+	// if duplicate selectors exist across buckets.
+	sort.Slice(manifests, func(i, j int) bool {
+		return manifests[i].Timestamp > manifests[j].Timestamp
+	})
 
 	seenSelectors := make(map[string]bool)
 	var deduped []*model.SnapshotManifest
@@ -218,24 +253,23 @@ func (s *S3Store) ListUserSnapshots(ctx context.Context, userID string) ([]*mode
 	return deduped, nil
 }
 
-func (s *S3Store) listObjectsPage(ctx context.Context, prefix, token, delimiter string) (*listObjectsV2Output, error) {
+func (s *S3Store) listObjectsPage(ctx context.Context, bucket, prefix, token string) (*listObjectsV2Output, error) {
 	params := url.Values{}
 	params.Set("list-type", "2")
 	params.Set("prefix", prefix)
 	if token != "" {
 		params.Set("continuation-token", token)
 	}
-	if delimiter != "" {
-		params.Set("delimiter", delimiter)
-	}
 
-	reqURL := s.buildBucketURL(params)
+	reqURL := s.buildBucketURL(bucket, params)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	s.signRequest(req, nil, time.Now())
+	if err := s.signRequest(req, nil, time.Now()); err != nil {
+		return nil, err
+	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -259,8 +293,8 @@ func (s *S3Store) listObjectsPage(ctx context.Context, prefix, token, delimiter 
 	return &output, nil
 }
 
-func (s *S3Store) fetchManifestsConcurrently(ctx context.Context, keys []string) ([]*model.SnapshotManifest, error) {
-	if len(keys) == 0 {
+func (s *S3Store) fetchManifestsConcurrently(ctx context.Context, locations []objectLocation) ([]*model.SnapshotManifest, error) {
+	if len(locations) == 0 {
 		return []*model.SnapshotManifest{}, nil
 	}
 
@@ -269,18 +303,18 @@ func (s *S3Store) fetchManifestsConcurrently(ctx context.Context, keys []string)
 		err      error
 	}
 
-	results := make([]fetchResult, len(keys))
+	results := make([]fetchResult, len(locations))
 	concurrency := 10
-	if len(keys) < concurrency {
-		concurrency = len(keys)
+	if len(locations) < concurrency {
+		concurrency = len(locations)
 	}
 
 	semaphore := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 
-	for i, key := range keys {
+	for i, loc := range locations {
 		wg.Add(1)
-		go func(idx int, objKey string) {
+		go func(idx int, l objectLocation) {
 			defer wg.Done()
 			select {
 			case semaphore <- struct{}{}:
@@ -290,14 +324,14 @@ func (s *S3Store) fetchManifestsConcurrently(ctx context.Context, keys []string)
 			}
 			defer func() { <-semaphore }()
 
-			manifest, err := s.fetchObjectByKey(ctx, objKey)
+			manifest, err := s.fetchObject(ctx, l.bucket, l.key)
 			results[idx] = fetchResult{manifest: manifest, err: err}
-		}(i, key)
+		}(i, loc)
 	}
 
 	wg.Wait()
 
-	manifests := make([]*model.SnapshotManifest, 0, len(keys))
+	manifests := make([]*model.SnapshotManifest, 0, len(locations))
 	for _, res := range results {
 		if res.err != nil {
 			return nil, res.err
@@ -310,7 +344,7 @@ func (s *S3Store) fetchManifestsConcurrently(ctx context.Context, keys []string)
 	return manifests, nil
 }
 
-// GetSnapshot retrieves a single snapshot manifest by its selector.
+// GetSnapshot retrieves a single snapshot manifest by its selector across configured buckets.
 func (s *S3Store) GetSnapshot(ctx context.Context, userID, selector string) (*model.SnapshotManifest, error) {
 	if err := validateUserID(userID); err != nil {
 		return nil, err
@@ -320,37 +354,43 @@ func (s *S3Store) GetSnapshot(ctx context.Context, userID, selector string) (*mo
 	}
 
 	rootKey := fmt.Sprintf("owners/%s/snapshots/%s.json", userID, selector)
-	manifest, err := s.fetchObjectByKey(ctx, rootKey)
-	if err == nil {
-		return manifest, nil
-	} else if !errors.Is(err, ErrNotFound) {
-		return nil, err
-	}
-
-	for _, prefix := range s.candidatePrefixes(ctx, userID) {
-		if prefix == fmt.Sprintf("owners/%s/snapshots/", userID) {
-			continue
-		}
-		key := fmt.Sprintf("%s%s.json", prefix, selector)
-		m, err := s.fetchObjectByKey(ctx, key)
+	for _, bucket := range s.cfg.Buckets {
+		manifest, err := s.fetchObject(ctx, bucket, rootKey)
 		if err == nil {
-			return m, nil
+			return manifest, nil
 		} else if !errors.Is(err, ErrNotFound) {
 			return nil, err
+		}
+	}
+
+	for _, bucket := range s.cfg.Buckets {
+		for _, prefix := range s.candidatePrefixes(userID) {
+			if prefix == fmt.Sprintf("owners/%s/snapshots/", userID) {
+				continue
+			}
+			key := fmt.Sprintf("%s%s.json", prefix, selector)
+			m, err := s.fetchObject(ctx, bucket, key)
+			if err == nil {
+				return m, nil
+			} else if !errors.Is(err, ErrNotFound) {
+				return nil, err
+			}
 		}
 	}
 
 	return nil, ErrNotFound
 }
 
-func (s *S3Store) fetchObjectByKey(ctx context.Context, key string) (*model.SnapshotManifest, error) {
-	reqURL := s.buildObjectURL(key)
+func (s *S3Store) fetchObject(ctx context.Context, bucket, key string) (*model.SnapshotManifest, error) {
+	reqURL := s.buildObjectURL(bucket, key)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	s.signRequest(req, nil, time.Now())
+	if err := s.signRequest(req, nil, time.Now()); err != nil {
+		return nil, err
+	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -374,9 +414,9 @@ func (s *S3Store) fetchObjectByKey(ctx context.Context, key string) (*model.Snap
 	return &manifest, nil
 }
 
-func (s *S3Store) buildBucketURL(params url.Values) *url.URL {
+func (s *S3Store) buildBucketURL(bucket string, params url.Values) *url.URL {
 	u := *s.baseURL
-	u.Path = path.Join(u.Path, s.cfg.Bucket)
+	u.Path = path.Join(u.Path, bucket)
 	if !strings.HasSuffix(u.Path, "/") {
 		u.Path += "/"
 	}
@@ -384,9 +424,9 @@ func (s *S3Store) buildBucketURL(params url.Values) *url.URL {
 	return &u
 }
 
-func (s *S3Store) buildObjectURL(key string) *url.URL {
+func (s *S3Store) buildObjectURL(bucket, key string) *url.URL {
 	u := *s.baseURL
-	u.Path = path.Join(u.Path, s.cfg.Bucket, key)
+	u.Path = path.Join(u.Path, bucket, key)
 	u.RawQuery = ""
 	return &u
 }
@@ -407,9 +447,13 @@ func validateSelector(selector string) error {
 	return nil
 }
 
-func (s *S3Store) signRequest(req *http.Request, body []byte, signTime time.Time) {
-	if s.cfg.AccessKeyID == "" && s.cfg.SecretAccessKey == "" {
-		return
+func (s *S3Store) signRequest(req *http.Request, body []byte, signTime time.Time) error {
+	if s.cfg.Credentials == nil {
+		return nil
+	}
+	creds, err := s.cfg.Credentials.Retrieve(req.Context())
+	if err != nil {
+		return fmt.Errorf("retrieve aws credentials: %w", err)
 	}
 
 	amzDate := signTime.UTC().Format("20060102T150405Z")
@@ -424,12 +468,12 @@ func (s *S3Store) signRequest(req *http.Request, body []byte, signTime time.Time
 		req.Header.Set("Host", req.URL.Host)
 	}
 
-	if s.cfg.SessionToken != "" {
-		req.Header.Set("x-amz-security-token", s.cfg.SessionToken)
+	if creds.SessionToken != "" {
+		req.Header.Set("x-amz-security-token", creds.SessionToken)
 	}
 
 	headersToSign := []string{"host", "x-amz-content-sha256", "x-amz-date"}
-	if s.cfg.SessionToken != "" {
+	if creds.SessionToken != "" {
 		headersToSign = append(headersToSign, "x-amz-security-token")
 	}
 	sort.Strings(headersToSign)
@@ -467,17 +511,18 @@ func (s *S3Store) signRequest(req *http.Request, body []byte, signTime time.Time
 		hex.EncodeToString(sha256Hash([]byte(canonicalRequest))),
 	}, "\n")
 
-	signingKey := getSigningKey(s.cfg.SecretAccessKey, dateStamp, s.cfg.Region, "s3")
+	signingKey := getSigningKey(creds.SecretAccessKey, dateStamp, s.cfg.Region, "s3")
 	signature := hex.EncodeToString(hmacSHA256(signingKey, []byte(stringToSign)))
 
 	authHeader := fmt.Sprintf(
 		"AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s",
-		s.cfg.AccessKeyID,
+		creds.AccessKeyID,
 		credentialScope,
 		signedHeaders,
 		signature,
 	)
 	req.Header.Set("Authorization", authHeader)
+	return nil
 }
 
 func buildCanonicalQueryString(values url.Values) string {
