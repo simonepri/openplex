@@ -41,11 +41,6 @@ spec:
                         command: &schedulerHealthProbe
                           - /bin/grpc_health_probe
                           - -addr=127.0.0.1:8002
-                          - -tls
-                          - -tls-ca-cert=/etc/dragonfly-trust/ca.crt
-                          - -tls-client-cert=/etc/dragonfly-mtls/tls.crt
-                          - -tls-client-key=/etc/dragonfly-mtls/tls.key
-                          - -tls-server-name=dragonfly-scheduler.dragonfly-system.svc
                           - -connect-timeout=3s
                           - -rpc-timeout=3s
                     readinessProbe:

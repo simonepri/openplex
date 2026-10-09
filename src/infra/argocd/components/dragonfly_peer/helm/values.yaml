@@ -93,10 +93,13 @@ seedClient:
   statefulsetAnnotations:
     argocd.argoproj.io/sync-wave: "2"
   image:
-    digest: sha256:b3e726eb104c399595f8b7ee1a9b191f7c6a3766dbd40eb1f25e48ce178fd33e
+    # LINT.IfChange(dragonfly-seed-client-digest)
+    digest: sha256:2fe93d00d81deb4d5c97337e195301ed6c1749736554a7a6b2c26e91c3eee717
+    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/policies.yaml:dragonfly-client-digests)
     registry: docker.io
     repository: dragonflyoss/client
-    tag: v1.5.7
+    # NOTE(simonepri): Upstream's latest build of commit 3904607 is v1.5.7 plus the scheduler TLS dial fix (dragonflyoss/client#1859), which no release carries yet.
+    tag: latest
   initContainer:
     image:
       digest: sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0
@@ -122,12 +125,6 @@ seedClient:
   resources:
     limits: {cpu: 2, memory: 4Gi}
     requests: {cpu: 250m, memory: 512Mi}
-  config:
-    scheduler:
-      caCert: /etc/dragonfly-mtls/ca.crt
-      cert: /etc/dragonfly-mtls/tls.crt
-      key: /etc/dragonfly-mtls/tls.key
-      serverName: dragonfly-scheduler.dragonfly-system.svc.cluster.local
 
 client:
   enable: true
@@ -141,11 +138,6 @@ client:
         enableTaskIDBasedBlobDigest: true
       server:
         ip: 127.0.0.1
-    scheduler:
-      caCert: /etc/dragonfly-mtls/ca.crt
-      cert: /etc/dragonfly-mtls/tls.crt
-      key: /etc/dragonfly-mtls/tls.key
-      serverName: dragonfly-scheduler.dragonfly-system.svc.cluster.local
   hostIPC: false
   hostNetwork: true
   hostPID: false
@@ -156,10 +148,13 @@ client:
   sysctlInit:
     enable: false
   image:
-    digest: sha256:b3e726eb104c399595f8b7ee1a9b191f7c6a3766dbd40eb1f25e48ce178fd33e
+    # LINT.IfChange(dragonfly-client-digest)
+    digest: sha256:2fe93d00d81deb4d5c97337e195301ed6c1749736554a7a6b2c26e91c3eee717
+    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/policies.yaml:dragonfly-client-digests)
     registry: docker.io
     repository: dragonflyoss/client
-    tag: v1.5.7
+    # NOTE(simonepri): Upstream's latest build of commit 3904607 is v1.5.7 plus the scheduler TLS dial fix (dragonflyoss/client#1859), which no release carries yet.
+    tag: latest
   initContainer:
     image:
       digest: sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0

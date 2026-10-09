@@ -2,11 +2,13 @@
 
 client:
   image: &dragonfly-client-image
-    digest: sha256:4735fb59bea73e194974ca2fbc302aeffddbbbbe98003b1ecf08e8312a5f2a46
+    # LINT.IfChange(dragonfly-client-digest)
+    digest: sha256:ecb877a7e658c7d76b1318b4266ecb1f2e264f8c5bcb44ffa7045b87a887a856
+    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/policies.yaml:dragonfly-client-digests)
     # LINT.IfChange(local-origin-registry-publication-root)
     registry: localhost:15100
-    repository: 000000000000/us-east-1/dragonfly-client
+    repository: 000000000000/us-east-1/src/third_party/dragonflyoss/client
     # LINT.ThenChange(//src/infra/mise.toml:local-origin-registry-publication-root)
-    tag: v1.5.2-mtls-r3
+    tag: upstream-3904607
 seedClient:
   image: *dragonfly-client-image
