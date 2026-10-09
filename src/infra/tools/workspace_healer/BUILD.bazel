@@ -1,0 +1,113 @@
+"""Builds and packages the Coder workspace healer container image and binaries."""
+
+load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_push")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/oci:defs.bzl", "oci_workload_publish")
+
+# gazelle:prefix go.invalid/internal/tools/workspace_healer
+
+package(default_visibility = ["//visibility:public"])
+
+platform(
+    name = "linux_amd64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+)
+
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
+)
+
+go_library(
+    name = "workspace_healer_lib",
+    srcs = ["main.go"],
+    importpath = "go.invalid/internal/tools/workspace_healer",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "workspace_healer",
+    embed = [":workspace_healer_lib"],
+    pure = "on",
+)
+
+go_test(
+    name = "workspace_healer_test",
+    srcs = ["main_test.go"],
+    embed = [":workspace_healer_lib"],
+)
+
+pkg_files(
+    name = "binary_file",
+    srcs = [":workspace_healer"],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/ko-app",
+    renames = {"workspace_healer": "workspace-healer"},
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "binary_layer",
+    srcs = [":binary_file"],
+)
+
+platform_transition_filegroup(
+    name = "binary_layer_linux_amd64",
+    srcs = [":binary_layer"],
+    target_platform = ":linux_amd64",
+)
+
+platform_transition_filegroup(
+    name = "binary_layer_linux_arm64",
+    srcs = [":binary_layer"],
+    target_platform = ":linux_arm64",
+)
+
+oci_image(
+    name = "image_linux_amd64",
+    base = "@workspace_snapshot_catalog_base_linux_amd64",
+    entrypoint = ["/ko-app/workspace-healer"],
+    tars = [":binary_layer_linux_amd64"],
+    user = "1000:1000",
+)
+
+oci_image(
+    name = "image_linux_arm64",
+    base = "@workspace_snapshot_catalog_base_linux_arm64_v8",
+    entrypoint = ["/ko-app/workspace-healer"],
+    tars = [":binary_layer_linux_arm64"],
+    user = "1000:1000",
+)
+
+oci_image_index(
+    name = "image_multiarch",
+    images = [
+        ":image_linux_amd64",
+        ":image_linux_arm64",
+    ],
+)
+
+oci_push(
+    name = "push",
+    image = ":image_multiarch",
+    tags = ["manual"],
+)
+
+oci_workload_publish(
+    name = "publish",
+    image = ":image_multiarch",
+    publication_mode = "digest",
+    workload_name = "healer",
+)
+
+package_sources()

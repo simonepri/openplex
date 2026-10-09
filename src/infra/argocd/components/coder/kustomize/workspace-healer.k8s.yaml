@@ -93,16 +93,16 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       initContainers:
         - name: bootstrap-healer-token
-          image: docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df
-          command: [/bin/sh, -ec]
+          image: placeholder.invalid/src/infra/tools/workspace_healer:inventory
+          command: [/ko-app/workspace-healer]
           args:
-            - |
-              if [ -s "/var/run/coder/session-token/coder-session-token" ]; then
-                cp /var/run/coder/session-token/coder-session-token /state/coder-session-token
-                exit 0
-              fi
-              cat /etc/ssl/certs/ca-certificates.crt /etc/local-ca/ca.crt > /state/ca-bundle.crt 2>/dev/null || cat /etc/ssl/certs/ca-certificates.crt > /state/ca-bundle.crt
-              exec python /program/bootstrap_healer_session.py
+            - --bootstrap-token-only
+            - --coder-url
+            - http://coder.coder.svc.cluster.local
+            - --token-file
+            - /state/coder-session-token
+            - --session-token-fallback
+            - /var/run/coder/session-token/coder-session-token
           env:
             - {name: CODER_URL, value: 'http://coder.coder.svc.cluster.local'}
             - name: CODER_BOOTSTRAP_URL
@@ -114,7 +114,7 @@ spec:
             - name: CODER_BOOTSTRAP_OIDC_PASSWORD
               valueFrom: {secretKeyRef: {name: coder-oidc, key: CODER_BOOTSTRAP_OIDC_PASSWORD}}
             - {name: CODER_SESSION_TOKEN_FILE, value: /state/coder-session-token}
-            - {name: SSL_CERT_FILE, value: /state/ca-bundle.crt}
+            - {name: SSL_CERT_FILE, value: /var/run/coder/oauth-bootstrap/ca.crt}
           resources:
             requests: {cpu: 10m, memory: 16Mi}
             limits: {cpu: 100m, memory: 64Mi}
@@ -127,15 +127,14 @@ spec:
             runAsUser: 1000
             seccompProfile: {type: RuntimeDefault}
           volumeMounts:
-            - {name: program, mountPath: /program, readOnly: true}
             - {name: session-token, mountPath: /var/run/coder/session-token, readOnly: true}
             - {name: local-ca, mountPath: /etc/local-ca, readOnly: true}
             - {name: oauth-bootstrap, mountPath: /var/run/coder/oauth-bootstrap, readOnly: true}
             - {name: state, mountPath: /state}
       containers:
         - name: healer
-          image: docker.io/library/python:3.14.7-alpine3.24@sha256:016508ba505da24f7139765bc4bb669df4e88eb2f12eeadd571bf2f88d7533df
-          command: [python3, -u, /program/workspace_healer.py]
+          image: placeholder.invalid/src/infra/tools/workspace_healer:inventory
+          command: [/ko-app/workspace-healer]
           args:
             - --continuous
             - --interval-seconds
@@ -162,21 +161,17 @@ spec:
           livenessProbe:
             exec:
               command:
-                - cat
+                - /ko-app/workspace-healer
+                - --check-heartbeat
                 - /tmp/healer-healthy
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5
           volumeMounts:
-            - {name: program, mountPath: /program, readOnly: true}
             - {name: state, mountPath: /state, readOnly: true}
             - {name: oauth-bootstrap, mountPath: /var/run/coder/oauth-bootstrap, readOnly: true}
             - {name: tmp, mountPath: /tmp}
       volumes:
-        - name: program
-          configMap:
-            name: coder-workspace-healer
-            defaultMode: 365
         - name: session-token
           secret:
             secretName: coder-template-publication
