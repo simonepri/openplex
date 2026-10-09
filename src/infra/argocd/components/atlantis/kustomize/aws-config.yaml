@@ -1,0 +1,21 @@
+# ConfigMap supplying AWS CLI and OpenTofu profile configuration for Atlantis plan and apply workflows.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atlantis-aws-config
+  namespace: atlantis
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: atlantis
+data:
+  config: |
+    [profile atlantis-plan]
+    role_arn = arn:aws:iam::000000000000:role/atlantis-plan
+    credential_source = EcsContainer
+    region = us-west-2
+
+    [profile atlantis-apply]
+    role_arn = arn:aws:iam::000000000000:role/atlantis-apply
+    credential_source = EcsContainer
+    region = us-west-2

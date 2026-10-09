@@ -8,7 +8,7 @@ environment:
   ATLANTIS_ACTIVE_CTRL: ctrl-aws-usw2
   ATLANTIS_TERRAFORM_DISTRIBUTION: tofu
 loadEnvFromSecrets:
-  - atlantis-runtime-environment
+  - atlantis-plan-credentials
 repoConfig: |
   repos:
     - id: github.com/example/cluster-config

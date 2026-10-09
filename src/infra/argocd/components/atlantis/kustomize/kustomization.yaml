@@ -5,6 +5,8 @@ kind: Kustomization
 resources:
   # keep-sorted start
   - auth-proxy.yaml
+  - aws-config.yaml
+  - cluster-api-network-policy.yaml
   - external-secrets.yaml
   - namespace.yaml
   - network-policy.yaml

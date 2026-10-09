@@ -5,18 +5,35 @@ automerge: true
 autodiscover:
   mode: disabled
 projects:
-  - name: fleet
-    dir: .
+  # keep-sorted start block=yes
+  - name: dns
+    dir: src/infra/terraform/deployments/dns
+    workflow: fleet
     apply_requirements: [approved, mergeable, undiverged]
     autoplan:
       enabled: true
       when_modified:
         # keep-sorted start
-        - .github/atlantis.yaml
-        - src/infra/argocd/apps/ctrl.yaml
-        - src/infra/argocd/components/atlantis/**
-        - src/infra/terraform/components/**
-        - src/infra/terraform/deployments/**
-        - src/infra/terraform/topologies/**
+        - "*.tf*"
+        - ../../../../.github/atlantis.yaml
+        - .terraform.lock.hcl
+        - deployment.yaml
         # keep-sorted end
-        - "!src/infra/terraform/deployments/local/**"
+  - name: research
+    dir: src/infra/terraform/deployments/research
+    workflow: fleet
+    apply_requirements: [approved, mergeable, undiverged]
+    autoplan:
+      enabled: true
+      when_modified:
+        # keep-sorted start
+        - "*.tf*"
+        - ../../../../.github/atlantis.yaml
+        - ../../../argocd/components/tailscale_access/cloud-policy.hujson
+        - ../../../definitions/**
+        - ../../components/**
+        - ../../topologies/**
+        - .terraform.lock.hcl
+        - deployment.yaml
+        # keep-sorted end
+# keep-sorted end

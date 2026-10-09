@@ -4,22 +4,30 @@ allowDraftPRs: false
 allowForkPRs: false
 atlantisUrl: https://atlantis.invalid
 defaultTFDistribution: opentofu
-defaultTFVersion: 1.12.6
+defaultTFVersion: 1.13.1
 disableApplyAll: true
 enableDiffMarkdownFormat: true
+extraVolumes:
+  - name: atlantis-aws-config
+    configMap:
+      name: atlantis-aws-config
+extraVolumeMounts:
+  - mountPath: /etc/atlantis-aws
+    name: atlantis-aws-config
+    readOnly: true
 githubApp:
-  id: "123456"
-  slug: cluster-atlantis
+  id: "5138653"
+  slug: openplex-atlantis
 hidePrevPlanComments: true
 image:
   repository: ghcr.io/runatlantis/atlantis
-  tag: v0.48.0@sha256:8dd77ed01565f797fe62922f4670398b16a094597b36dedd6e806490177fffd9
+  tag: v0.48.1@sha256:42bde40e38ec7b89f02a2968b4b1b74b990121eb8768d0a7de7caad125344298
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 ingress:
   enabled: false
 loadEnvFromSecrets:
-  - atlantis-runtime-environment
+  - atlantis-plan-credentials
 logLevel: info
 orgAllowlist: github.com/invalid
 vcsSecretName: atlantis-github-app
@@ -27,12 +35,28 @@ environment:
   ATLANTIS_AUTODISCOVER_MODE: disabled
   ATLANTIS_DISCARD_APPROVAL_ON_PLAN: "true"
   ATLANTIS_SILENCE_NO_PROJECTS: "true"
+  AWS_CONFIG_FILE: /etc/atlantis-aws/config
 repoConfig: |
   repos:
     - id: /.*/
       apply_requirements: [approved, mergeable, undiverged]
       allowed_overrides: [workflow, apply_requirements]
       repo_config_file: .github/atlantis.yaml
+  workflows:
+    fleet:
+      plan:
+        steps:
+          - env:
+              name: AWS_PROFILE
+              value: atlantis-plan
+          - init
+          - plan
+      apply:
+        steps:
+          - env:
+              name: AWS_PROFILE
+              value: atlantis-apply
+          - apply
 replicaCount: 1
 resources:
   requests: {cpu: 250m, memory: 512Mi}
