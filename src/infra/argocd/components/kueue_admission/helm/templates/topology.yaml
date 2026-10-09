@@ -33,6 +33,8 @@ spec:
   nodeTaints:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  topologyName: cell-topology
+  {{- with .topology }}
+  topologyName: {{ . }}
+  {{- end }}
 {{- end }}
 {{- end }}

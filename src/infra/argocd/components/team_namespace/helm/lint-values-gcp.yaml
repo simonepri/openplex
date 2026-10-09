@@ -1,38 +1,10 @@
 # Renders the GCP workload-identity SecretStore and private ECR pull contract. Fleet checks consume this fixture to validate the real provider-specific manifests.
 
 mode: cell
-devWorkspaces:
-  buildbuddy: {accessAliasDomain: c.example.invalid, mode: cloud, enterpriseProxy: true, executors: all}
-  buildbuddyAuth:
-    adapter: gcp
-    auth:
-      gcp: {projectId: example-project}
-    recordName: buildbuddy-auth-cell-gcp-euw4
-  cell: cell-gcp-euw4
-  enabled: true
-  localGitCIDR: ""
-  originRegistryCIDR: ""
-  origin:
-    authMode: web-identity
-    kubernetesApiCIDRs: [172.17.32.1/32]
-    privateHttpsCIDRs: []
-    provider: gcp
-    publicHttps: true
-    region: us-west-2
-    registry: 999988887777.dkr.ecr.us-west-2.amazonaws.com
-    roleArn: arn:aws:iam::999988887777:role/fixtureteam-workspace-ecr
-    tokenAudience: sts.amazonaws.com
-    tokenFile: /var/run/secrets/workload-origin/token
-  provisionerSubject:
-    apiGroup: rbac.authorization.k8s.io
-    kind: User
-    name: coder-provisioner@example-project.iam.gserviceaccount.com
-  recordName: org-workspace-backups
-  secretStoreName: org-workspace-backups-team-fixtureteam-workspaces
 team:
   slug: fixtureteam
   group: cluster:group:team:fixtureteam
-  namespaceSuffix: workspaces
+  namespaceSuffix: workloads
   classes: [ha]
 resources:
   - {access: view, apiGroup: "", kind: Service, project: true, resource: services}
@@ -44,11 +16,6 @@ workloadRepositories:
   src/examples/ray_data: registry.invalid/aws/src/examples/ray_data
 rayDashboard:
   enabled: false
-devSecrets:
-  names: []
-runtimeSecrets:
-  adapter: ""
-  auth: {}
 storageProjection:
   enabled: true
   handoff:
@@ -65,7 +32,7 @@ storageProjection:
         scratch: scratch/fixtureteam/
       gateway: {endpoint: "http://s3-gateway.s3-system.svc"}
       mounts:
-        global: {bucket: global, keyPrefix: home/fixtureteam/gcp-euw4/, remote: global}
+        global: {bucket: global, keyPrefix: home/fixtureteam/, remote: global}
         global-meta: {bucket: global, keyPrefix: meta/, remote: global-meta}
         global-scratch: {bucket: global, keyPrefix: scratch/fixtureteam/, remote: global-scratch}
         home: {bucket: gcp-euw4, keyPrefix: home/fixtureteam/, remote: home}

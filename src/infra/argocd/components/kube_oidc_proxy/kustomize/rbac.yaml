@@ -253,31 +253,6 @@ rules:
       - "impersonate-on:user-info:get"
       - "impersonate-on:user-info:list"
       - "impersonate-on:user-info:watch"
-  - apiGroups: [spdx.softwarecomposition.kubescape.io]
-    resources:
-      - applicationprofiles
-      - configurationscansummaries
-      - generatednetworkpolicies
-      - knownservers
-      - networkneighborhoods
-      - openvulnerabilityexchangecontainers
-      - sbomsyftfiltereds
-      - sbomsyfts
-      - vulnerabilitymanifests
-      - vulnerabilitymanifestsummaries
-      - vulnerabilitysummaries
-      - workloadconfigurationscans
-      - workloadconfigurationscansummaries
-    verbs:
-      - "impersonate-on:user-info:get"
-      - "impersonate-on:user-info:list"
-      - "impersonate-on:user-info:watch"
-  - apiGroups: [kubescape.io]
-    resources: [clustersecurityexceptions, rules, runtimerulealertbindings, securityexceptions]
-    verbs:
-      - "impersonate-on:user-info:get"
-      - "impersonate-on:user-info:list"
-      - "impersonate-on:user-info:watch"
   - apiGroups: [""]
     resources: [services/proxy]
     resourceNames: ['opencost:http-ui']
@@ -296,6 +271,18 @@ rules:
       - /version/
     verbs: ["impersonate-on:user-info:get"]
   # LINT.ThenChange(//src/infra/argocd/components/cluster_access/kustomize/operator-access.yaml:headlamp-cluster-operator-actions)
+  # Coder workspaces submit and cancel team workloads through this proxy. The
+  # impersonated user's team RBAC limits these writes to the team namespaces
+  # whose groups the user belongs to.
+  - apiGroups: [ray.io]
+    resources: [rayjobs, rayservices]
+    verbs: ["impersonate-on:user-info:create", "impersonate-on:user-info:delete"]
+  - apiGroups: [batch]
+    resources: [cronjobs, jobs]
+    verbs: ["impersonate-on:user-info:create", "impersonate-on:user-info:delete"]
+  - apiGroups: [authentication.k8s.io]
+    resources: [selfsubjectreviews]
+    verbs: ["impersonate-on:user-info:create"]
   # User and group values come only from the validated OIDC token: the proxy
   # rejects client-supplied Impersonate-* headers unless the OIDC user may
   # impersonate, and the fleet contract requires the cluster:group: prefix.

@@ -8,6 +8,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
   labels:
+    app.kubernetes.io/component: external-dns-source
     app.kubernetes.io/managed-by: argocd
     app.kubernetes.io/name: kube-oidc-proxy
     app.kubernetes.io/part-of: headlamp

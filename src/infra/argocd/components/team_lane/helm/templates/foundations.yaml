@@ -4,111 +4,21 @@
 {{- $project := include "fleet-team.projectName" . -}}
 {{- $group := include "fleet-team.group" . -}}
 {{- $resources := include "fleet-team.resources" . | fromJsonArray -}}
-{{- $accessAliasDomain := required "accessAliasDomain is required" .Values.accessAliasDomain -}}
 {{- $cells := include "fleet-team.selectedCells" (dict "root" .) | fromJsonArray -}}
 {{- range $suffix := include "fleet-team.namespaceSuffixes" . | fromJsonArray }}
 {{- $namespace := printf "team-%s-%s" $.Values.team.slug ($suffix | replace "_" "-") -}}
-{{- $devWorkspacesEnabled := eq (include "fleet-team.devWorkspacesEnabled" (dict "root" $ "suffix" $suffix)) "true" -}}
-{{- $workspaceSubmissionsEnabled := eq (include "fleet-team.workspaceSubmissionsEnabled" (dict "root" $ "suffix" $suffix)) "true" -}}
 {{- $torchCompileCacheEnabled := eq (include "fleet-team.torchCompileCacheEnabled" (dict "root" $ "suffix" $suffix)) "true" -}}
-{{- $workspaceBackupStoreName := include "fleet-team.workspaceBackupStoreName" (dict "namespace" $namespace) -}}
 {{- range $cell := $cells }}
-{{- $storageTopology := required (printf "cell %q requires storage.gateway.config" $cell.name) $cell.storage.gateway.config -}}
-{{- $_ := required (printf "cell %q storage topology requires global.writerCell" $cell.name) $storageTopology.global.writerCell -}}
-{{- $cellWorkspacesEnabled := dig "cellRecord" "workspaces" "enabled" false $cell -}}
-{{- $cellDevWorkspacesEnabled := and $devWorkspacesEnabled $cellWorkspacesEnabled -}}
-{{- $workspaceOriginRegistryCIDR := "" -}}
-{{- $workspaceOrigin := dict -}}
-{{- $workspaceProvisionerSubject := dict -}}
+{{- $hasStorage := and (hasKey $cell "storage") $cell.storage (hasKey $cell.storage "gateway") -}}
 {{- $workloadImagePull := dict "enabled" false "region" "" "roleArn" "" -}}
 {{- if hasKey $cell "workloadImagePull" -}}
 {{- $roleArn := required (printf "cell %q workload image pull requires team %q" $cell.name $.Values.team.slug) (index $cell.workloadImagePull.roles $.Values.team.slug) -}}
 {{- $workloadImagePull = dict "enabled" true "region" $cell.workloadImagePull.region "roleArn" $roleArn -}}
 {{- end -}}
-{{- if $cellDevWorkspacesEnabled -}}
-{{- /* floci-divergence: Floci cells configure local workspace origin registry running on the local control node. */ -}}
-{{- if eq $cell.provider "floci" -}}
-{{- $localOrigin := include "fleet-team.localWorkspaceOrigin" $ | fromJson -}}
-{{- $workspaceOriginRegistryCIDR = $localOrigin.cidr -}}
-{{- $workspaceOrigin = dict "authMode" "floci" "kubernetesApiCIDRs" $cell.network.apiServerCIDRs "privateHttpsCIDRs" (list) "provider" "floci" "publicHttps" true "registry" $localOrigin.registry "region" $localOrigin.region "roleArn" "" "tokenAudience" "" "tokenFile" "" -}}
-{{- $workspaceProvisionerSubject = dict "apiGroup" "rbac.authorization.k8s.io" "kind" "Group" "name" "cluster:coder-provisioners" -}}
-{{- else -}}
-{{- $imagePush := required (printf "managed Coder workspaces on %q require workloadImagePush" $cell.name) $cell.workloadImagePush -}}
-{{- $provisioner := required (printf "managed Coder workspaces on %q require coderProvisioner" $cell.name) $cell.coderProvisioner -}}
-{{- $roleArn := required (printf "cell %q workloadImagePush requires team %q" $cell.name $.Values.team.slug) (index $imagePush.roles $.Values.team.slug) -}}
-{{- $expectedMode := ternary "eks-pod-identity" "web-identity" (eq $cell.provider "aws") -}}
-{{- $kubernetesApiCIDRs := $cell.network.apiServerCIDRs -}}
-{{- $publicHttps := $imagePush.network.publicHTTPS -}}
-{{- $privateHttpsCIDRs := $imagePush.network.privateHttpsCIDRs -}}
-{{- range $cidr := $kubernetesApiCIDRs -}}
-{{- if not (regexMatch `^(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\.){3}(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})/32$` $cidr) -}}
-{{- fail (printf "cell %q Coder Kubernetes API egress %q must be an exact IPv4 endpoint /32" $cell.name $cidr) -}}
-{{- end -}}
-{{- end -}}
-{{- range $cidr := $privateHttpsCIDRs -}}
-{{- if not (regexMatch `^(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\.){3}(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})/32$` $cidr) -}}
-{{- fail (printf "cell %q workload-image private HTTPS egress %q must be an exact IPv4 endpoint /32" $cell.name $cidr) -}}
-{{- end -}}
-{{- end -}}
-{{- if eq $cell.provider "aws" -}}
-{{- if or (not $publicHttps) (eq (len $privateHttpsCIDRs) 0) -}}
-{{- fail (printf "cell %q must use public HTTPS plus its provider-owned private ECR endpoint CIDRs" $cell.name) -}}
-{{- end -}}
-{{- else if or (not $publicHttps) (ne (len $privateHttpsCIDRs) 0) -}}
-{{- fail (printf "cell %q must use public HTTPS without private AWS endpoint CIDRs" $cell.name) -}}
-{{- end -}}
-{{- $originRegistry := "" -}}
-{{- range $image := include "fleet-team.images" $ | fromJsonArray -}}
-{{- $repository := required (printf "delivery.originRepositories requires team image package %q" $image.package) (index $.Values.delivery.originRepositories $image.package) -}}
-{{- $repositoryRegistry := first (splitList "/" $repository) -}}
-{{- if not $originRegistry -}}
-{{- $originRegistry = $repositoryRegistry -}}
-{{- else if ne $originRegistry $repositoryRegistry -}}
-{{- fail (printf "team %q workload origins must use one registry" $.Values.team.slug) -}}
-{{- end -}}
-{{- end -}}
-{{- $isEcr := regexMatch `^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com$` $originRegistry -}}
-{{- $isArtifactRegistry := or (hasSuffix ".pkg.dev" $originRegistry) (regexMatch `^(?:[a-z0-9-]+\.)?gcr\.io$` $originRegistry) -}}
-{{- if eq $cell.provider "aws" -}}
-{{- if not (regexMatch (printf `^[0-9]{12}\.dkr\.ecr\.%s\.amazonaws\.com$` $imagePush.region) $originRegistry) -}}
-{{- fail (printf "cell %q workload origin %q must be an ECR registry in %q" $cell.name $originRegistry $imagePush.region) -}}
-{{- end -}}
-{{- else -}}
-{{- if not (or $isArtifactRegistry $isEcr) -}}
-{{- fail (printf "cell %q workload origin %q must be an Artifact Registry (*.pkg.dev or gcr.io) or cross-cloud ECR registry" $cell.name $originRegistry) -}}
-{{- end -}}
-{{- end -}}
-{{- $tokenAudience := "" -}}
-{{- $tokenFile := "" -}}
-{{- if eq $expectedMode "web-identity" -}}
-{{- if $isEcr -}}
-{{- $tokenAudience = "sts.amazonaws.com" -}}
-{{- $tokenFile = "/var/run/secrets/workload-origin/token" -}}
-{{- else if and (hasKey $imagePush "tokenAudience") $imagePush.tokenAudience -}}
-{{- $tokenAudience = $imagePush.tokenAudience -}}
-{{- $tokenFile = default "/var/run/secrets/workload-origin/token" (index $imagePush "tokenFile") -}}
-{{- end -}}
-{{- end -}}
-{{- $workspaceOrigin = dict "authMode" $expectedMode "kubernetesApiCIDRs" $kubernetesApiCIDRs "privateHttpsCIDRs" $privateHttpsCIDRs "provider" $cell.provider "publicHttps" $publicHttps "registry" $originRegistry "region" $imagePush.region "roleArn" $roleArn "tokenAudience" $tokenAudience "tokenFile" $tokenFile -}}
-{{- $workspaceProvisionerSubject = $provisioner.identity.kubernetesSubject -}}
-{{- end -}}
-{{- end -}}
-{{- $allDeploymentRepositories := required (printf "cell %q requires delivery.deploymentRepositories" $cell.name) $cell.delivery.deploymentRepositories -}}
-{{- $teamDeploymentRepositories := dict -}}
-{{- range $image := include "fleet-team.images" $ | fromJsonArray -}}
-{{- if not (hasKey $allDeploymentRepositories $image.package) -}}
-{{- fail (printf "cell %q deployment repositories require team image package %q" $cell.name $image.package) -}}
-{{- end -}}
-{{- $_ := set $teamDeploymentRepositories $image.package (index $allDeploymentRepositories $image.package) -}}
-{{- end -}}
-{{- $handoff := include "fleet-team.storageHandoff" (dict "root" $ "cell" $cell) | fromJson -}}
-{{- $storageAuthAdapter := include "fleet-team.storageAuthAdapter" $handoff -}}
-{{- $localGitCIDR := "" -}}
-{{- $gitTransportURL := $.Values.repository.transportURL | default $.Values.repository.url -}}
-{{- /* floci-divergence: Floci cells allow egress to host-local git daemon IP for repository synchronization. */ -}}
-{{- if and (eq $cell.provider "floci") (regexMatch `^git://(?:[0-9]{1,3}\.){3}[0-9]{1,3}:9418/[a-z0-9][a-z0-9._-]*\.git$` $gitTransportURL) -}}
-{{- $localGitAddress := regexFind `[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+` $gitTransportURL -}}
-{{- $localGitCIDR = printf "%s/32" $localGitAddress -}}
+{{- $teamDeploymentRepositories := include "fleet-team.deploymentRepositories" (dict "cell" $cell "images" (include "fleet-team.images" $ | fromJsonArray)) | fromJson -}}
+{{- $handoff := dict -}}
+{{- if $hasStorage -}}
+{{- $handoff = include "fleet-team.storageHandoff" (dict "root" $ "cell" $cell) | fromJson -}}
 {{- end -}}
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -137,32 +47,16 @@ spec:
     path: src/infra/argocd/components/team_namespace/helm
     helm:
       valuesObject:
-        team: {{ dict "slug" $.Values.team.slug "group" $group "namespaceSuffix" $suffix "classes" (keys $.Values.team.quota.classes | sortAlpha) | toJson }}
+        team: {{ dict "slug" $.Values.team.slug "group" $group "namespaceSuffix" $suffix "classes" (keys $.Values.team.quota.classes | sortAlpha) "submitters" ($.Values.team.submitters | default "members") | toJson }}
         resources: {{ $resources | toJson }}
         rayDashboard: {{ dict "enabled" true | toJson }}
         workloadImagePull: {{ $workloadImagePull | toJson }}
         workloadRepositories: {{ $teamDeploymentRepositories | toJson }}
-        devWorkspaces:
-          enabled: {{ $cellDevWorkspacesEnabled }}
-          localGitCIDR: {{ $localGitCIDR | quote }}
-          originRegistryCIDR: {{ $workspaceOriginRegistryCIDR | quote }}
-{{- if $cellDevWorkspacesEnabled }}
-          buildbuddy: {{ include "fleet-team.workspaceBuildbuddy" (dict "cell" $cell "accessAliasDomain" $accessAliasDomain) }}
-          buildbuddyAuth: {{ include "fleet-team.buildbuddyAuth" (dict "cell" $cell) }}
-          cell: {{ $cell.name | quote }}
-          origin: {{ $workspaceOrigin | toJson }}
-          provisionerSubject: {{ $workspaceProvisionerSubject | toJson }}
-          recordName: {{ ternary "s3-org-workspace-backups" "org-workspace-backups" (eq $storageAuthAdapter "kubernetes") | quote }}
-          secretStoreName: {{ $workspaceBackupStoreName | quote }}
-{{- end }}
-        workspaceSubmissions:
-          sourceNamespace: {{ ternary (printf "team-%s-workspaces" $.Values.team.slug) "" $workspaceSubmissionsEnabled | quote }}
-{{- if and (eq $suffix "workspaces") $.Values.team.dev_secrets }}
-{{ include "fleet-team.devSecretsValues" (dict "root" $ "cell" $cell "storageAuthAdapter" $storageAuthAdapter) | nindent 8 }}
-{{- end }}
         storageProjection:
-          enabled: true
+          enabled: {{ $hasStorage }}
+          {{- if $hasStorage }}
           handoff: {{ $handoff | toJson }}
+          {{- end }}
   syncPolicy:
 {{ include "fleet-team.applicationSyncPolicy" $ | nindent 4 }}
 {{- if $torchCompileCacheEnabled }}

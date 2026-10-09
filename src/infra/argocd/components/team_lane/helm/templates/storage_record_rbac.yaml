@@ -1,4 +1,4 @@
-{{- /* Generates one Kubernetes-auth source-record RBAC Application per selected cell. It owns the shared team Role and every exact namespace binding. */ -}}
+{{- /* Generates Kubernetes-auth source-record RBAC Applications for Floci cells to provide local team secret access. */ -}}
 
 {{- include "fleet-team.validate" . -}}
 {{- $group := include "fleet-team.group" . -}}
@@ -8,6 +8,7 @@
       "extraExpressions" (list
         (dict "key" "provider" "operator" "In" "values" (list "floci")))) | fromJsonArray -}}
 {{- range $cell := $flociCells }}
+{{- if and (hasKey $cell "storage") $cell.storage (hasKey $cell.storage "teams") }}
 {{- $handoff := include "fleet-team.storageHandoff" (dict "root" $ "cell" $cell) | fromJson -}}
 {{- $rbacHandoff := deepCopy $handoff -}}
 {{- $_ := set $rbacHandoff.secretStore "auth" (dict "kubernetes" (dict "remoteNamespace" "secret-records")) -}}
@@ -42,14 +43,11 @@ spec:
         mode: storage-rbac
         team: {{ dict "slug" $.Values.team.slug "group" $group "namespaceSuffix" "" "classes" (keys $.Values.team.quota.classes | sortAlpha) | toJson }}
         resources: []
-        devWorkspaces:
-          enabled: false
-        devSecrets:
-          names: []
         storageProjection:
           enabled: true
           handoff: {{ $rbacHandoff | toJson }}
           rbacNamespaceSuffixes: {{ $namespaceSuffixes | toJson }}
   syncPolicy:
 {{ include "fleet-team.applicationSyncPolicy" $ | nindent 4 }}
+{{ end }}
 {{ end }}

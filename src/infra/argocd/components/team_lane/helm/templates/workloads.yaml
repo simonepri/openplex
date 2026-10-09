@@ -15,7 +15,7 @@ metadata:
   name: {{ printf "%s-%s" $cell.name $applicationSuffix }}
   namespace: argocd
   annotations:
-    argocd.argoproj.io/compare-options: IncludeMutationWebhook=true
+    argocd.argoproj.io/compare-options: ServerSideDiff=true,IncludeMutationWebhook=true
     argocd.argoproj.io/sync-wave: "3"
 {{- if eq $deployment.delivery "promoted" }}
     kargo.akuity.io/authorized-stage: {{ printf "%s:%s-%s" $project $cell.name $applicationSuffix | quote }}

@@ -1,0 +1,17 @@
+# Binds the node OpenTelemetry collector's ServiceAccount to Kueue's metrics-reader ClusterRole for Prometheus scraping.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kueue-metrics-reader-otel-collector
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: kueue
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kueue-metrics-reader
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: otel-system

@@ -2,7 +2,16 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["clusterName", "compute", "flavors", "provider", "role", "teams", "topologies"],
+  "required": [
+    "clusterName",
+    "compute",
+    "devQueue",
+    "flavors",
+    "provider",
+    "role",
+    "teams",
+    "topologies"
+  ],
   "properties": {
     "role": { "type": "string", "enum": ["disabled", "cell"] },
     "clusterName": { "type": "string" },
@@ -12,6 +21,7 @@
     },
     "provider": { "type": "string", "enum": ["", "aws", "floci", "gcp"] },
     "compute": { "$ref": "#/definitions/compute" },
+    "devQueue": { "$ref": "#/definitions/devQueue" },
     "flavors": {
       "type": "array",
       "minItems": 0,
@@ -96,6 +106,27 @@
         }
       }
     },
+    "devQueue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "quota": { "$ref": "#/definitions/resources" }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": {
+        "required": ["quota"],
+        "properties": {
+          "quota": {
+            "properties": {
+              "cpu": { "pattern": "^[1-9][0-9]*$" },
+              "memory": { "pattern": "^[1-9][0-9]*Gi$" }
+            }
+          }
+        }
+      }
+    },
     "fixedTpuPool": {
       "type": "object",
       "additionalProperties": false,
@@ -138,6 +169,11 @@
         "nodeTaints": {
           "type": "array",
           "items": { "$ref": "#/definitions/taint" }
+        },
+        "topology": {
+          "description": "Topology that Kueue uses to place workloads on this flavor; set only when its nodes exist before admission.",
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
         }
       }
     },

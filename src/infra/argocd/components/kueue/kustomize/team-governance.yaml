@@ -205,7 +205,9 @@ spec:
              !(key in variables.infrastructureLocationKeys) &&
              (!variables.infrastructureSelectorPrefixes.exists(prefix,
                key.startsWith(prefix)) ||
-              (request.operation == 'UPDATE' && key == 'karpenter.sh/capacity-type')) &&
+              (key == 'karpenter.sh/capacity-type' &&
+               (request.operation == 'UPDATE' ||
+                namespaceObject.metadata.name == 'workspaces'))) &&
              (key != 'kubernetes.io/hostname' ||
               (request.operation == 'UPDATE' && object.kind == 'Pod' &&
                has(dyn(oldObject.spec).nodeSelector) &&

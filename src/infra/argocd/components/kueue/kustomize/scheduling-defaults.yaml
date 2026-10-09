@@ -125,6 +125,50 @@ spec:
           'value': 'present',
           'effect': 'NoSchedule'
         }
+    - name: availabilityPodAffinityTerm
+      expression: |-
+        {
+          'weight': dyn(50),
+          'podAffinityTerm': dyn({
+            'labelSelector': dyn({
+              'matchExpressions': dyn([{
+                'key': dyn('availability-class'),
+                'operator': dyn('In'),
+                'values': dyn([variables.availability])
+              }])
+            }),
+            'topologyKey': dyn('kubernetes.io/hostname')
+          })
+        }
+    - name: haPodAntiAffinityTerm
+      expression: |-
+        {
+          'weight': dyn(50),
+          'podAffinityTerm': dyn({
+            'labelSelector': dyn({
+              'matchExpressions': dyn([{
+                'key': dyn('availability-class'),
+                'operator': dyn('In'),
+                'values': dyn(['wa', 'be'])
+              }])
+            }),
+            'topologyKey': dyn('kubernetes.io/hostname')
+          })
+        }
+    - name: defaultAffinity
+      expression: |-
+        variables.availability == 'ha' ? {
+          'podAffinity': {
+            'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]
+          },
+          'podAntiAffinity': {
+            'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]
+          }
+        } : {
+          'podAffinity': {
+            'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]
+          }
+        }
   mutations:
     - patchType: JSONPatch
       jsonPatch:
@@ -544,6 +588,599 @@ spec:
                   value: (has(group.template.spec.tolerations) ?
                     group.template.spec.tolerations : []) + [variables.tpuToleration]
                 }) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'Pod' && request.operation == 'CREATE' ?
+            (!has(object.spec.affinity) ?
+              [JSONPatch{op: 'add', path: '/spec/affinity', value: variables.defaultAffinity}] :
+              ((!has(object.spec.affinity.podAffinity) ?
+                [JSONPatch{
+                  op: 'add',
+                  path: '/spec/affinity/podAffinity',
+                  value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+                }] :
+                (!has(object.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                  [JSONPatch{
+                    op: 'add',
+                    path: '/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                    value: [variables.availabilityPodAffinityTerm]
+                  }] :
+                  (!object.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                    term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                    ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                      term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                        expr.key == 'availability-class' &&
+                        expr.operator == 'In' &&
+                        variables.availability in expr.values)) ||
+                     (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                      'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                      term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))) ?
+                    [JSONPatch{
+                      op: 'add',
+                      path: '/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                      value: object.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.availabilityPodAffinityTerm]
+                    }] : []))) +
+               (variables.availability == 'ha' ?
+                 (!has(object.spec.affinity.podAntiAffinity) ?
+                   [JSONPatch{
+                     op: 'add',
+                     path: '/spec/affinity/podAntiAffinity',
+                     value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                   }] :
+                   (!has(object.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                     [JSONPatch{
+                       op: 'add',
+                       path: '/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                       value: [variables.haPodAntiAffinityTerm]
+                     }] :
+                     (!object.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                       term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                       has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                       term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                         expr.key == 'availability-class' &&
+                         expr.operator == 'In' &&
+                         'wa' in expr.values &&
+                         'be' in expr.values)) ?
+                       [JSONPatch{
+                         op: 'add',
+                         path: '/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                         value: object.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.haPodAntiAffinityTerm]
+                       }] : []))) : []))) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          (object.kind in ['Deployment', 'StatefulSet'] || (object.kind == 'Job' && request.operation == 'CREATE')) ?
+            (!has(object.spec.template.spec.affinity) ?
+              [JSONPatch{op: 'add', path: '/spec/template/spec/affinity', value: variables.defaultAffinity}] :
+              ((!has(object.spec.template.spec.affinity.podAffinity) ?
+                [JSONPatch{
+                  op: 'add',
+                  path: '/spec/template/spec/affinity/podAffinity',
+                  value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+                }] :
+                (!has(object.spec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                  [JSONPatch{
+                    op: 'add',
+                    path: '/spec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                    value: [variables.availabilityPodAffinityTerm]
+                  }] :
+                  (!object.spec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                    term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                    ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                      term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                        expr.key == 'availability-class' &&
+                        expr.operator == 'In' &&
+                        variables.availability in expr.values)) ||
+                     (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                      'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                      term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))) ?
+                    [JSONPatch{
+                      op: 'add',
+                      path: '/spec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                      value: object.spec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.availabilityPodAffinityTerm]
+                    }] : []))) +
+               (variables.availability == 'ha' ?
+                 (!has(object.spec.template.spec.affinity.podAntiAffinity) ?
+                   [JSONPatch{
+                     op: 'add',
+                     path: '/spec/template/spec/affinity/podAntiAffinity',
+                     value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                   }] :
+                   (!has(object.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                     [JSONPatch{
+                       op: 'add',
+                       path: '/spec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                       value: [variables.haPodAntiAffinityTerm]
+                     }] :
+                     (!object.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                       term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                       has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                       term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                         expr.key == 'availability-class' &&
+                         expr.operator == 'In' &&
+                         'wa' in expr.values &&
+                         'be' in expr.values)) ?
+                       [JSONPatch{
+                         op: 'add',
+                         path: '/spec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                         value: object.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.haPodAntiAffinityTerm]
+                       }] : []))) : []))) :
+          object.kind == 'CronJob' ?
+            (!has(object.spec.jobTemplate.spec.template.spec.affinity) ?
+              [JSONPatch{op: 'add', path: '/spec/jobTemplate/spec/template/spec/affinity', value: variables.defaultAffinity}] :
+              ((!has(object.spec.jobTemplate.spec.template.spec.affinity.podAffinity) ?
+                [JSONPatch{
+                  op: 'add',
+                  path: '/spec/jobTemplate/spec/template/spec/affinity/podAffinity',
+                  value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+                }] :
+                (!has(object.spec.jobTemplate.spec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                  [JSONPatch{
+                    op: 'add',
+                    path: '/spec/jobTemplate/spec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                    value: [variables.availabilityPodAffinityTerm]
+                  }] :
+                  (!object.spec.jobTemplate.spec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                    term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                    ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                      term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                        expr.key == 'availability-class' &&
+                        expr.operator == 'In' &&
+                        variables.availability in expr.values)) ||
+                     (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                      'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                      term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))) ?
+                    [JSONPatch{
+                      op: 'add',
+                      path: '/spec/jobTemplate/spec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                      value: object.spec.jobTemplate.spec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.availabilityPodAffinityTerm]
+                    }] : []))) +
+               (variables.availability == 'ha' ?
+                 (!has(object.spec.jobTemplate.spec.template.spec.affinity.podAntiAffinity) ?
+                   [JSONPatch{
+                     op: 'add',
+                     path: '/spec/jobTemplate/spec/template/spec/affinity/podAntiAffinity',
+                     value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                   }] :
+                   (!has(object.spec.jobTemplate.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                     [JSONPatch{
+                       op: 'add',
+                       path: '/spec/jobTemplate/spec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                       value: [variables.haPodAntiAffinityTerm]
+                     }] :
+                     (!object.spec.jobTemplate.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                       term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                       has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                       term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                         expr.key == 'availability-class' &&
+                         expr.operator == 'In' &&
+                         'wa' in expr.values &&
+                         'be' in expr.values)) ?
+                       [JSONPatch{
+                         op: 'add',
+                         path: '/spec/jobTemplate/spec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                         value: object.spec.jobTemplate.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.haPodAntiAffinityTerm]
+                       }] : []))) : []))) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayJob' ?
+            (has(object.spec.submitterPodTemplate) ?
+              (!has(object.spec.submitterPodTemplate.spec.affinity) ?
+                [JSONPatch{op: 'add', path: '/spec/submitterPodTemplate/spec/affinity', value: variables.defaultAffinity}] :
+                ((!has(object.spec.submitterPodTemplate.spec.affinity.podAffinity) ?
+                  [JSONPatch{
+                    op: 'add',
+                    path: '/spec/submitterPodTemplate/spec/affinity/podAffinity',
+                    value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+                  }] :
+                  (!has(object.spec.submitterPodTemplate.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                    [JSONPatch{
+                      op: 'add',
+                      path: '/spec/submitterPodTemplate/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                      value: [variables.availabilityPodAffinityTerm]
+                    }] :
+                    (!object.spec.submitterPodTemplate.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                      term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                      ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                        term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                          expr.key == 'availability-class' &&
+                          expr.operator == 'In' &&
+                          variables.availability in expr.values)) ||
+                       (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                        'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                        term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))) ?
+                      [JSONPatch{
+                        op: 'add',
+                        path: '/spec/submitterPodTemplate/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                        value: object.spec.submitterPodTemplate.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.availabilityPodAffinityTerm]
+                      }] : []))) +
+                 (variables.availability == 'ha' ?
+                   (!has(object.spec.submitterPodTemplate.spec.affinity.podAntiAffinity) ?
+                     [JSONPatch{
+                       op: 'add',
+                       path: '/spec/submitterPodTemplate/spec/affinity/podAntiAffinity',
+                       value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                     }] :
+                     (!has(object.spec.submitterPodTemplate.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                       [JSONPatch{
+                         op: 'add',
+                         path: '/spec/submitterPodTemplate/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                         value: [variables.haPodAntiAffinityTerm]
+                       }] :
+                       (!object.spec.submitterPodTemplate.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                         term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                         has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                         term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                           expr.key == 'availability-class' &&
+                           expr.operator == 'In' &&
+                           'wa' in expr.values &&
+                           'be' in expr.values)) ?
+                         [JSONPatch{
+                           op: 'add',
+                           path: '/spec/submitterPodTemplate/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                           value: object.spec.submitterPodTemplate.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.haPodAntiAffinityTerm]
+                         }] : []))) : []))) : []) +
+            (!has(object.spec.rayClusterSpec.headGroupSpec.template.spec.affinity) ?
+              [JSONPatch{op: 'add', path: '/spec/rayClusterSpec/headGroupSpec/template/spec/affinity', value: variables.defaultAffinity}] :
+              ((!has(object.spec.rayClusterSpec.headGroupSpec.template.spec.affinity.podAffinity) ?
+                [JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterSpec/headGroupSpec/template/spec/affinity/podAffinity',
+                  value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+                }] :
+                (!has(object.spec.rayClusterSpec.headGroupSpec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                  [JSONPatch{
+                    op: 'add',
+                    path: '/spec/rayClusterSpec/headGroupSpec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                    value: [variables.availabilityPodAffinityTerm]
+                  }] :
+                  (!object.spec.rayClusterSpec.headGroupSpec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                    term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                    ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                      term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                        expr.key == 'availability-class' &&
+                        expr.operator == 'In' &&
+                        variables.availability in expr.values)) ||
+                     (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                      'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                      term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))) ?
+                    [JSONPatch{
+                      op: 'add',
+                      path: '/spec/rayClusterSpec/headGroupSpec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                      value: object.spec.rayClusterSpec.headGroupSpec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.availabilityPodAffinityTerm]
+                    }] : []))) +
+               (variables.availability == 'ha' ?
+                 (!has(object.spec.rayClusterSpec.headGroupSpec.template.spec.affinity.podAntiAffinity) ?
+                   [JSONPatch{
+                     op: 'add',
+                     path: '/spec/rayClusterSpec/headGroupSpec/template/spec/affinity/podAntiAffinity',
+                     value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                   }] :
+                   (!has(object.spec.rayClusterSpec.headGroupSpec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                     [JSONPatch{
+                       op: 'add',
+                       path: '/spec/rayClusterSpec/headGroupSpec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                       value: [variables.haPodAntiAffinityTerm]
+                     }] :
+                     (!object.spec.rayClusterSpec.headGroupSpec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                       term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                       has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                       term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                         expr.key == 'availability-class' &&
+                         expr.operator == 'In' &&
+                         'wa' in expr.values &&
+                         'be' in expr.values)) ?
+                       [JSONPatch{
+                         op: 'add',
+                         path: '/spec/rayClusterSpec/headGroupSpec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                         value: object.spec.rayClusterSpec.headGroupSpec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.haPodAntiAffinityTerm]
+                       }] : []))) : []))) +
+            object.spec.rayClusterSpec.workerGroupSpecs.filter(group,
+              !has(group.template.spec.affinity)).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterSpec/workerGroupSpecs/' + string(object.spec.rayClusterSpec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity',
+                value: variables.defaultAffinity
+              }) +
+            object.spec.rayClusterSpec.workerGroupSpecs.filter(group,
+              has(group.template.spec.affinity) &&
+              !has(group.template.spec.affinity.podAffinity)).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterSpec/workerGroupSpecs/' + string(object.spec.rayClusterSpec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAffinity',
+                value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+              }) +
+            object.spec.rayClusterSpec.workerGroupSpecs.filter(group,
+              has(group.template.spec.affinity) &&
+              has(group.template.spec.affinity.podAffinity) &&
+              (!has(group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+               !group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                 term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                 ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                   term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                     expr.key == 'availability-class' &&
+                     expr.operator == 'In' &&
+                     variables.availability in expr.values)) ||
+                  (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                   'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                   term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))))).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterSpec/workerGroupSpecs/' + string(object.spec.rayClusterSpec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                value: (has(group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                  group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution : []) + [variables.availabilityPodAffinityTerm]
+              }) +
+            (variables.availability == 'ha' ?
+              (object.spec.rayClusterSpec.workerGroupSpecs.filter(group,
+                has(group.template.spec.affinity) &&
+                !has(group.template.spec.affinity.podAntiAffinity)).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterSpec/workerGroupSpecs/' + string(object.spec.rayClusterSpec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAntiAffinity',
+                  value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                }) +
+               object.spec.rayClusterSpec.workerGroupSpecs.filter(group,
+                has(group.template.spec.affinity) &&
+                has(group.template.spec.affinity.podAntiAffinity) &&
+                (!has(group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+                 !group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                   term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                   has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                   term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                     expr.key == 'availability-class' &&
+                     expr.operator == 'In' &&
+                     'wa' in expr.values &&
+                     'be' in expr.values)))).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterSpec/workerGroupSpecs/' + string(object.spec.rayClusterSpec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                  value: (has(group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                    group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution : []) + [variables.haPodAntiAffinityTerm]
+                })) : []) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayCluster' ?
+            (!has(object.spec.headGroupSpec.template.spec.affinity) ?
+              [JSONPatch{op: 'add', path: '/spec/headGroupSpec/template/spec/affinity', value: variables.defaultAffinity}] :
+              ((!has(object.spec.headGroupSpec.template.spec.affinity.podAffinity) ?
+                [JSONPatch{
+                  op: 'add',
+                  path: '/spec/headGroupSpec/template/spec/affinity/podAffinity',
+                  value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+                }] :
+                (!has(object.spec.headGroupSpec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                  [JSONPatch{
+                    op: 'add',
+                    path: '/spec/headGroupSpec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                    value: [variables.availabilityPodAffinityTerm]
+                  }] :
+                  (!object.spec.headGroupSpec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                    term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                    ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                      term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                        expr.key == 'availability-class' &&
+                        expr.operator == 'In' &&
+                        variables.availability in expr.values)) ||
+                     (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                      'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                      term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))) ?
+                    [JSONPatch{
+                      op: 'add',
+                      path: '/spec/headGroupSpec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                      value: object.spec.headGroupSpec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.availabilityPodAffinityTerm]
+                    }] : []))) +
+               (variables.availability == 'ha' ?
+                 (!has(object.spec.headGroupSpec.template.spec.affinity.podAntiAffinity) ?
+                   [JSONPatch{
+                     op: 'add',
+                     path: '/spec/headGroupSpec/template/spec/affinity/podAntiAffinity',
+                     value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                   }] :
+                   (!has(object.spec.headGroupSpec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                     [JSONPatch{
+                       op: 'add',
+                       path: '/spec/headGroupSpec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                       value: [variables.haPodAntiAffinityTerm]
+                     }] :
+                     (!object.spec.headGroupSpec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                       term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                       has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                       term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                         expr.key == 'availability-class' &&
+                         expr.operator == 'In' &&
+                         'wa' in expr.values &&
+                         'be' in expr.values)) ?
+                       [JSONPatch{
+                         op: 'add',
+                         path: '/spec/headGroupSpec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                         value: object.spec.headGroupSpec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.haPodAntiAffinityTerm]
+                       }] : []))) : []))) +
+            object.spec.workerGroupSpecs.filter(group,
+              !has(group.template.spec.affinity)).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/workerGroupSpecs/' + string(object.spec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity',
+                value: variables.defaultAffinity
+              }) +
+            object.spec.workerGroupSpecs.filter(group,
+              has(group.template.spec.affinity) &&
+              !has(group.template.spec.affinity.podAffinity)).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/workerGroupSpecs/' + string(object.spec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAffinity',
+                value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+              }) +
+            object.spec.workerGroupSpecs.filter(group,
+              has(group.template.spec.affinity) &&
+              has(group.template.spec.affinity.podAffinity) &&
+              (!has(group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+               !group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                 term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                 ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                   term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                     expr.key == 'availability-class' &&
+                     expr.operator == 'In' &&
+                     variables.availability in expr.values)) ||
+                  (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                   'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                   term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))))).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/workerGroupSpecs/' + string(object.spec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                value: (has(group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                  group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution : []) + [variables.availabilityPodAffinityTerm]
+              }) +
+            (variables.availability == 'ha' ?
+              (object.spec.workerGroupSpecs.filter(group,
+                has(group.template.spec.affinity) &&
+                !has(group.template.spec.affinity.podAntiAffinity)).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/workerGroupSpecs/' + string(object.spec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAntiAffinity',
+                  value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                }) +
+               object.spec.workerGroupSpecs.filter(group,
+                has(group.template.spec.affinity) &&
+                has(group.template.spec.affinity.podAntiAffinity) &&
+                (!has(group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+                 !group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                   term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                   has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                   term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                     expr.key == 'availability-class' &&
+                     expr.operator == 'In' &&
+                     'wa' in expr.values &&
+                     'be' in expr.values)))).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/workerGroupSpecs/' + string(object.spec.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                  value: (has(group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                    group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution : []) + [variables.haPodAntiAffinityTerm]
+                })) : []) : []
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: |-
+          object.kind == 'RayService' ?
+            (!has(object.spec.rayClusterConfig.headGroupSpec.template.spec.affinity) ?
+              [JSONPatch{op: 'add', path: '/spec/rayClusterConfig/headGroupSpec/template/spec/affinity', value: variables.defaultAffinity}] :
+              ((!has(object.spec.rayClusterConfig.headGroupSpec.template.spec.affinity.podAffinity) ?
+                [JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterConfig/headGroupSpec/template/spec/affinity/podAffinity',
+                  value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+                }] :
+                (!has(object.spec.rayClusterConfig.headGroupSpec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                  [JSONPatch{
+                    op: 'add',
+                    path: '/spec/rayClusterConfig/headGroupSpec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                    value: [variables.availabilityPodAffinityTerm]
+                  }] :
+                  (!object.spec.rayClusterConfig.headGroupSpec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                    term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                    ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                      term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                        expr.key == 'availability-class' &&
+                        expr.operator == 'In' &&
+                        variables.availability in expr.values)) ||
+                     (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                      'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                      term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))) ?
+                    [JSONPatch{
+                      op: 'add',
+                      path: '/spec/rayClusterConfig/headGroupSpec/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                      value: object.spec.rayClusterConfig.headGroupSpec.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.availabilityPodAffinityTerm]
+                    }] : []))) +
+               (variables.availability == 'ha' ?
+                 (!has(object.spec.rayClusterConfig.headGroupSpec.template.spec.affinity.podAntiAffinity) ?
+                   [JSONPatch{
+                     op: 'add',
+                     path: '/spec/rayClusterConfig/headGroupSpec/template/spec/affinity/podAntiAffinity',
+                     value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                   }] :
+                   (!has(object.spec.rayClusterConfig.headGroupSpec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                     [JSONPatch{
+                       op: 'add',
+                       path: '/spec/rayClusterConfig/headGroupSpec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                       value: [variables.haPodAntiAffinityTerm]
+                     }] :
+                     (!object.spec.rayClusterConfig.headGroupSpec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                       term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                       has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                       term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                         expr.key == 'availability-class' &&
+                         expr.operator == 'In' &&
+                         'wa' in expr.values &&
+                         'be' in expr.values)) ?
+                       [JSONPatch{
+                         op: 'add',
+                         path: '/spec/rayClusterConfig/headGroupSpec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                         value: object.spec.rayClusterConfig.headGroupSpec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution + [variables.haPodAntiAffinityTerm]
+                       }] : []))) : []))) +
+            object.spec.rayClusterConfig.workerGroupSpecs.filter(group,
+              !has(group.template.spec.affinity)).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterConfig/workerGroupSpecs/' + string(object.spec.rayClusterConfig.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity',
+                value: variables.defaultAffinity
+              }) +
+            object.spec.rayClusterConfig.workerGroupSpecs.filter(group,
+              has(group.template.spec.affinity) &&
+              !has(group.template.spec.affinity.podAffinity)).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterConfig/workerGroupSpecs/' + string(object.spec.rayClusterConfig.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAffinity',
+                value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.availabilityPodAffinityTerm]}
+              }) +
+            object.spec.rayClusterConfig.workerGroupSpecs.filter(group,
+              has(group.template.spec.affinity) &&
+              has(group.template.spec.affinity.podAffinity) &&
+              (!has(group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+               !group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                 term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                 ((has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                   term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                     expr.key == 'availability-class' &&
+                     expr.operator == 'In' &&
+                     variables.availability in expr.values)) ||
+                  (has(term.podAffinityTerm.labelSelector.matchLabels) &&
+                   'availability-class' in term.podAffinityTerm.labelSelector.matchLabels &&
+                   term.podAffinityTerm.labelSelector.matchLabels['availability-class'] == variables.availability))))).map(group,
+              JSONPatch{
+                op: 'add',
+                path: '/spec/rayClusterConfig/workerGroupSpecs/' + string(object.spec.rayClusterConfig.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                value: (has(group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                  group.template.spec.affinity.podAffinity.preferredDuringSchedulingIgnoredDuringExecution : []) + [variables.availabilityPodAffinityTerm]
+              }) +
+            (variables.availability == 'ha' ?
+              (object.spec.rayClusterConfig.workerGroupSpecs.filter(group,
+                has(group.template.spec.affinity) &&
+                !has(group.template.spec.affinity.podAntiAffinity)).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterConfig/workerGroupSpecs/' + string(object.spec.rayClusterConfig.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAntiAffinity',
+                  value: {'preferredDuringSchedulingIgnoredDuringExecution': [variables.haPodAntiAffinityTerm]}
+                }) +
+               object.spec.rayClusterConfig.workerGroupSpecs.filter(group,
+                has(group.template.spec.affinity) &&
+                has(group.template.spec.affinity.podAntiAffinity) &&
+                (!has(group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ||
+                 !group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution.exists(term,
+                   term.podAffinityTerm.topologyKey == 'kubernetes.io/hostname' &&
+                   has(term.podAffinityTerm.labelSelector.matchExpressions) &&
+                   term.podAffinityTerm.labelSelector.matchExpressions.exists(expr,
+                     expr.key == 'availability-class' &&
+                     expr.operator == 'In' &&
+                     'wa' in expr.values &&
+                     'be' in expr.values)))).map(group,
+                JSONPatch{
+                  op: 'add',
+                  path: '/spec/rayClusterConfig/workerGroupSpecs/' + string(object.spec.rayClusterConfig.workerGroupSpecs.indexOf(group)) + '/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution',
+                  value: (has(group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution) ?
+                    group.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution : []) + [variables.haPodAntiAffinityTerm]
+                })) : []) : []
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingAdmissionPolicyBinding

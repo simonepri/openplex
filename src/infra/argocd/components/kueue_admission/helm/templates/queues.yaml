@@ -1,4 +1,4 @@
-{{- /* Configures per-cell elastic ClusterQueues, LocalQueues, and cohort sharing rules. */ -}}
+{{- /* Configures per-cell elastic team ClusterQueues, the shared dev ClusterQueue, and cohort sharing rules. */ -}}
 
 {{- if eq .Values.role "cell" }}
 {{- $classes := list
@@ -137,5 +137,36 @@ spec:
         {{- end }}
 {{- end }}
 {{- end }}
+{{- end }}
+{{- if .Values.devQueue.enabled }}
+{{- /* Coder workspaces share one standalone queue: no cohort, so dev pods neither borrow nor lend team class capacity. */}}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: workspaces-ha
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: workspaces
+  preemption:
+    withinClusterQueue: Never
+  queueingStrategy: StrictFIFO
+  resourceGroups:
+    - coveredResources:
+        {{- range $resources }}
+        - {{ . }}
+        {{- end }}
+      flavors:
+        {{- range $flavor := .Values.flavors }}
+        - name: {{ $flavor.name }}
+          resources:
+            {{- range $resource := $resources }}
+            - name: {{ $resource }}
+              nominalQuota: {{ include "kueue-admission.resourceQuantity" (list $resource (dig $resource "0" $.Values.devQueue.quota)) | quote }}
+            {{- end }}
+        {{- end }}
 {{- end }}
 {{- end }}

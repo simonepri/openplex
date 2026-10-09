@@ -7,6 +7,7 @@ enableCertManager: false
 controllerManager:
   featureGates:
     - {enabled: false, name: AdmissionFairSharing}
+    - {enabled: false, name: AdmissionFairSharingAnchorAtQuotaReservation}
     - {enabled: true, name: ConcurrentAdmission}
     - {enabled: true, name: KueueDRAIntegration}
     - {enabled: true, name: KueueDRAIntegrationConsumableCapacity}
@@ -42,7 +43,7 @@ controllerManager:
     logLevel: info
     image:
       repository: registry.k8s.io/kueue/kueue
-      tag: v0.20.0@sha256:7c57f630b2987058cc543710aa4829cfd8119b7f7c23431cbc242b82cf4bce57
+      tag: v0.20.1@sha256:874ed2a77e2313817ae36570ad831353ae03ab66c1ed96d9392ab84b7be3bde3
     resources:
       limits:
         cpu: "2"
@@ -84,6 +85,7 @@ managerConfig:
       healthProbeBindAddress: :8081
     metrics:
       bindAddress: :8443
+      enableClusterQueueResources: true
     webhook:
       port: 9443
     leaderElection:

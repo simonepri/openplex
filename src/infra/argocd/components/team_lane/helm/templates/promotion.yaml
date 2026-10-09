@@ -26,7 +26,11 @@
 {{- end -}}
 {{- $warehouses = append $warehouses (dict "images" $projectImages "name" ($workloadProject.name | replace "_" "-")) -}}
 {{- range $image := $projectImages -}}
-{{- $originRepo := ternary (printf "%s/%s" $flociWorkloadRoot $image.package) (index $.Values.delivery.originRepositories $image.package) (ne $flociWorkloadRoot "") -}}
+{{- $fallbackRepo := and $.Values.ecrRegistry (printf "%s/%s" $.Values.ecrRegistry $image.package) -}}
+{{- if and (not $.Values.ecrRegistry) (hasKey $.Values "delivery") (hasKey $.Values.delivery "originRepositories") (hasKey $.Values.delivery.originRepositories $image.package) -}}
+{{- $fallbackRepo = index $.Values.delivery.originRepositories $image.package -}}
+{{- end -}}
+{{- $originRepo := ternary (printf "%s/%s" $flociWorkloadRoot $image.package) $fallbackRepo (ne $flociWorkloadRoot "") -}}
 {{- $_ := set $teamOriginRepositories $image.package (required (printf "delivery.originRepositories requires project image package %q" $image.package) $originRepo) -}}
 {{- end -}}
 {{- end -}}
@@ -62,7 +66,7 @@ spec:
         mode: warehouse
         promotionMode: automatic
         teamSlug: {{ .Values.team.slug | quote }}
-        repositoryURL: {{ regexReplaceAll "^git@([^:]+):" .Values.repository.url "https://$1/" | quote }}
+        repositoryURL: {{ .Values.repository.url | quote }}
         originRepositories: {{ $teamOriginRepositories | toJson }}
         images: []
         warehouses: {{ $warehouses | toJson }}
@@ -78,18 +82,15 @@ spec:
 {{- range $cell := $cells }}
 {{- $projectOriginRepositories := dict -}}
 {{- range $image := $projectImages -}}
+{{- $cellFallbackRepo := and $.Values.ecrRegistry (printf "%s/%s" $.Values.ecrRegistry $image.package) -}}
+{{- if and (not $.Values.ecrRegistry) (hasKey $.Values "delivery") (hasKey $.Values.delivery "originRepositories") (hasKey $.Values.delivery.originRepositories $image.package) -}}
+{{- $cellFallbackRepo = index $.Values.delivery.originRepositories $image.package -}}
+{{- end -}}
 {{- /* floci-divergence: Floci cells pull promoted workload images from local origin repository root. */ -}}
-{{- $originRepo := ternary (printf "%s/%s" $flociWorkloadRoot $image.package) (index $.Values.delivery.originRepositories $image.package) (eq $cell.provider "floci") -}}
+{{- $originRepo := ternary (printf "%s/%s" $flociWorkloadRoot $image.package) $cellFallbackRepo (eq $cell.provider "floci") -}}
 {{- $_ := set $projectOriginRepositories $image.package (required (printf "delivery.originRepositories requires project image package %q" $image.package) $originRepo) -}}
 {{- end -}}
-{{- $allDeploymentRepositories := required (printf "cell %q requires delivery.deploymentRepositories" $cell.name) $cell.delivery.deploymentRepositories -}}
-{{- $deploymentRepositories := dict -}}
-{{- range $image := $projectImages -}}
-{{- if not (hasKey $allDeploymentRepositories $image.package) -}}
-{{- fail (printf "cell %q deployment repositories require project image package %q" $cell.name $image.package) -}}
-{{- end -}}
-{{- $_ := set $deploymentRepositories $image.package (index $allDeploymentRepositories $image.package) -}}
-{{- end }}
+{{- $deploymentRepositories := include "fleet-team.deploymentRepositories" (dict "cell" $cell "images" $projectImages) | fromJson }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -121,7 +122,7 @@ spec:
         mode: stage
         promotionMode: automatic
         teamSlug: {{ $.Values.team.slug | quote }}
-        repositoryURL: {{ regexReplaceAll "^git@([^:]+):" $.Values.repository.url "https://$1/" | quote }}
+        repositoryURL: {{ $.Values.repository.url | quote }}
         originRepositories: {{ $projectOriginRepositories | toJson }}
         images: {{ $projectImages | toJson }}
         warehouses: []

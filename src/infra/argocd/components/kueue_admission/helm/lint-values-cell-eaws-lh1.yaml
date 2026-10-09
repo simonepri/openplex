@@ -25,9 +25,11 @@ flavors:
 - name: on-demand
   nodeLabels:
     karpenter.sh/capacity-type: on-demand
+  topology: cell-topology
 - name: spot
   nodeLabels:
     karpenter.sh/capacity-type: spot
+  topology: cell-topology
 provider: floci
 role: cell
 teams:

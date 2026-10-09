@@ -1,4 +1,4 @@
-# Default Kueue admission values configuring cluster queue cohorts, compute limits, and team flavors.
+# Default Kueue admission values configuring cluster queue cohorts, compute limits, team flavors, and the shared dev queue.
 
 role: disabled
 clusterName: ""
@@ -18,3 +18,10 @@ compute:
 flavors: []
 topologies: []
 teams: []
+
+# Standalone ClusterQueue `workspaces-ha` admits Coder workspace pods in the `workspaces` namespace.
+# Without a cohort, Kueue cannot share a single quota across flavors, so the nominal quota applies
+# per flavor in `flavors` (for example, on-demand and spot each receive this nominalQuota).
+devQueue:
+  enabled: true
+  quota: {cpu: "16", memory: 64Gi}

@@ -6,25 +6,15 @@ team:
   group: ""
   namespaceSuffix: ""
   classes: []
+  submitters: members
 resources: []
 workloadImagePull:
   enabled: false
   region: ""
   roleArn: ""
 workloadRepositories: {}
-devWorkspaces:
-  enabled: false
-  localGitCIDR: ""
-  originRegistryCIDR: ""
-workspaceSubmissions:
-  sourceNamespace: ""
 rayDashboard:
   enabled: false
-devSecrets:
-  names: []
-runtimeSecrets:
-  adapter: ""
-  auth: {}
 storageProjection:
   enabled: false
   rbacNamespaceSuffixes: []

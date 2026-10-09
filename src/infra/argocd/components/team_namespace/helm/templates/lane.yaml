@@ -3,7 +3,6 @@
 {{- if eq .Values.mode "cell" }}
 {{- include "team-namespace.validate" . -}}
 {{- $namespace := include "team-namespace.namespace" . -}}
-{{- $runtimeSecrets := include "team-namespace.runtimeSecrets" . | fromJson -}}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -16,11 +15,6 @@ metadata:
     app.kubernetes.io/component: storage-projection
 {{- end }}
     cost-center: {{ .Values.team.slug | quote }}
-{{- if .Values.devWorkspaces.enabled }}
-    # LINT.IfChange(workspace-buildbuddy-cell-label)
-    cell: {{ .Values.devWorkspaces.cell | quote }}
-    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/dev-secrets-policy.yaml:workspace-buildbuddy-cell-label)
-{{- end }}
     environment: production
     kueue.x-k8s.io/managed: "true"
 {{- if .Values.rayDashboard.enabled }}
@@ -33,40 +27,8 @@ metadata:
     pod-security.kubernetes.io/warn-version: latest
     # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/team-pod-security-policy.yaml:team-pod-security-profile)
     team: {{ .Values.team.slug | quote }}
-{{- if .Values.devWorkspaces.enabled }}
-# LINT.IfChange(dev-workspace-secret-projection)
----
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: workspace-backups
-  namespace: {{ $namespace }}
-  labels:
-{{ include "team-namespace.labels" . | nindent 4 }}
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    kind: ClusterSecretStore
-    name: {{ .Values.devWorkspaces.secretStoreName }}
-  target:
-    name: workspace-backups
-    creationPolicy: Owner
-    deletionPolicy: Retain
-    template:
-      engineVersion: v2
-      data:
-        access_key_id: {{`'{{ .access_key_id }}'`}}
-        secret_access_key: {{`'{{ .secret_access_key }}'`}}
-  data:
-    - secretKey: access_key_id
-      remoteRef:
-        key: {{ .Values.devWorkspaces.recordName | quote }}
-        property: access_key_id
-    - secretKey: secret_access_key
-      remoteRef:
-        key: {{ .Values.devWorkspaces.recordName | quote }}
-        property: secret_access_key
-# LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/dev-secrets-policy.yaml:dev-workspace-secret-projection,//src/infra/argocd/components/coder_workspace_secret_store/helm/templates/store.yaml:dev-workspace-secret-projection,//src/infra/definitions/workspaces/templates/dev/deployment.tf:dev-workspace-secret-projection)
+{{- if eq (default "members" .Values.team.submitters) "all" }}
+    teams.openplex.io/submitters: "all"
 {{- end }}
 {{- range $class := .Values.team.classes }}
 ---
@@ -159,6 +121,39 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: team-operator
+{{- if eq (default "members" .Values.team.submitters) "all" }}
+---
+# Grants open RayJob submission and cancellation to authenticated principals.
+# Cluster admission policy restricts this open RBAC grant to authenticated humans
+# and authorized controllers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: team-open-submitter
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [ray.io]
+    resources: [rayjobs]
+    verbs: [create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: team-open-submitter
+  namespace: {{ $namespace }}
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:authenticated
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: team-open-submitter
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -207,10 +202,26 @@ roleRef:
 {{- end }}
 {{- if .Values.storageProjection.enabled }}
 {{- $handoff := .Values.storageProjection.handoff }}
-{{- $storageContract := dict }}
-{{- if .Values.devWorkspaces.enabled }}
-{{- $storageContract = required "storageProjection.handoff.storageContract is required for dev workspaces" $handoff.storageContract }}
-{{- end }}
+{{- $storageContract := $handoff.storageContract | default dict }}
+{{- if eq $handoff.provider "aws" }}
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: {{ printf "team-s3-%s" $namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+{{ include "team-namespace.labels" . | nindent 4 }}
+spec:
+  conditions:
+    - namespaces:
+        - {{ $namespace }}
+  provider:
+    aws:
+      service: SecretsManager
+      region: {{ dig "secretStore" "auth" "aws" "region" (or $.Values.workloadImagePull.region "configured-by-applicationset.invalid") $handoff | quote }}
+{{- else }}
 {{- $storageAuthAdapter := include "team-namespace.storageAuthAdapter" $handoff -}}
 {{- $storageKubernetesAuth := dict -}}
 {{- if eq $storageAuthAdapter "kubernetes" -}}
@@ -222,13 +233,9 @@ kind: ServiceAccount
 metadata:
   name: {{ $handoff.secretStore.serviceAccount }}
   namespace: {{ $namespace }}
-{{- if or (and (eq $storageAuthAdapter "aws") $handoff.secretStore.auth.aws.roleArn) (eq $storageAuthAdapter "gcp") }}
+{{- if eq $storageAuthAdapter "gcp" }}
   annotations:
-{{- if and (eq $storageAuthAdapter "aws") $handoff.secretStore.auth.aws.roleArn }}
-    eks.amazonaws.com/role-arn: {{ $handoff.secretStore.auth.aws.roleArn | quote }}
-{{- else if eq $storageAuthAdapter "gcp" }}
     iam.gke.io/gcp-service-account: {{ $handoff.secretStore.auth.gcp.serviceAccountEmail | quote }}
-{{- end }}
 {{- end }}
   labels:
 {{ include "team-namespace.labels" . | nindent 4 }}
@@ -246,12 +253,6 @@ spec:
     aws:
       service: SecretsManager
       region: {{ $handoff.secretStore.auth.aws.region | quote }}
-{{- if $handoff.secretStore.auth.aws.roleArn }}
-      auth:
-        jwt:
-          serviceAccountRef:
-            name: {{ $handoff.secretStore.serviceAccount }}
-{{- end }}
 {{- else if eq $storageAuthAdapter "gcp" }}
     gcpsm:
       projectID: {{ $handoff.secretStore.auth.gcp.projectId | quote }}
@@ -274,6 +275,7 @@ spec:
         serviceAccount:
           name: {{ $handoff.secretStore.serviceAccount }}
 {{- end }}
+{{- end }}
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -285,8 +287,13 @@ metadata:
 spec:
   refreshInterval: 1h
   secretStoreRef:
+{{- if eq $handoff.provider "aws" }}
+    kind: ClusterSecretStore
+    name: {{ printf "team-s3-%s" $namespace }}
+{{- else }}
     kind: SecretStore
     name: {{ $handoff.secretStore.name }}
+{{- end }}
   target:
     name: {{ $handoff.externalSecret.targetSecretName }}
     creationPolicy: Owner
@@ -298,7 +305,13 @@ spec:
           [team-s3]
           aws_access_key_id = {{`{{ .access_key_id }}`}}
           aws_secret_access_key = {{`{{ .secret_access_key }}`}}
-{{- if .Values.devWorkspaces.enabled }}
+
+          [global]
+          aws_access_key_id = {{`{{ .global_access_key_id }}`}}
+          aws_secret_access_key = {{`{{ .global_secret_access_key }}`}}
+        global_endpoint: '{{`{{ .global_endpoint }}`}}'
+        global_bucket: '{{`{{ .global_bucket }}`}}'
+{{- if $storageContract }}
         configData: |-
           [gateway]
           type = s3
@@ -326,5 +339,21 @@ spec:
       remoteRef:
         key: {{ $handoff.recordName | quote }}
         property: {{ $handoff.externalSecret.remoteProperties.secretAccessKey }}
+    - secretKey: global_access_key_id
+      remoteRef:
+        key: {{ $handoff.recordName | quote }}
+        property: {{ dig "externalSecret" "remoteProperties" "globalAccessKeyId" "global_access_key_id" $handoff }}
+    - secretKey: global_secret_access_key
+      remoteRef:
+        key: {{ $handoff.recordName | quote }}
+        property: {{ dig "externalSecret" "remoteProperties" "globalSecretAccessKey" "global_secret_access_key" $handoff }}
+    - secretKey: global_endpoint
+      remoteRef:
+        key: {{ $handoff.recordName | quote }}
+        property: {{ dig "externalSecret" "remoteProperties" "globalEndpoint" "global_endpoint" $handoff }}
+    - secretKey: global_bucket
+      remoteRef:
+        key: {{ $handoff.recordName | quote }}
+        property: {{ dig "externalSecret" "remoteProperties" "globalBucket" "global_bucket" $handoff }}
 {{- end }}
 {{- end }}

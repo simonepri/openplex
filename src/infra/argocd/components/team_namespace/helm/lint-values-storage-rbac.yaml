@@ -1,8 +1,6 @@
 # Exercises complete Floci source-record RBAC fixture using Kubernetes auth for every namespace selected by one team Application.
 
 mode: storage-rbac
-devWorkspaces:
-  enabled: false
 team:
   slug: examples
   group: cluster:group:team:examples
@@ -10,8 +8,6 @@ team:
   classes: [ha]
 resources: []
 workloadRepositories: {}
-devSecrets:
-  names: []
 storageProjection:
   enabled: true
   handoff:
@@ -28,4 +24,4 @@ storageProjection:
       remoteProperties:
         accessKeyId: access_key_id
         secretAccessKey: secret_access_key
-  rbacNamespaceSuffixes: [workloads, workspaces]
+  rbacNamespaceSuffixes: [workloads]

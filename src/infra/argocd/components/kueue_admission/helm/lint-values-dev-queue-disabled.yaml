@@ -1,0 +1,32 @@
+# Render-enabling values for Bazel's first-party Helm checks. They prove a GPU-less cell renders without the shared dev queue when it is disabled.
+
+role: cell
+clusterName: cell-floci-lint
+provider: floci
+compute:
+  cpu_capabilities: []
+  gpu_classes: {}
+  tpu_classes: {}
+  floors:
+    ha: {cpu: "4", memory: 12Gi}
+    ma: {cpu: "1", memory: 6Gi}
+    wa: {cpu: "1", memory: 2Gi}
+    be: {cpu: "0", memory: "0"}
+  ceiling: {cpu: "6", memory: 20Gi}
+flavors:
+  - name: on-demand
+    nodeLabels: {karpenter.sh/capacity-type: on-demand}
+  - name: spot
+    nodeLabels: {karpenter.sh/capacity-type: spot}
+topologies:
+  - name: cell-topology
+    levels:
+      - topology.kubernetes.io/zone
+      - kubernetes.io/hostname
+teams:
+  - slug: fixtureteam
+    quota:
+      classes:
+        ha: {cpu: "4", memory: 12Gi}
+devQueue:
+  enabled: false

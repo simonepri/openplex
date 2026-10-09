@@ -2,7 +2,7 @@
 
 apiVersion: v2
 name: team-namespace
-description: Team namespace foundation chart configuring cell-local storage, network policies, S3 gateway access, and dev workspaces.
+description: Team namespace foundation chart configuring cell-local storage, network policies, and S3 gateway access.
 type: application
 version: 0.1.0
 appVersion: 1.0.0

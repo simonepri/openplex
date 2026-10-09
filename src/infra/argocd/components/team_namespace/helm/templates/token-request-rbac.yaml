@@ -4,16 +4,9 @@
 {{- $namespace := include "team-namespace.namespace" . -}}
 {{- $serviceAccounts := list -}}
 {{- if .Values.storageProjection.enabled -}}
-{{- $serviceAccounts = append $serviceAccounts .Values.storageProjection.handoff.secretStore.serviceAccount -}}
-{{- end -}}
-{{- $runtimeSecrets := include "team-namespace.runtimeSecrets" . | fromJson -}}
-{{- if and .Values.devSecrets.names (eq $runtimeSecrets.adapter "kubernetes") -}}
-{{- $serviceAccounts = append $serviceAccounts "team-dev-secrets" -}}
-{{- end -}}
-{{- if .Values.devWorkspaces.enabled -}}
-{{- $buildbuddyAuth := include "team-namespace.buildbuddyAuth" . | fromJson -}}
-{{- if eq $buildbuddyAuth.adapter "kubernetes" -}}
-{{- $serviceAccounts = append $serviceAccounts "workspace-buildbuddy-auth" -}}
+{{- $handoff := .Values.storageProjection.handoff -}}
+{{- if and (ne $handoff.provider "aws") (hasKey $handoff "secretStore") -}}
+{{- $serviceAccounts = append $serviceAccounts $handoff.secretStore.serviceAccount -}}
 {{- end -}}
 {{- end -}}
 {{- if .Values.workloadImagePull.enabled -}}

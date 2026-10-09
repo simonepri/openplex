@@ -23,47 +23,9 @@ podSelector:
       values: [torch-compile-cache]
 {{- end -}}
 
-{{- define "team-namespace.runtimeSecrets" -}}
-{{- $adapter := .Values.runtimeSecrets.adapter -}}
-{{- $auth := .Values.runtimeSecrets.auth -}}
-{{- if ne $adapter "" -}}
-{{- if not (has $adapter (list "aws" "gcp" "kubernetes")) -}}
-{{- fail (printf "runtime secrets adapter %q is unsupported" $adapter) -}}
-{{- end -}}
-{{- $authKeys := keys $auth | sortAlpha -}}
-{{- if or (ne (len $authKeys) 1) (ne (first $authKeys) $adapter) -}}
-{{- fail (printf "runtime secrets adapter %q requires exactly its matching auth" $adapter) -}}
-{{- end -}}
-{{- else if .Values.devSecrets.names -}}
-{{- fail "dev secrets require a runtime secrets adapter" -}}
-{{- end -}}
-{{- dict "adapter" $adapter "auth" $auth | toJson -}}
-{{- end -}}
-
-{{- define "team-namespace.buildbuddyAuth" -}}
-{{- $auth := required "dev workspaces require BuildBuddy auth" .Values.devWorkspaces.buildbuddyAuth -}}
-{{- $expectedRecord := printf "buildbuddy-auth-%s" .Values.devWorkspaces.cell -}}
-{{- if ne $auth.recordName $expectedRecord -}}
-{{- fail (printf "BuildBuddy auth record must be %q" $expectedRecord) -}}
-{{- end -}}
-{{- $expectedAdapter := .Values.devWorkspaces.origin.provider -}}
-{{- /* floci-divergence: Floci clusters adapt BuildBuddy auth to AWS emulation. */ -}}
-{{- if eq $expectedAdapter "floci" -}}
-{{- if ne $auth.adapter "aws" -}}
-{{- fail (printf "BuildBuddy auth for provider %q requires adapter aws" .Values.devWorkspaces.origin.provider) -}}
-{{- end -}}
-{{- else if ne $auth.adapter $expectedAdapter -}}
-{{- fail (printf "BuildBuddy auth for provider %q requires adapter %q" .Values.devWorkspaces.origin.provider $expectedAdapter) -}}
-{{- end -}}
-{{- $authKeys := keys $auth.auth | sortAlpha -}}
-{{- if or (ne (len $authKeys) 1) (ne (first $authKeys) $auth.adapter) -}}
-{{- fail (printf "BuildBuddy auth adapter %q requires exactly its matching auth" $auth.adapter) -}}
-{{- end -}}
-{{- $auth | toJson -}}
-{{- end -}}
-
 {{- define "team-namespace.storageAuthAdapter" -}}
-{{- $auth := required "storage projection requires secretStore.auth" .secretStore.auth -}}
+{{- if and (hasKey . "secretStore") .secretStore (hasKey .secretStore "auth") .secretStore.auth -}}
+{{- $auth := .secretStore.auth -}}
 {{- $keys := keys $auth | sortAlpha -}}
 {{- if ne (len $keys) 1 -}}
 {{- fail "storage projection auth must select exactly one adapter" -}}
@@ -73,6 +35,11 @@ podSelector:
 {{- fail (printf "storage projection auth adapter %q is unsupported" $adapter) -}}
 {{- end -}}
 {{- $adapter -}}
+{{- else if eq .provider "aws" -}}
+aws
+{{- else -}}
+{{- fail "storage projection requires secretStore.auth" -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "team-namespace.storageKubernetesAuth" -}}
@@ -82,6 +49,10 @@ podSelector:
 
 {{- define "team-namespace.validate" -}}
 {{- $slug := required "team.slug is required" .Values.team.slug -}}
+{{- $submitters := .Values.team.submitters | default "members" -}}
+{{- if not (has $submitters (list "all" "members")) -}}
+{{- fail (printf "team.submitters must be 'all' or 'members', got %q" $submitters) -}}
+{{- end -}}
 {{- $expectedGroup := printf "cluster:group:team:%s" $slug -}}
 {{- if ne .Values.team.group $expectedGroup -}}
 {{- fail (printf "team.group must be the derived group %q" $expectedGroup) -}}
@@ -101,30 +72,16 @@ podSelector:
 {{- end -}}
 {{- $_ := set $resources $key true -}}
 {{- end -}}
-{{- $_ := include "team-namespace.runtimeSecrets" . | fromJson -}}
-{{- $workspacesNamespace := printf "team-%s-workspaces" $slug -}}
-{{- $submissionSource := .Values.workspaceSubmissions.sourceNamespace -}}
-{{- if and $submissionSource (ne $submissionSource $workspacesNamespace) -}}
-{{- fail "workspace submissions must originate from the team's dedicated workspaces namespace" -}}
-{{- end -}}
-{{- if .Values.devWorkspaces.enabled -}}
-{{- $_ := include "team-namespace.buildbuddyAuth" . | fromJson -}}
-{{- if ne .Values.team.namespaceSuffix "workspaces" -}}
-{{- fail "dev workspaces are limited to the workspaces namespace" -}}
-{{- end -}}
-{{- if not .Values.storageProjection.enabled -}}
-{{- fail "dev workspaces require storage projection" -}}
-{{- end -}}
-{{- $storageContract := required "dev workspaces require the team storage contract" .Values.storageProjection.handoff.storageContract -}}
-{{- if or (eq $storageContract.mounts.home.bucket "global") (ne $storageContract.mounts.home.bucket $storageContract.mounts.scratch.bucket) -}}
-{{- fail "dev workspace home and scratch mounts must share one non-global virtual cell" -}}
-{{- end -}}
-{{- end -}}
-{{- if and .Values.devWorkspaces.enabled (eq .Values.team.namespaceSuffix "workspaces") $submissionSource -}}
-{{- fail "the workspaces namespace cannot bind its workspace submitter back to itself" -}}
-{{- end -}}
 {{- if .Values.storageProjection.enabled -}}
 {{- $handoff := .Values.storageProjection.handoff -}}
+{{- if eq $handoff.provider "aws" -}}
+{{- if and (hasKey $handoff "secretStore") $handoff.secretStore (hasKey $handoff.secretStore "auth") $handoff.secretStore.auth -}}
+{{- $authAdapter := include "team-namespace.storageAuthAdapter" $handoff -}}
+{{- if ne $authAdapter "aws" -}}
+{{- fail (printf "storage projection provider %q requires matching auth, found %q" $handoff.provider $authAdapter) -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
 {{- $authAdapter := include "team-namespace.storageAuthAdapter" $handoff -}}
 {{- /* floci-divergence: Floci emulates team storage handoff credentials via AWS auth. */ -}}
 {{- if and (ne .Values.mode "storage-rbac") (eq $handoff.provider "floci") -}}
@@ -136,6 +93,7 @@ podSelector:
 {{- end -}}
 {{- if and (eq .Values.mode "storage-rbac") (ne $authAdapter "kubernetes") -}}
 {{- fail "storage-rbac mode requires Kubernetes storage auth" -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

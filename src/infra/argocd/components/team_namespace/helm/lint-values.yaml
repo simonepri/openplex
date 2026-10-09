@@ -1,13 +1,12 @@
 # Exercises complete non-production team lane to lint namespace ownership, class LocalQueue aliases, and the split declarative/interactive Role surface.
 
 mode: cell
-devWorkspaces:
-  enabled: false
 team:
   slug: fixtureteam
   group: cluster:group:team:fixtureteam
   namespaceSuffix: workloads
   classes: [ha, wa]
+  submitters: members
 resources:
   - {access: view, apiGroup: apps, kind: Deployment, project: true, resource: deployments}
   - {access: view, apiGroup: "", kind: Service, project: true, resource: services}
@@ -23,25 +22,13 @@ workloadImagePull:
 workloadRepositories:
   src/examples/ray_data: registry.invalid/aws/src/examples/ray_data
   src/examples/svelte_web: registry.invalid/aws/src/examples/svelte_web
-workspaceSubmissions:
-  sourceNamespace: team-fixtureteam-workspaces
 rayDashboard:
   enabled: true
-devSecrets:
-  names:
-    # keep-sorted start
-    - slack_bot_token
-    - temporal_cloud_api_key
-    # keep-sorted end
-runtimeSecrets:
-  adapter: aws
-  auth:
-    aws: {region: us-west-2}
 storageProjection:
   enabled: true
   handoff:
     provider: aws
-    recordName: infra/data/s3-gateway/cell-aws-usw2/team-fixtureteam
+    recordName: cell-aws-usw2-s3-team-fixtureteam
     storageContract:
       version: 1
       authorizationPrefixes:
@@ -53,7 +40,7 @@ storageProjection:
         scratch: scratch/fixtureteam/
       gateway: {endpoint: "http://s3-gateway.s3-system.svc"}
       mounts:
-        global: {bucket: global, keyPrefix: home/fixtureteam/aws-usw2/, remote: global}
+        global: {bucket: global, keyPrefix: home/fixtureteam/, remote: global}
         global-meta: {bucket: global, keyPrefix: meta/, remote: global-meta}
         global-scratch: {bucket: global, keyPrefix: scratch/fixtureteam/, remote: global-scratch}
         home: {bucket: aws-usw2, keyPrefix: home/fixtureteam/, remote: home}
@@ -65,7 +52,6 @@ storageProjection:
       auth:
         aws:
           region: us-west-2
-          roleArn: arn:aws:iam::999988887777:role/fixtureteam-s3-record-reader
     externalSecret:
       name: team-s3
       targetSecretName: team-s3

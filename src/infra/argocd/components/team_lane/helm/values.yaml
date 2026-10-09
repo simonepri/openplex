@@ -3,9 +3,6 @@
 repository:
   revision: "0000000000000000000000000000000000000000"
   url: https://example.invalid/fleet-config.git
-clusterRegistry:
-  version: 1
-  clusters: []
 delivery:
   originRepositories:
     src/examples/batch_cron: 000000000000.dkr.ecr.us-west-2.amazonaws.com/src/examples/batch_cron
@@ -99,7 +96,8 @@ team:
       wa: {cpu: "0", memory: "0"}
       be: {cpu: "0", memory: "0"}
   promotion: automatic
-  workspaces: true
+  readers: all
+  submitters: members
   archive: true
 enabledPacks:
   # keep-sorted start

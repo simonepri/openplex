@@ -4,10 +4,10 @@
   "additionalProperties": false,
   "required": [
     "accessAliasDomain",
-    "clusterRegistry",
     "delivery",
     "enabledPacks",
     "projectIndex",
+    "registeredClusters",
     "repository",
     "resourcePacks",
     "team"
@@ -22,11 +22,6 @@
       "type": "string",
       "pattern": "^[0-9]{12}$"
     },
-    "gcpProjectNumber": {
-      "type": "string",
-      "pattern": "^[0-9]+$"
-    },
-    "clusterRegistry": { "$ref": "#/definitions/clusterRegistry" },
     "ecrRegistry": {
       "$ref": "#/definitions/repository"
     },
@@ -44,12 +39,7 @@
           },
           "labels": {
             "type": "object",
-            "additionalProperties": { "type": "string" },
-            "properties": {
-              "buildbuddy.io/enterprise-proxy": { "enum": ["disabled", "enabled"] },
-              "buildbuddy.io/executors": { "enum": ["none", "cpu", "gpu", "all"] },
-              "buildbuddy.io/mode": { "enum": ["cloud", "community"] }
-            }
+            "additionalProperties": { "type": "string" }
           },
           "name": { "$ref": "#/definitions/dnsLabel" },
           "server": { "type": "string", "format": "uri" }
@@ -99,397 +89,6 @@
     }
   },
   "definitions": {
-    "clusterRegistry": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["clusters", "version"],
-      "properties": {
-        "version": { "const": 1 },
-        "clusters": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/clusterRegistryEntry" }
-        }
-      }
-    },
-    "clusterRegistryEntry": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["cloud", "name", "provider", "region", "role", "server"],
-      "properties": {
-        "coderProvisioner": { "$ref": "#/definitions/coderProvisioner" },
-        "workloadImagePull": { "$ref": "#/definitions/workloadImagePull" },
-        "workloadImagePush": { "$ref": "#/definitions/workloadImagePush" },
-        "cellRecord": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "workspaces": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["enabled"],
-              "properties": {
-                "enabled": { "const": true },
-                "resource_envelope": { "$ref": "#/definitions/workspaceResourceEnvelope" }
-              }
-            }
-          }
-        },
-        "cloud": { "enum": ["aws", "eaws", "gcp"] },
-        "delivery": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["deploymentRepositories"],
-          "properties": { "deploymentRepositories": { "$ref": "#/definitions/repositoryMap" } }
-        },
-        "name": { "$ref": "#/definitions/dnsLabel" },
-        "network": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["apiServerCIDRs"],
-          "properties": {
-            "apiServerCIDRs": {
-              "type": "array",
-              "minItems": 1,
-              "uniqueItems": true,
-              "items": { "type": "string", "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32$" }
-            }
-          }
-        },
-        "localRuntime": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["gatewayIPv4", "originRegistry"],
-          "properties": {
-            "gatewayIPv4": { "type": "string", "format": "ipv4" },
-            "originRegistry": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["ipv4", "workloadRoot", "workspaceRepository", "workspaceSource"],
-              "properties": {
-                "ipv4": { "type": "string", "format": "ipv4" },
-                "workloadRoot": { "$ref": "#/definitions/repository" },
-                "workspaceRepository": { "$ref": "#/definitions/repository" },
-                "workspaceSource": { "$ref": "#/definitions/repository" }
-              }
-            }
-          }
-        },
-        "providerConfig": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "gcp": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["projectID"],
-              "properties": { "projectID": { "type": "string", "minLength": 1 } }
-            }
-          }
-        },
-        "provider": { "enum": ["aws", "floci", "gcp"] },
-        "region": { "type": "string", "minLength": 1 },
-        "role": { "enum": ["cell", "ctrl"] },
-        "server": { "type": "string", "minLength": 1 },
-        "storage": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "gateway": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["config"],
-              "properties": { "config": { "type": "object", "minProperties": 1 } }
-            },
-            "teams": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "gatewayIdentities": { "type": "object" },
-                "handoffs": { "type": "object" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "coderProvisioner": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "authentication",
-        "control",
-        "federation",
-        "identity",
-        "incarnation",
-        "kubeconfig",
-        "kubeconfigFile",
-        "schemaVersion"
-      ],
-      "properties": {
-        "schemaVersion": { "const": 1 },
-        "incarnation": { "type": "string", "pattern": "^[0-9a-f]{12}$" },
-        "kubeconfig": {
-          "type": "string",
-          "minLength": 1,
-          "not": { "pattern": "client-key-data|PRIVATE KEY" }
-        },
-        "kubeconfigFile": { "type": "string", "pattern": "^/[^\\s]+$" },
-        "control": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["cluster", "namespace", "serviceAccount", "subject"],
-          "properties": {
-            "cluster": { "type": "string", "minLength": 1 },
-            "namespace": { "type": "string", "minLength": 1 },
-            "serviceAccount": { "type": "string", "minLength": 1 },
-            "subject": { "type": "string", "pattern": "^system:serviceaccount:[^:\\s]+:[^:\\s]+$" }
-          }
-        },
-        "identity": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["kubernetesSubject"],
-          "properties": {
-            "roleArn": {
-              "type": "string",
-              "pattern": "^arn:[^:\\s]+:iam::[0-9]{12}:role/[^\\s]+$"
-            },
-            "serviceAccount": { "type": "string", "minLength": 1 },
-            "clientId": { "type": "string", "minLength": 1 },
-            "principalId": { "type": "string", "minLength": 1 },
-            "tenantId": { "type": "string", "minLength": 1 },
-            "kubernetesSubject": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["apiGroup", "kind", "name"],
-              "properties": {
-                "apiGroup": { "const": "rbac.authorization.k8s.io" },
-                "kind": { "enum": ["Group", "User"] },
-                "name": { "type": "string", "minLength": 1 }
-              }
-            }
-          },
-          "oneOf": [
-            {
-              "required": ["roleArn"],
-              "not": {
-                "anyOf": [
-                  { "required": ["serviceAccount"] },
-                  { "required": ["clientId"] },
-                  { "required": ["principalId"] },
-                  { "required": ["tenantId"] }
-                ]
-              }
-            },
-            {
-              "required": ["serviceAccount"],
-              "not": {
-                "anyOf": [
-                  { "required": ["roleArn"] },
-                  { "required": ["clientId"] },
-                  { "required": ["principalId"] },
-                  { "required": ["tenantId"] }
-                ]
-              }
-            },
-            {
-              "required": ["clientId", "principalId", "tenantId"],
-              "not": { "anyOf": [{ "required": ["roleArn"] }, { "required": ["serviceAccount"] }] }
-            }
-          ]
-        },
-        "federation": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["expirationSeconds", "tokenAudience", "tokenFile"],
-          "properties": {
-            "expirationSeconds": { "const": 3600 },
-            "tokenAudience": { "type": "string", "minLength": 1 },
-            "tokenFile": { "type": "string", "pattern": "^/[^\\s]+$" },
-            "credentialConfiguration": { "type": "string", "minLength": 1 },
-            "credentialFile": { "type": "string", "pattern": "^/[^\\s]+$" }
-          },
-          "oneOf": [
-            {
-              "not": {
-                "anyOf": [
-                  { "required": ["credentialConfiguration"] },
-                  { "required": ["credentialFile"] }
-                ]
-              }
-            },
-            { "required": ["credentialConfiguration", "credentialFile"] }
-          ]
-        },
-        "authentication": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["apiVersion", "args", "command"],
-          "properties": {
-            "apiVersion": { "const": "client.authentication.k8s.io/v1beta1" },
-            "command": { "const": "/opt/coder-provisioner-auth/argocd-k8s-auth" },
-            "args": { "type": "array", "minItems": 1, "items": { "type": "string" } }
-          }
-        }
-      }
-    },
-    "workspaceResourceEnvelope": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "cpu",
-        "cpu_capacity_witness",
-        "gpu_offers",
-        "memory_gib",
-        "storage_gib",
-        "tpu_offers"
-      ],
-      "properties": {
-        "cpu": { "$ref": "#/definitions/workspaceResourceRange" },
-        "cpu_capacity_witness": { "$ref": "#/definitions/workspaceCpuCapacityWitness" },
-        "gpu_offers": {
-          "type": "object",
-          "propertyNames": { "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
-          "additionalProperties": { "$ref": "#/definitions/workspaceGpuOffer" }
-        },
-        "memory_gib": { "$ref": "#/definitions/workspaceResourceRange" },
-        "storage_gib": { "$ref": "#/definitions/workspaceResourceRange" },
-        "tmp_storage_gib": { "type": "integer", "minimum": 1 },
-        "tpu_offers": {
-          "type": "object",
-          "propertyNames": { "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
-          "additionalProperties": { "$ref": "#/definitions/workspaceTpuOffer" }
-        }
-      }
-    },
-    "workspaceResourceRange": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["default", "max", "min"],
-      "properties": {
-        "default": { "type": "integer", "minimum": 1 },
-        "max": { "type": "integer", "minimum": 1 },
-        "min": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "workspaceResourceMaximum": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["cpu", "memory_gib"],
-      "properties": {
-        "cpu": { "type": "integer", "minimum": 1 },
-        "memory_gib": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "workspaceKubernetesReserve": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["cpu_millicores", "memory_mib"],
-      "properties": {
-        "cpu_millicores": { "type": "integer", "minimum": 0 },
-        "memory_mib": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "workspaceCpuCapacityWitness": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["cpu", "instance_type", "kubernetes_reserve", "memory_gib", "source"],
-      "properties": {
-        "cpu": { "type": "integer", "minimum": 1 },
-        "instance_type": { "type": "string", "minLength": 1 },
-        "kubernetes_reserve": { "$ref": "#/definitions/workspaceKubernetesReserve" },
-        "memory_gib": { "type": "integer", "minimum": 1 },
-        "node_labels": {
-          "type": "object",
-          "minProperties": 1,
-          "propertyNames": { "type": "string", "minLength": 1 },
-          "additionalProperties": { "type": "string", "minLength": 1 }
-        },
-        "requirement_key": { "type": "string", "minLength": 1 },
-        "requirement_value": { "type": "string", "minLength": 1 },
-        "source": { "enum": ["fixed_runtime", "node_pool"] }
-      },
-      "allOf": [
-        {
-          "if": { "properties": { "source": { "const": "node_pool" } } },
-          "then": { "required": ["node_labels", "requirement_key", "requirement_value"] },
-          "else": {
-            "not": {
-              "anyOf": [{ "required": ["requirement_key"] }, { "required": ["requirement_value"] }]
-            }
-          }
-        }
-      ]
-    },
-    "workspaceGpuOffer": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["capacity_type", "max_count", "model", "workspace_max"],
-      "properties": {
-        "capacity_type": { "type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
-        "max_count": { "type": "integer", "minimum": 1 },
-        "model": { "type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
-        "workspace_max": { "$ref": "#/definitions/workspaceResourceMaximum" }
-      }
-    },
-    "workspaceTpuOffer": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["capacity_type", "class", "max_count", "workspace_max"],
-      "properties": {
-        "capacity_type": { "type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
-        "class": { "type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
-        "max_count": { "type": "integer", "minimum": 1 },
-        "workspace_max": { "$ref": "#/definitions/workspaceResourceMaximum" }
-      }
-    },
-    "workloadImagePull": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["region", "roles"],
-      "properties": {
-        "region": { "type": "string", "pattern": "^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$" },
-        "roles": {
-          "type": "object",
-          "minProperties": 1,
-          "propertyNames": { "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
-          "additionalProperties": {
-            "type": "string",
-            "pattern": "^arn:[^:\\s]+:iam::[0-9]{12}:role/[^\\s]+$"
-          }
-        }
-      }
-    },
-    "workloadImagePush": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["network", "region", "roles"],
-      "properties": {
-        "network": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["privateHttpsCIDRs", "publicHTTPS"],
-          "properties": {
-            "privateHttpsCIDRs": {
-              "type": "array",
-              "uniqueItems": true,
-              "items": { "type": "string", "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}/32$" }
-            },
-            "publicHTTPS": { "const": true }
-          }
-        },
-        "region": { "type": "string", "pattern": "^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$" },
-        "roles": {
-          "type": "object",
-          "minProperties": 1,
-          "propertyNames": { "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$" },
-          "additionalProperties": {
-            "type": "string",
-            "pattern": "^arn:[^:\\s]+:iam::[0-9]{12}:role/[^\\s]+$"
-          }
-        }
-      }
-    },
     "dnsLabel": {
       "type": "string",
       "minLength": 1,
@@ -760,7 +359,7 @@
           "uniqueItems": true
         },
         "dev_secrets": {
-          "description": "Debug-tier secret names readable by every developer and process in the team's workspaces, including coding agents; never use them as workload or production credentials.",
+          "description": "Debug-tier secret names declared by the team; never use them as workload or production credentials.",
           "type": "array",
           "items": {
             "type": "string",
@@ -792,7 +391,8 @@
           }
         },
         "promotion": { "enum": ["automatic", "manual", "triggered"] },
-        "workspaces": { "type": "boolean" },
+        "readers": { "enum": ["all", "members"] },
+        "submitters": { "enum": ["all", "members"] },
         "archive": { "type": "boolean" },
         "members": {
           "type": "array",

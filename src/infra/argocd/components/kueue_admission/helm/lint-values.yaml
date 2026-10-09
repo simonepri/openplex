@@ -1,4 +1,4 @@
-# Render-enabling values for Bazel's first-party Helm checks. They exercise exact class floors, elastic capacity, and both native accelerator resources.
+# Render-enabling values for Bazel's first-party Helm checks. They exercise exact class floors, elastic capacity, both native accelerator resources, and an accelerator-backed dev queue.
 
 role: cell
 clusterName: cell-gcp-lint
@@ -41,3 +41,6 @@ teams:
         ha: {cpu: "1", memory: 2Gi, nvidia.com/gpu: "1", google.com/tpu: "0"}
         ma: {cpu: "2", memory: 4Gi, nvidia.com/gpu: "0", google.com/tpu: "4"}
         wa: {cpu: "1", memory: 2Gi, nvidia.com/gpu: "1", google.com/tpu: "0"}
+devQueue:
+  enabled: true
+  quota: {cpu: "3", memory: 6Gi, nvidia.com/gpu: "1", google.com/tpu: "4"}

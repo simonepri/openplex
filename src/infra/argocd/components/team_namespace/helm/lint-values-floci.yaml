@@ -1,57 +1,19 @@
-# Exercises Floci lint fixture verifying physical cluster identity stays separate from AWS-backed runtime and AWS storage secret adapters.
+# Exercises Floci lint fixture verifying physical cluster identity stays separate from the AWS storage secret adapter.
 
 mode: cell
-devWorkspaces:
-  buildbuddy: {accessAliasDomain: c.example.invalid}
-  buildbuddyAuth:
-    adapter: aws
-    auth:
-      aws:
-        region: us-east-1
-    recordName: buildbuddy-auth-cell-eaws-lh1
-  cell: cell-eaws-lh1
-  enabled: true
-  localGitCIDR: 172.19.255.21/32
-  originRegistryCIDR: 172.19.255.22/32
-  origin:
-    authMode: floci
-    kubernetesApiCIDRs: [172.19.255.11/32]
-    privateHttpsCIDRs: []
-    provider: floci
-    publicHttps: true
-    region: us-east-1
-    registry: origin-registry:5000/000000000000/us-east-1
-    roleArn: ""
-    tokenAudience: ""
-    tokenFile: ""
-  provisionerSubject: {apiGroup: rbac.authorization.k8s.io, kind: Group, name: 'cluster:coder-provisioners'}
-  recordName: s3-org-workspace-backups
-  secretStoreName: org-workspace-backups-team-examples-workspaces
 team:
   slug: examples
   group: cluster:group:team:examples
-  namespaceSuffix: workspaces
+  namespaceSuffix: workloads
   classes: [ha]
+  submitters: all
 resources:
   - {access: view, apiGroup: "", kind: Service, project: true, resource: services}
 workloadRepositories:
   src/examples/ray_data: localhost:15100/000000000000/us-east-1/src/examples/ray_data
   src/examples/svelte_web: localhost:15100/000000000000/us-east-1/src/examples/svelte_web
-workspaceSubmissions:
-  sourceNamespace: ""
 rayDashboard:
   enabled: true
-devSecrets:
-  names:
-    # keep-sorted start
-    - slack_bot_token
-    - temporal_cloud_api_key
-    # keep-sorted end
-runtimeSecrets:
-  adapter: aws
-  auth:
-    aws:
-      region: us-west-2
 storageProjection:
   enabled: true
   handoff:
@@ -68,7 +30,7 @@ storageProjection:
         scratch: scratch/examples/
       gateway: {endpoint: 'http://s3-gateway.s3-system.svc'}
       mounts:
-        global: {bucket: global, keyPrefix: home/examples/eaws-lh1/, remote: global}
+        global: {bucket: global, keyPrefix: home/examples/, remote: global}
         global-meta: {bucket: global, keyPrefix: meta/, remote: global-meta}
         global-scratch: {bucket: global, keyPrefix: scratch/examples/, remote: global-scratch}
         home: {bucket: eaws-lh1, keyPrefix: home/examples/, remote: home}

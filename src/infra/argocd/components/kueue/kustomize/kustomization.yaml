@@ -7,6 +7,7 @@ resources:
   - namespace.yaml
   - network-policy.yaml
   - priorities.yaml
+  - rbac.yaml
   - scheduling-defaults.yaml
   - team-governance.yaml
   # keep-sorted end

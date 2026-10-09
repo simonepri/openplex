@@ -1,116 +1,79 @@
 # Exercises complete examples-team fixture to lint exact cell selection, the project trust boundary, cluster foundations, and the singular-source workload app.
 
 accessAliasDomain: c.example.invalid
-clusterRegistry:
-  version: 1
-  clusters:
-    - name: cell-eaws-lh1
+registeredClusters:
+  - name: cell-eaws-lh1
+    server: https://cell-eaws-lh1.example.invalid
+    labels:
       cloud: eaws
-      region: lh1
-      server: https://cell-eaws-lh1.example.invalid
-      role: cell
       provider: floci
-      network: {apiServerCIDRs: [172.19.255.11/32]}
-      delivery:
-        deploymentRepositories: {src/examples/batch_cron: 'localhost:15100/000000000000/us-east-1/src/examples/batch_cron', src/examples/ray_data: 'localhost:15100/000000000000/us-east-1/src/examples/ray_data', src/examples/ray_serve: 'localhost:15100/000000000000/us-east-1/src/examples/ray_serve', src/examples/ray_train: 'localhost:15100/000000000000/us-east-1/src/examples/ray_train', src/examples/svelte_web: 'localhost:15100/000000000000/us-east-1/src/examples/svelte_web'}
-      storage:
-        gateway:
-          config: {version: 1, cells: [{name: cell-eaws-lh1, provider: floci, virtualName: eaws-lh1, crossRegionServer: s3-gateway.cell-eaws-lh1.example.invalid}], global: {writerCell: cell-eaws-lh1, replicaCells: [cell-eaws-lh1]}}
-        teams:
-          handoffs:
-            examples: {provider: floci, recordName: s3-team-examples, storageContract: {version: 1, authorizationPrefixes: {global: global/home/examples/, global-meta: global/meta/, global-scratch: global/scratch/examples/, home: home/examples/, meta: meta/, scratch: scratch/examples/}, gateway: {endpoint: 'http://s3-gateway.s3-system.svc'}, mounts: {global: {bucket: global, keyPrefix: home/examples/eaws-lh1/, remote: global}, global-meta: {bucket: global, keyPrefix: meta/, remote: global-meta}, global-scratch: {bucket: global, keyPrefix: scratch/examples/, remote: global-scratch}, home: {bucket: eaws-lh1, keyPrefix: home/examples/, remote: home}, meta: {bucket: eaws-lh1, keyPrefix: meta/, remote: meta}, scratch: {bucket: eaws-lh1, keyPrefix: scratch/examples/, remote: scratch}}}, secretStore: {name: team-s3, serviceAccount: team-s3, auth: {aws: {region: us-east-1}}}, externalSecret: {name: team-s3, targetSecretName: team-s3, remoteProperties: {accessKeyId: access_key_id, secretAccessKey: secret_access_key}}}
-      cellRecord: {workspaces: {enabled: true}}
-    - name: cell-aws-usw2
+      region: lh1
+      role: cell
+    annotations:
+      aws-account-id: "999988887777"
+      bucket-suffix: "999988887777"
+      global-storage-bucket-prefix: ctrl-example-global
+      global-storage-bucket-suffix: "999988887777"
+      global-storage-endpoint: https://example-account.r2.cloudflarestorage.com
+      global-storage-provider: Cloudflare
+      kubernetes-api-cidrs: 172.19.255.11/32
+      registered-cells: cell-eaws-lh1,cell-aws-usw2,cell-gcp-euw4
+      s3-endpoint: http://172.19.0.2:4566
+      storage-endpoint: http://172.19.0.2:4566
+  - name: cell-aws-usw2
+    server: https://cell-aws-usw2.example.invalid
+    labels:
       cloud: aws
-      region: us-west-2
-      server: https://cell-aws-usw2.example.invalid
-      role: cell
       provider: aws
-      coderProvisioner:
-        schemaVersion: 1
-        incarnation: aaaaaaaaaaaa
-        kubeconfig: "apiVersion: v1\nkind: Config\ncurrent-context: cell-aws-usw2\n"
-        kubeconfigFile: /var/run/coder/cell/kubeconfig
-        control: {cluster: ctrl-aws-usw2, namespace: coder, serviceAccount: coder, subject: "system:serviceaccount:coder:coder"}
-        identity:
-          roleArn: arn:aws:iam::999988887777:role/cell-aws-usw2-coder-provisioner
-          kubernetesSubject: {apiGroup: rbac.authorization.k8s.io, kind: Group, name: 'cluster:coder-provisioners'}
-        federation: {expirationSeconds: 3600, tokenAudience: sts.amazonaws.com, tokenFile: /var/run/secrets/coder/aws-federation/cell-aws-usw2/token}
-        authentication: {apiVersion: client.authentication.k8s.io/v1beta1, command: /opt/coder-provisioner-auth/argocd-k8s-auth, args: [aws, --cluster-name, cell-aws-usw2]}
-      workloadImagePush:
-        region: us-west-2
-        network: {publicHTTPS: true, privateHttpsCIDRs: ["10.16.0.10/32", "10.16.64.10/32", "10.16.128.10/32"]}
-        roles: {examples: 'arn:aws:iam::999988887777:role/cell-aws-usw2-examples-workspace-ecr'}
-      network: {apiServerCIDRs: [172.17.0.1/32]}
-      delivery:
-        deploymentRepositories: {src/examples/batch_cron: registry.invalid/aws/src/examples/batch_cron, src/examples/ray_data: registry.invalid/aws/src/examples/ray_data, src/examples/ray_serve: registry.invalid/aws/src/examples/ray_serve, src/examples/ray_train: registry.invalid/aws/src/examples/ray_train, src/examples/svelte_web: registry.invalid/aws/src/examples/svelte_web}
-      storage:
-        gateway:
-          config: {version: 1, cells: [{name: cell-aws-usw2, provider: aws, virtualName: aws-usw2, crossRegionServer: s3-gateway.cell-aws-usw2.example.invalid}], global: {writerCell: cell-aws-usw2, replicaCells: [cell-aws-usw2]}}
-        teams:
-          gatewayIdentities:
-            examples: {roleArn: 'arn:aws:iam::999988887777:role/examples-gateway', serviceAccount: s3-gateway-examples}
-          handoffs:
-            examples: {provider: aws, recordName: s3-team-examples, storageContract: {version: 1, authorizationPrefixes: {global: global/home/examples/, global-meta: global/meta/, global-scratch: global/scratch/examples/, home: home/examples/, meta: meta/, scratch: scratch/examples/}, gateway: {endpoint: 'http://s3-gateway.s3-system.svc'}, mounts: {global: {bucket: global, keyPrefix: home/examples/aws-usw2/, remote: global}, global-meta: {bucket: global, keyPrefix: meta/, remote: global-meta}, global-scratch: {bucket: global, keyPrefix: scratch/examples/, remote: global-scratch}, home: {bucket: aws-usw2, keyPrefix: home/examples/, remote: home}, meta: {bucket: aws-usw2, keyPrefix: meta/, remote: meta}, scratch: {bucket: aws-usw2, keyPrefix: scratch/examples/, remote: scratch}}}, secretStore: {name: team-s3, serviceAccount: team-s3, auth: {aws: {region: us-west-2, roleArn: 'arn:aws:iam::999988887777:role/examples-record-reader'}}}, externalSecret: {name: team-s3, targetSecretName: team-s3, remoteProperties: {accessKeyId: access_key_id, secretAccessKey: secret_access_key}}}
-      cellRecord: {workspaces: {enabled: true}}
-    - name: cell-gcp-euw4
-      cloud: gcp
-      region: europe-west4
-      server: https://cell-gcp-euw4.example.invalid
+      region: us-west-2
       role: cell
+    annotations:
+      global-storage-bucket-prefix: ctrl-example-global
+      global-storage-bucket-suffix: "999988887777"
+      global-storage-endpoint: https://example-account.r2.cloudflarestorage.com
+      global-storage-provider: Cloudflare
+      aws-account-id: "999988887777"
+      aws-region: us-west-2
+      bucket-suffix: "999988887777"
+      ecr-registry: registry.invalid/aws
+      kubernetes-api-cidrs: 172.17.0.1/32
+      registered-cells: cell-eaws-lh1,cell-aws-usw2,cell-gcp-euw4
+      storage-endpoint: s3.us-west-2.amazonaws.com
+  - name: cell-gcp-euw4
+    server: https://cell-gcp-euw4.example.invalid
+    labels:
+      cloud: gcp
       provider: gcp
-      coderProvisioner:
-        schemaVersion: 1
-        incarnation: cccccccccccc
-        kubeconfig: "apiVersion: v1\nkind: Config\ncurrent-context: cell-gcp-euw4\n"
-        kubeconfigFile: /var/run/coder/cell/kubeconfig
-        control: {cluster: ctrl-gcp-euw4, namespace: coder, serviceAccount: coder, subject: "system:serviceaccount:coder:coder"}
-        identity:
-          serviceAccount: coder-provisioner@acme-production.iam.gserviceaccount.com
-          kubernetesSubject: {apiGroup: rbac.authorization.k8s.io, kind: User, name: coder-provisioner@acme-production.iam.gserviceaccount.com}
-        federation:
-          expirationSeconds: 3600
-          tokenAudience: //iam.googleapis.com/projects/000000000000/locations/global/workloadIdentityPools/coder-provisioner/providers/active-ctrl
-          tokenFile: /var/run/secrets/coder/gcp-federation/cell-gcp-euw4/token
-          credentialConfiguration: '{"type":"external_account"}'
-          credentialFile: /var/run/secrets/coder/gcp-federation/cell-gcp-euw4/credential-configuration.json
-        authentication: {apiVersion: client.authentication.k8s.io/v1beta1, command: /opt/coder-provisioner-auth/argocd-k8s-auth, args: [gcp]}
-      workloadImagePull:
-        region: us-west-2
-        roles:
-          examples: arn:aws:iam::999988887777:role/cell-gcp-euw4-examples-ecr-pull
-      workloadImagePush:
-        region: us-west-2
-        network: {publicHTTPS: true, privateHttpsCIDRs: []}
-        roles: {examples: 'arn:aws:iam::999988887777:role/cell-gcp-euw4-examples-workspace-ecr'}
-      network: {apiServerCIDRs: [172.17.16.1/32]}
-      delivery:
-        deploymentRepositories: {src/examples/batch_cron: registry.invalid/gcp/src/examples/batch_cron, src/examples/ray_data: registry.invalid/gcp/src/examples/ray_data, src/examples/ray_serve: registry.invalid/gcp/src/examples/ray_serve, src/examples/ray_train: registry.invalid/gcp/src/examples/ray_train, src/examples/svelte_web: registry.invalid/gcp/src/examples/svelte_web}
-      providerConfig:
-        gcp: {projectID: acme-production}
-      storage:
-        gateway:
-          config: {version: 1, cells: [{name: cell-gcp-euw4, provider: gcp, virtualName: gcp-euw4, crossRegionServer: s3-gateway.cell-gcp-euw4.example.invalid}], global: {writerCell: cell-gcp-euw4, replicaCells: [cell-gcp-euw4]}}
-        teams:
-          gatewayIdentities:
-            examples: {serviceAccount: s3-gateway-examples, serviceAccountEmail: examples-gateway@acme-production.iam.gserviceaccount.com}
-          handoffs:
-            examples: {provider: gcp, recordName: s3-team-examples, storageContract: {version: 1, authorizationPrefixes: {global: global/home/examples/, global-meta: global/meta/, global-scratch: global/scratch/examples/, home: home/examples/, meta: meta/, scratch: scratch/examples/}, gateway: {endpoint: 'http://s3-gateway.s3-system.svc'}, mounts: {global: {bucket: global, keyPrefix: home/examples/gcp-euw4/, remote: global}, global-meta: {bucket: global, keyPrefix: meta/, remote: global-meta}, global-scratch: {bucket: global, keyPrefix: scratch/examples/, remote: global-scratch}, home: {bucket: gcp-euw4, keyPrefix: home/examples/, remote: home}, meta: {bucket: gcp-euw4, keyPrefix: meta/, remote: meta}, scratch: {bucket: gcp-euw4, keyPrefix: scratch/examples/, remote: scratch}}}, secretStore: {name: team-s3, serviceAccount: team-s3, auth: {gcp: {clusterLocation: europe-west4, clusterName: cell-gcp-euw4, projectId: acme-production, serviceAccountEmail: examples-record-reader@acme-production.iam.gserviceaccount.com}}}, externalSecret: {name: team-s3, targetSecretName: team-s3, remoteProperties: {accessKeyId: access_key_id, secretAccessKey: secret_access_key}}}
-      cellRecord: {}
-    - name: ctrl-eaws-lh1
+      region: europe-west4
+      role: cell
+    annotations:
+      global-storage-bucket-prefix: ctrl-example-global
+      global-storage-bucket-suffix: "999988887777"
+      global-storage-endpoint: https://example-account.r2.cloudflarestorage.com
+      global-storage-provider: Cloudflare
+      aws-account-id: "999988887777"
+      bucket-suffix: "999988887777"
+      ecr-registry: registry.invalid/gcp
+      gcp-project-id: acme-production
+      kubernetes-api-cidrs: 172.17.16.1/32
+      registered-cells: cell-eaws-lh1,cell-aws-usw2,cell-gcp-euw4
+      storage-endpoint: storage.googleapis.com
+  - name: ctrl-eaws-lh1
+    server: https://kubernetes.default.svc
+    labels:
       cloud: eaws
-      region: lh1
-      server: https://kubernetes.default.svc
-      role: ctrl
       provider: floci
-      network: {apiServerCIDRs: [172.18.0.1/32]}
-      localRuntime:
-        gatewayIPv4: 172.19.255.20
-        originRegistry:
-          ipv4: 172.19.255.22
-          workloadRoot: origin-registry:5000/000000000000/us-east-1
-          workspaceRepository: origin-registry:5000/000000000000/us-east-1/src/infra/definitions/workspaces/templates/dev
-          workspaceSource: origin-registry:5000/000000000000/us-east-1/src/infra/definitions/workspaces/templates/dev
+      region: lh1
+      role: ctrl
+    annotations:
+      bucket-suffix: "999988887777"
+      global-storage-bucket-prefix: ctrl-example-global
+      global-storage-bucket-suffix: "999988887777"
+      global-storage-endpoint: https://example-account.r2.cloudflarestorage.com
+      global-storage-provider: Cloudflare
+      kubernetes-api-cidrs: 172.18.0.1/32
+      origin-registry-workload-root: origin-registry:5000/000000000000/us-east-1
+      registered-cells: cell-eaws-lh1,cell-aws-usw2,cell-gcp-euw4
 repository:
   revision: "0000000000000000000000000000000000000000"
   url: git://172.19.255.21:9418/fixture-config.git
@@ -191,6 +154,15 @@ projectIndex:
       team: examples
 team:
   slug: examples
+  readers: all
+  submitters: members
+  members:
+    - id: "user-2"
+      email: user2@example.com
+      roles: [dev]
+    - id: "user-1"
+      email: user1@example.com
+      roles: [dev, ops]
   cells:
     matchLabels:
       role: cell

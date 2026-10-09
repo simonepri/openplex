@@ -73,6 +73,25 @@ manifest_checks(
 )
 
 helm_lint_test(
+    name = "helm-lint-dev-queue-disabled",
+    chart = ":chart",
+    opts = ["--strict"],
+    values = ["helm/lint-values-dev-queue-disabled.yaml"],
+)
+
+helm_template(
+    name = "helm_render-dev-queue-disabled",
+    chart = ":chart",
+    values = ["helm/lint-values-dev-queue-disabled.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+manifest_checks(
+    name = "helm-dev-queue-disabled",
+    rendered = ":helm_render-dev-queue-disabled",
+)
+
+helm_lint_test(
     name = "helm-lint",
     chart = ":chart",
     opts = ["--strict"],

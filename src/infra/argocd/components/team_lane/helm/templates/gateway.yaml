@@ -1,7 +1,8 @@
-{{- /* Generates one value-free gateway backend Application per selected cell. */ -}}
+{{- /* Generates team S3 gateway backend Applications per selected cell configuring team routes and identity. */ -}}
 
 {{- include "fleet-team.validate" . -}}
 {{- range $cell := include "fleet-team.selectedCells" (dict "root" .) | fromJsonArray }}
+{{- if and (hasKey $cell "storage") $cell.storage (hasKey $cell.storage "gateway") }}
 {{- $handoff := include "fleet-team.storageHandoff" (dict "root" $ "cell" $cell) | fromJson -}}
 {{- $storageAuthAdapter := include "fleet-team.storageAuthAdapter" $handoff -}}
 {{- $topology := required (printf "cell %q requires storage.gateway.config" $cell.name) $cell.storage.gateway.config -}}
@@ -14,6 +15,11 @@
 {{- end -}}
 {{- $identity = index $identities $.Values.team.slug -}}
 {{- end }}
+{{- $grantMembers := list -}}
+{{- range $member := ($.Values.team.members | default list) -}}
+  {{- $grantMembers = append $grantMembers $member.id -}}
+{{- end -}}
+{{- $grantMembers = sortAlpha $grantMembers -}}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -40,12 +46,19 @@ spec:
     helm:
       valuesObject:
         team: {{ $.Values.team.slug | quote }}
+        readers: {{ $.Values.team.readers | default "all" | quote }}
         provider: {{ required (printf "cell %q requires provider" $cell.name) $cell.provider | quote }}
         # floci-divergence: Floci cells use kubernetes auth adapter for local team gateway backend.
         authAdapter: {{ ternary "kubernetes" $storageAuthAdapter (eq $cell.provider "floci") | quote }}
         targetCell: {{ $cell.name | quote }}
         topology: {{ $topology | toJson }}
         identity: {{ $identity | toJson }}
+        globalStorage: {{ $cell.globalStorage | toJson }}
+        workspaceGrant:
+          members: {{ $grantMembers | toJson }}
+          recordName: {{ $handoff.recordName | quote }}
+          readerRecordName: {{ printf "%s-reader" $handoff.recordName | quote }}
   syncPolicy:
 {{ include "fleet-team.applicationSyncPolicy" $ | nindent 4 }}
+{{ end }}
 {{ end }}

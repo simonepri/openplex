@@ -188,5 +188,19 @@
 {{- fail (printf "google.com/tpu %s floor does not fit an offered TPU class" $class) -}}
 {{- end -}}
 {{- end -}}
+{{- if .Values.devQueue.enabled -}}
+{{- $devGpu := include "kueue-admission.quantityInt" (list (default "0" (index .Values.devQueue.quota "nvidia.com/gpu"))) | int -}}
+{{- $cellGpu := include "kueue-admission.quantityInt" (list (default "0" (index .Values.compute.ceiling "nvidia.com/gpu"))) | int -}}
+{{- if and (gt $devGpu 0) (eq $cellGpu 0) -}}
+{{- fail "devQueue nvidia.com/gpu quota requires non-zero cell GPU capacity" -}}
+{{- end -}}
+{{- $devTpu := include "kueue-admission.quantityInt" (list (default "0" (index .Values.devQueue.quota "google.com/tpu"))) | int -}}
+{{- if and (gt $devTpu 0) (eq (len $fixedPools) 0) -}}
+{{- fail "devQueue google.com/tpu quota requires fixed TPU pools" -}}
+{{- end -}}
+{{- if ne (include "kueue-admission.tpuQuantityFits" (list $devTpu $tpuClasses)) "true" -}}
+{{- fail "devQueue google.com/tpu quota does not fit an offered TPU class" -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
