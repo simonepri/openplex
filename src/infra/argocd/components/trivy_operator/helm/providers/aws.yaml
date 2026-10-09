@@ -1,0 +1,12 @@
+# Configures AWS/EKS provider overrides for the Trivy Operator, adding the CIS
+# Amazon EKS benchmark: EKS manages the control plane, so the generic CIS
+# Kubernetes control-plane checks do not describe what the cluster owner controls.
+
+compliance:
+  # Lists replace rather than merge: this restates the chart's default specs.
+  specs:
+    - k8s-cis-1.23
+    - k8s-nsa-1.0
+    - k8s-pss-baseline-0.1
+    - k8s-pss-restricted-0.1
+    - eks-cis-1.4

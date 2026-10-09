@@ -1,4 +1,6 @@
-# Defines namespace for Trivy Operator and Trivy Server vulnerability scanning, labeled for restricted Pod Security admission.
+# Defines namespace for Trivy Operator and Trivy Server vulnerability scanning. Enforces the privileged Pod Security
+# level only because the operator always runs its node collector here; the trivy-pod-security Kyverno policy
+# restores the restricted level for every other Pod.
 
 apiVersion: v1
 kind: Namespace
@@ -12,7 +14,7 @@ metadata:
     environment: production
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/audit-version: latest
-    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/enforce-version: latest
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/warn-version: latest

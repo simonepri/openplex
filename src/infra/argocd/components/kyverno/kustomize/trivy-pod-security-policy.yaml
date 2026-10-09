@@ -1,0 +1,76 @@
+# Keeps trivy-system at the restricted Pod Security level while its namespace label is privileged, so only the pinned Trivy node collector may use host namespaces and hostPath volumes.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: trivy-pod-security
+  annotations:
+    # keep-sorted start
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/description: >-
+      trivy-system enforces the privileged Pod Security level because the Trivy operator always runs its node collector there and the collector needs hostPID and read-only hostPath mounts. This policy restores the restricted level for every other Pod in the namespace and limits the exemption to the pinned collector image.
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/title: Trivy Pod Security
+    # keep-sorted end
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: trivy-pod-security
+spec:
+  admission: true
+  background: false
+  validationFailureAction: Enforce
+  rules:
+    - name: restricted-for-trivy-workloads
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [trivy-system]
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  app: node-collector
+      validate:
+        podSecurity:
+          level: restricted
+          version: latest
+    - name: restricted-except-host-access-for-node-collector
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [trivy-system]
+              selector:
+                matchLabels:
+                  app: node-collector
+      validate:
+        podSecurity:
+          level: restricted
+          version: latest
+          exclude:
+            - controlName: Host Namespaces
+            - controlName: HostPath Volumes
+            # The restricted level forbids hostPath a second time through its volume type allowlist.
+            - controlName: Volume Types
+    - name: pinned-node-collector-image
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [trivy-system]
+              selector:
+                matchLabels:
+                  app: node-collector
+      validate:
+        message: Only the pinned Trivy node collector image may run with host access in trivy-system.
+        pattern:
+          spec:
+            =(initContainers): []
+            =(ephemeralContainers): []
+            containers:
+              # LINT.IfChange(node-collector-image)
+              - image: ghcr.io/aquasecurity/node-collector:0.3.1@sha256:f4702ce4667388f0219d6248d623a7e816231c2d4561d6af01c3ae053e524025
+            # LINT.ThenChange(//src/infra/argocd/components/trivy_operator/helm/values.yaml:node-collector-image)
