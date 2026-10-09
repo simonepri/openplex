@@ -6,12 +6,13 @@ set -eu
 check_name="${1:-${CHECK_NAME:?check name is required}}"
 test_path="${2:-${TEST_PATH:-/tests}}"
 
-target_url="${KH_REPORTING_URL:-http://kuberhealthy.kuberhealthy.svc.cluster.local:8080/externalCheckStatus}"
+target_url="${KH_REPORTING_URL:-http://kuberhealthy.kuberhealthy.svc.cluster.local:8080/check}"
 case "${target_url}" in
   *://*:*/*) ;;
   http://*/*) target_url="$(echo "${target_url}" | sed 's|http://\([^/]*\)/|http://\1:8080/|')" ;;
   *) ;;
 esac
+target_url="$(echo "${target_url}" | sed 's|/externalCheckStatus$|/check|')"
 
 report_path="/tmp"
 report_name="report.json"

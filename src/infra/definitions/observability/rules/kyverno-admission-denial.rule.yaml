@@ -18,22 +18,21 @@ spec:
   objectTemplate:
     spec:
       alert: Kyverno admission denial spike detected
-      alertType: LOGS_BASED_ALERT
+      alertType: METRIC_BASED_ALERT
       labels: {severity: warning}
       condition:
         compositeQuery:
           panelType: graph
           queries:
-            - type: builder_query
+            - type: promql
               spec:
                 name: A
-                aggregations:
-                  - expression: "count()"
-                filter:
-                  expression: "(k8s_container_name = 'kyverno' OR k8s_namespace_name = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%' OR body LIKE '%fail (blocked)%')"
-                signal: logs
-                stepInterval: 1m
-          queryType: builder
+                query: >-
+                  sum by (policy_name, rule_name) (increase(kyverno_policy_results_total{rule_result="fail",policy_validation_mode="enforce"}[5m]))
+                disabled: false
+                step: 60
+                legend: "{{policy_name}} / {{rule_name}}"
+          queryType: promql
         selectedQueryName: A
         thresholds:
           kind: basic

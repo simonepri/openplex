@@ -242,6 +242,7 @@ spec:
                 value:
                   # keep-sorted start
                   - 602401143452.dkr.ecr.us-west-2.amazonaws.com
+                  - buildbuddy.bbcr.io
                   - docker.io
                   - gcr.io
                   - ghcr.io
@@ -280,6 +281,15 @@ spec:
                   app.kubernetes.io/instance: parca-agent
                   app.kubernetes.io/name: parca-agent
                   # LINT.ThenChange(//src/infra/argocd/components/parca_agent/kustomize/agent/daemonset.yaml:parca-agent-privilege-exception)
+          # LINT.IfChange(obi-privilege-exception)
+          - resources:
+              namespaces: [obi-system]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/component: workload
+                  app.kubernetes.io/instance: obi
+                  app.kubernetes.io/name: obi
+                  # LINT.ThenChange(//src/infra/argocd/components/obi/helm/values.yaml:obi-privilege-exception)
           - resources:
               namespaces: [dragonfly-system]
               selector: &dragonfly-node-client-privilege-selector
@@ -318,6 +328,17 @@ spec:
                   app.kubernetes.io/component: health-monitor
                   app.kubernetes.io/instance: node-problem-detector
                   app.kubernetes.io/name: node-problem-detector
+          # Reviewed in buildbuddy-pod-security ClusterPolicy (src/infra/argocd/components/kyverno/kustomize/buildbuddy-pod-security-policy.yaml)
+          - resources:
+              namespaces: [buildbuddy]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: buildbuddy-executor
+          - resources:
+              namespaces: [trivy-system]
+              selector:
+                matchLabels:
+                  app: node-collector
       validate:
         message: Privileged workloads require a dedicated, reviewed exception policy.
         foreach:
@@ -386,13 +407,15 @@ spec:
               - key: '{{ request.object.spec.containers[0].name }}'
                 operator: NotEquals
                 value: client
+              # LINT.IfChange(dragonfly-client-digests)
               - key: '{{ request.object.spec.containers[0].image }}'
                 operator: AnyNotIn
                 value:
                   - >-
-                    localhost:15100/000000000000/us-east-1/dragonfly-client@sha256:4735fb59bea73e194974ca2fbc302aeffddbbbbe98003b1ecf08e8312a5f2a46
+                    localhost:15100/000000000000/us-east-1/src/third_party/dragonflyoss/client@sha256:ecb877a7e658c7d76b1318b4266ecb1f2e264f8c5bcb44ffa7045b87a887a856
                   - >-
-                    docker.io/dragonflyoss/client@sha256:4735fb59bea73e194974ca2fbc302aeffddbbbbe98003b1ecf08e8312a5f2a46
+                    docker.io/dragonflyoss/client@sha256:2fe93d00d81deb4d5c97337e195301ed6c1749736554a7a6b2c26e91c3eee717
+              # LINT.ThenChange(//src/infra/argocd/components/dragonfly_peer/helm/values.yaml:dragonfly-seed-client-digest,//src/infra/argocd/components/dragonfly_peer/helm/values.yaml:dragonfly-client-digest,//src/infra/argocd/components/dragonfly_peer/helm/client-image.yaml:dragonfly-client-digest)
               - key: '{{ request.object.spec.containers[0].imagePullPolicy }}'
                 operator: NotEquals
                 value: IfNotPresent

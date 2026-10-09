@@ -21,6 +21,12 @@ deployNodeAgent: true
 nodeAgent:
   # Node agents run on every node, including small Karpenter nodes packed before the DaemonSet pod arrives.
   priorityClassName: node-agents
+  podSecurityContext:
+    runAsUser: 0
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: 50m

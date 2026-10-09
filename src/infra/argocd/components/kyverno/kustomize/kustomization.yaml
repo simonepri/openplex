@@ -5,6 +5,7 @@ kind: Kustomization
 resources:
   # keep-sorted start
   - acme-domain-policy.yaml
+  - buildbuddy-pod-security-policy.yaml
   - dev-secrets-policy.yaml
   - ecr-pull-policy.yaml
   - env-secrets-policy.yaml
@@ -15,9 +16,11 @@ resources:
   - service-account-token-policy.yaml
   - team-ephemeral-container-policy.yaml
   - team-pod-security-policy.yaml
+  - trivy-pod-security-policy.yaml
   - vpa-rbac.yaml
   - workload-run-identity-policy.yaml
   - workload-vpa-policy.yaml
+  - workspace-s3-grant-policy.yaml
   # keep-sorted end
 
 patches:

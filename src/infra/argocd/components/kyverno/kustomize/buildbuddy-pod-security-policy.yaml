@@ -1,0 +1,93 @@
+# Keeps buildbuddy at the restricted Pod Security level while its namespace label is privileged, so only BuildBuddy executors may run privileged containers and mount CDI device paths.
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: buildbuddy-pod-security
+  annotations:
+    # keep-sorted start
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/description: >-
+      buildbuddy enforces the privileged Pod Security level because BuildBuddy remote build executors require privileged container execution for OCI build actions and hostPath access for NVIDIA CDI device specs. This policy restores the restricted level for every other Pod in the namespace and limits executor exemptions to necessary privileges and allowed CDI hostPath directories.
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/title: BuildBuddy Pod Security
+    # keep-sorted end
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/name: buildbuddy-pod-security
+spec:
+  admission: true
+  background: false
+  validationFailureAction: Enforce
+  rules:
+    - name: restricted-for-buildbuddy-workloads
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [buildbuddy]
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: buildbuddy-executor
+      validate:
+        podSecurity:
+          level: restricted
+          version: latest
+    - name: restricted-except-executor-privileges
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [buildbuddy]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: buildbuddy-executor
+      validate:
+        podSecurity:
+          level: restricted
+          version: latest
+          exclude:
+            # keep-sorted start
+            - controlName: Capabilities
+              images:
+                - buildbuddy.bbcr.io/public/buildbuddy-executor-enterprise*
+            - controlName: HostPath Volumes
+            - controlName: Privilege Escalation
+              images:
+                - buildbuddy.bbcr.io/public/buildbuddy-executor-enterprise*
+            - controlName: Privileged Containers
+              images:
+                - buildbuddy.bbcr.io/public/buildbuddy-executor-enterprise*
+            - controlName: Running as Non-root
+              images:
+                - buildbuddy.bbcr.io/public/buildbuddy-executor-enterprise*
+            - controlName: Seccomp
+              images:
+                - buildbuddy.bbcr.io/public/buildbuddy-executor-enterprise*
+            - controlName: Volume Types
+              # keep-sorted end
+    - name: allowed-executor-hostpath-volumes
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [buildbuddy]
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: buildbuddy-executor
+      validate:
+        message: BuildBuddy executors may only mount hostPath volumes for /etc/cdi and /var/run/cdi.
+        foreach:
+          - list: request.object.spec.volumes[?hostPath]
+            deny:
+              conditions:
+                all:
+                  - key: "{{ element.hostPath.path }}"
+                    operator: AnyNotIn
+                    value:
+                      - /etc/cdi
+                      - /var/run/cdi

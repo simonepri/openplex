@@ -1,4 +1,4 @@
-# Keeps native restricted audit and warning on team namespaces while Kyverno enforces restricted pod security and the non-root user-namespace rule.
+# Keeps native restricted audit and warning on team and workspace namespaces while Kyverno enforces restricted pod security and the non-root user-namespace rule.
 
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
@@ -16,21 +16,32 @@ spec:
         resources: [namespaces]
   variables:
     # LINT.IfChange(team-lane-identity-label)
-    - name: isTeamNamespace
+    - name: teamLaneIdentity
+      expression: "'team-lane'"
+    # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/policies.yaml:team-lane-identity-label,//src/infra/argocd/components/team_namespace/helm/templates/_helpers.tpl:team-lane-identity-label)
+    # LINT.IfChange(coder-workspaces-identity-label)
+    - name: coderWorkspacesIdentity
+      expression: "'coder-workspaces'"
+    # LINT.ThenChange(//src/infra/argocd/components/coder_workspaces/helm/templates/_helpers.tpl:coder-workspaces-identity-label)
+    - name: governedIdentities
+      expression: "[variables.teamLaneIdentity, variables.coderWorkspacesIdentity]"
+    # An UPDATE keeps the identity the namespace already had, so a governed namespace cannot drop or swap its label.
+    - name: requiredIdentity
       expression: >-
-        (has(object.metadata.labels) &&
-          'app.kubernetes.io/part-of' in object.metadata.labels &&
-          object.metadata.labels['app.kubernetes.io/part-of'] == 'team-lane') ||
-        (request.operation == 'UPDATE' && has(oldObject.metadata.labels) &&
-          'app.kubernetes.io/part-of' in oldObject.metadata.labels &&
-          oldObject.metadata.labels['app.kubernetes.io/part-of'] == 'team-lane')
-      # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/policies.yaml:team-lane-identity-label,//src/infra/argocd/components/team_namespace/helm/templates/_helpers.tpl:team-lane-identity-label)
+        request.operation == 'UPDATE' &&
+          oldObject.?metadata.labels['app.kubernetes.io/part-of'].orValue('') in
+            variables.governedIdentities
+          ? oldObject.metadata.labels['app.kubernetes.io/part-of']
+          : (object.?metadata.labels['app.kubernetes.io/part-of'].orValue('') in
+              variables.governedIdentities
+            ? object.metadata.labels['app.kubernetes.io/part-of']
+            : '')
   # LINT.IfChange(team-pod-security-profile)
   validations:
     - expression: >-
-        !variables.isTeamNamespace || (has(object.metadata.labels) &&
+        variables.requiredIdentity == '' || (has(object.metadata.labels) &&
           'app.kubernetes.io/part-of' in object.metadata.labels &&
-          object.metadata.labels['app.kubernetes.io/part-of'] == 'team-lane' &&
+          object.metadata.labels['app.kubernetes.io/part-of'] == variables.requiredIdentity &&
           'kueue.x-k8s.io/managed' in object.metadata.labels &&
           object.metadata.labels['kueue.x-k8s.io/managed'] == 'true' &&
           object.metadata.labels['pod-security.kubernetes.io/audit'] == 'restricted' &&
@@ -39,8 +50,8 @@ spec:
           object.metadata.labels['pod-security.kubernetes.io/warn-version'] == 'latest' &&
           !('pod-security.kubernetes.io/enforce' in object.metadata.labels) &&
           !('pod-security.kubernetes.io/enforce-version' in object.metadata.labels))
-      message: Team namespaces must retain native restricted audit and warning while Kyverno owns enforcement.
-      # LINT.ThenChange(//src/infra/argocd/components/team_namespace/helm/templates/lane.yaml:team-pod-security-profile)
+      message: Team and workspace namespaces must retain native restricted audit and warning while Kyverno owns enforcement.
+      # LINT.ThenChange(//src/infra/argocd/components/team_namespace/helm/templates/lane.yaml:team-pod-security-profile,//src/infra/argocd/components/coder_workspaces/helm/templates/namespace.yaml:team-pod-security-profile)
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -109,7 +120,8 @@ spec:
   validationActions: [Deny]
   matchResources:
     namespaceSelector:
-      matchLabels: {app.kubernetes.io/part-of: team-lane}
+      matchExpressions:
+        - {key: app.kubernetes.io/part-of, operator: In, values: [coder-workspaces, team-lane]}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
@@ -184,7 +196,8 @@ spec:
   validationActions: [Deny]
   matchResources:
     namespaceSelector:
-      matchLabels: {app.kubernetes.io/part-of: team-lane}
+      matchExpressions:
+        - {key: app.kubernetes.io/part-of, operator: In, values: [coder-workspaces, team-lane]}
 ---
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy

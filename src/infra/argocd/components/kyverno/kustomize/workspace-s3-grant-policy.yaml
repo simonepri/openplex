@@ -1,0 +1,229 @@
+# Enforces admission rules for team-scoped workspace S3 credentials, grant ConfigMaps, and volume bindings.
+
+# LINT.IfChange(workspace-s3-credential-contract)
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: workspace-s3-credentials
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  evaluation:
+    background:
+      enabled: true
+  validationActions:
+    - Deny
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [external-secrets.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [externalsecrets]
+    namespaceSelector:
+      matchExpressions:
+        - key: app.kubernetes.io/part-of
+          operator: In
+          values: [coder-workspaces]
+  matchConditions:
+    - name: is-coder-s3-externalsecret
+      expression: >-
+        object.metadata.name.matches('^coder-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-s3$')
+  variables:
+    - name: grants
+      expression: >-
+        dyn(resource.List("v1", "configmaps", object.metadata.namespace).items).filter(cm,
+          cm.?metadata.labels['app.kubernetes.io/component'].orValue('') == 'workspace-s3-grant')
+    - name: uid
+      expression: >-
+        object.?metadata.labels['com.coder.user.id'].orValue('')
+  validations:
+    - expression: >-
+        has(object.metadata.labels) && 'com.coder.workspace.id' in object.metadata.labels && object.metadata.labels['com.coder.workspace.id'] != '' && object.metadata.name == 'coder-' + object.metadata.labels['com.coder.workspace.id'] + '-s3' && 'com.coder.user.id' in object.metadata.labels && object.metadata.labels['com.coder.user.id'] != '' && 'app.kubernetes.io/component' in object.metadata.labels && object.metadata.labels['app.kubernetes.io/component'] == 'workspace-s3-credentials'
+      message: >-
+        Workspace S3 ExternalSecret name must match coder-<com.coder.workspace.id>-s3 and declare required workspace, user, and component labels.
+    - expression: >-
+        has(object.spec.refreshInterval) && object.spec.refreshInterval == '1h' && has(object.spec.secretStoreRef) && object.spec.secretStoreRef.kind == 'ClusterSecretStore' && object.spec.secretStoreRef.name == 'workspace-s3-workspaces'
+      message: >-
+        Workspace S3 ExternalSecret must specify refreshInterval 1h and secretStoreRef ClusterSecretStore/workspace-s3-workspaces.
+    - expression: >-
+        has(object.spec.target) && object.spec.target.name == object.metadata.name && object.spec.target.creationPolicy == 'Owner' && object.spec.target.deletionPolicy == 'Retain' && has(object.spec.target.template) && object.spec.target.template.engineVersion == 'v2' && has(object.spec.target.template.data) && size(object.spec.target.template.data) == 2 && 'credentials' in object.spec.target.template.data && 'configData' in object.spec.target.template.data
+      message: >-
+        Workspace S3 ExternalSecret target must match metadata.name with Owner creation, Retain deletion, engineVersion v2, and template.data keys exactly {credentials, configData}.
+    - expression: >-
+        !has(object.spec.dataFrom)
+      message: >-
+        Workspace S3 ExternalSecret must not specify dataFrom.
+    - expression: >-
+        has(object.spec.data) && object.spec.data.all(entry,
+          has(entry.secretKey) &&
+          entry.secretKey.matches('^(legacy|team_[a-z][a-z0-9]{1,30}(_reader)?)_(access_key_id|secret_access_key)$') &&
+          has(entry.remoteRef) &&
+          has(entry.remoteRef.property) &&
+          ((entry.secretKey.endsWith('_access_key_id') && entry.remoteRef.property == 'access_key_id') ||
+           (entry.secretKey.endsWith('_secret_access_key') && entry.remoteRef.property == 'secret_access_key')))
+      message: >-
+        Workspace S3 ExternalSecret data keys must match ^(legacy|team_[a-z][a-z0-9]{1,30})_(access_key_id|secret_access_key)$ with matching remoteRef property.
+    - expression: >-
+        !has(object.spec.data) || object.spec.data.all(entry,
+          !entry.secretKey.startsWith('legacy_') ||
+          (has(entry.remoteRef) && has(entry.remoteRef.key) &&
+            variables.grants.exists(g,
+              g.?data['grant'].orValue('') == 'legacy' &&
+              entry.remoteRef.key == g.?data['recordName'].orValue(''))))
+      message: >-
+        Legacy secret keys must reference the recordName of the active legacy workspace-s3-grant.
+    - expression: >-
+        !has(object.spec.data) || object.spec.data.all(entry,
+          !entry.secretKey.startsWith('team_') ||
+          (has(entry.remoteRef) && has(entry.remoteRef.key) && entry.remoteRef.key.endsWith('-reader')) ||
+          (has(entry.remoteRef) && has(entry.remoteRef.key) &&
+            variables.grants.exists(g,
+              g.?data['grant'].orValue('') == 'team' &&
+              g.metadata.name == 'workspace-s3-grant-team-' + g.?data['team'].orValue('') &&
+              entry.secretKey.startsWith('team_' + g.?data['team'].orValue('') + '_') &&
+              entry.remoteRef.key == g.?data['recordName'].orValue('') &&
+              (',' + g.?data['members'].orValue('') + ',').contains(',' + variables.uid + ','))))
+      message: >-
+        Team secret keys must reference the recordName of the matching team grant and require the user to be a member.
+    - expression: >-
+        !has(object.spec.data) || object.spec.data.all(entry,
+          !entry.secretKey.startsWith('team_') ||
+          !(has(entry.remoteRef) && has(entry.remoteRef.key) && entry.remoteRef.key.endsWith('-reader')) ||
+          (has(entry.remoteRef) && has(entry.remoteRef.key) &&
+            variables.grants.exists(g,
+              (g.metadata.name == 'workspace-s3-read-grant-team-' + g.?data['team'].orValue('') ||
+               g.?data['grant'].orValue('') in ['team-reader', 'reader']) &&
+              entry.secretKey.startsWith('team_' + g.?data['team'].orValue('') + '_') &&
+              entry.remoteRef.key == g.?data['recordName'].orValue('') &&
+              (g.?data['readers'].orValue('') == 'all' ||
+               g.?data['allOwners'].orValue('') == 'true' ||
+               g.?data['all_owners'].orValue('') == 'true' ||
+               g.?data['all-owners'].orValue('') == 'true' ||
+               g.?data['members'].orValue('') in ['*', 'all', 'all-owners']))))
+      message: >-
+        Team reader secret keys may only reference reader records when a read grant with the all-owners marker exists for that team.
+# LINT.ThenChange(//src/infra/definitions/workspaces/templates/dev/s3_access.tf:workspace-s3-credential-contract,//src/infra/definitions/workspaces/templates/dev/deployment.tf:workspace-s3-credential-contract)
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: workspace-s3-grant-integrity
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [configmaps]
+  validations:
+    - expression: >-
+        (!((object != null && object.?metadata.labels['app.kubernetes.io/component'].orValue('') == 'workspace-s3-grant') ||
+           (oldObject != null && oldObject.?metadata.labels['app.kubernetes.io/component'].orValue('') == 'workspace-s3-grant'))) ||
+        request.userInfo.username in
+          ['system:serviceaccount:kube-system:argocd-manager', 'system:serviceaccount:kube-system:namespace-controller']
+      message: >-
+        Workspace S3 grant ConfigMaps may only be created, modified, or deleted by Argo CD or namespace-controller.
+    # LINT.IfChange(workspace-s3-grant-contract)
+    - expression: >-
+        object == null || object.?metadata.labels['app.kubernetes.io/component'].orValue('') != 'workspace-s3-grant' || (object.?metadata.labels['app.kubernetes.io/part-of'].orValue('') == 'coder-workspaces' &&
+         object.?metadata.labels['app.kubernetes.io/managed-by'].orValue('') == 'argocd' &&
+         has(object.data) &&
+         'grant' in object.data &&
+         ((object.data.grant == 'legacy' &&
+           object.metadata.name == 'workspace-s3-grant-legacy' &&
+           has(object.data.recordName) && object.data.recordName != '') ||
+          (object.data.grant == 'team' &&
+           has(object.data.team) && object.data.team != '' &&
+           object.metadata.name == 'workspace-s3-grant-team-' + object.data.team &&
+           has(object.data.recordName) && object.data.recordName != '' &&
+           has(object.data.members) &&
+           has(object.data.globalStorage)) ||
+          (object.data.grant in ['team', 'team-reader', 'reader'] &&
+           has(object.data.team) && object.data.team != '' &&
+           object.metadata.name == 'workspace-s3-read-grant-team-' + object.data.team &&
+           has(object.data.recordName) && object.data.recordName != '' &&
+           has(object.data.globalStorage) &&
+           (object.?data['readers'].orValue('') == 'all' ||
+            object.?data['allOwners'].orValue('') == 'true' ||
+            object.?data['all_owners'].orValue('') == 'true' ||
+            object.?data['all-owners'].orValue('') == 'true' ||
+            object.?data['members'].orValue('') in ['*', 'all', 'all-owners']))))
+      message: >-
+        Workspace S3 grant ConfigMaps must satisfy the team, team-reader, or legacy grant contract.
+      # LINT.ThenChange(//src/infra/argocd/components/s3_gateway_team/helm/templates/workspace-grant.yaml:workspace-s3-grant-contract,//src/infra/argocd/components/coder_workspaces/helm/templates/workspace-s3-grant-legacy.yaml:workspace-s3-grant-contract,//src/infra/definitions/workspaces/templates/dev/s3_access.tf:workspace-s3-grant-contract)
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: workspace-s3-grant-integrity
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: workspace-s3-grant-integrity
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: app.kubernetes.io/part-of
+          operator: In
+          values: [coder-workspaces]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: workspace-s3-secret-binding
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+      - apiGroups: [apps]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [deployments]
+  variables:
+    - name: labels
+      expression: >-
+        object.kind == 'Pod' ? object.metadata.?labels.orValue({}) : (object.kind == 'Deployment' ? object.spec.template.metadata.?labels.orValue({}) : {})
+    - name: volumes
+      expression: >-
+        object.kind == 'Pod' ? object.spec.?volumes.orValue([]) : (object.kind == 'Deployment' ? object.spec.template.spec.?volumes.orValue([]) : [])
+    - name: workspace_id
+      expression: >-
+        variables.labels[?'com.coder.workspace.id'].orValue('')
+  validations:
+    - expression: >-
+        variables.volumes.all(v,
+          (!has(v.secret) || !has(v.secret.secretName) ||
+            !v.secret.secretName.matches('^coder-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-s3$') ||
+            (variables.workspace_id != '' && v.secret.secretName == 'coder-' + variables.workspace_id + '-s3')) &&
+          (!has(v.csi) || !has(v.csi.nodePublishSecretRef) || !has(v.csi.nodePublishSecretRef.name) ||
+            !v.csi.nodePublishSecretRef.name.matches('^coder-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-s3$') ||
+            (variables.workspace_id != '' && v.csi.nodePublishSecretRef.name == 'coder-' + variables.workspace_id + '-s3')))
+      message: >-
+        Workspace S3 secrets may only be mounted by the matching Coder workspace Pod or Deployment.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: workspace-s3-secret-binding
+  labels:
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: workspace-s3-secret-binding
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: app.kubernetes.io/part-of
+          operator: In
+          values: [coder-workspaces]

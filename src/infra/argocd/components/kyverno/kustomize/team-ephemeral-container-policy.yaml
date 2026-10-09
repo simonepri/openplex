@@ -1,4 +1,4 @@
-# Denies ephemeral containers in every team namespace; the team-lane chart stamps the team label consumed by this policy binding.
+# Denies ephemeral containers in team and workspace namespaces.
 
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
@@ -34,4 +34,5 @@ spec:
   validationActions: [Deny]
   matchResources:
     namespaceSelector:
-      matchLabels: {app.kubernetes.io/part-of: team-lane}
+      matchExpressions:
+        - {key: app.kubernetes.io/part-of, operator: In, values: [coder-workspaces, team-lane]}

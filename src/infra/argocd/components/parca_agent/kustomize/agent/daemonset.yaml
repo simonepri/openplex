@@ -44,7 +44,7 @@ spec:
     metadata:
       annotations:
         # yamllint disable-line rule:line-length
-        checksum/config: 1bff2a54f0861b5991bb6ec61f85e24c68813669366fd2c9a52a81a5e7f5a247
+        checksum/config: 38d257966e70134659c1798a34cacf0e34debf5321570911fbf000f56fdcf244
         signoz.io/path: /metrics
         signoz.io/port: "7071"
         signoz.io/scrape: "true"

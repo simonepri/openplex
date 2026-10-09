@@ -4,11 +4,11 @@
   path: /spec/rules/1/name
   value: require-trusted-registries-for-workload-images
 - op: test
-  path: /spec/rules/1/validate/deny/conditions/any/0/value/3
+  path: /spec/rules/1/validate/deny/conditions/any/0/value/4
   value: ghcr.io
 - op: test
-  path: /spec/rules/1/validate/deny/conditions/any/0/value/4
+  path: /spec/rules/1/validate/deny/conditions/any/0/value/5
   value: nvcr.io
 - op: add
-  path: /spec/rules/1/validate/deny/conditions/any/0/value/4
+  path: /spec/rules/1/validate/deny/conditions/any/0/value/5
   value: localhost:15100

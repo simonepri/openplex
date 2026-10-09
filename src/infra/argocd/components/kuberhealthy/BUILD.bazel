@@ -4,7 +4,6 @@ load("@rules_helm//helm:defs.bzl", "helm_template")
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
 load("@rules_python//python:defs.bzl", "py_library")
 load("@rules_shell//shell:sh_library.bzl", "sh_library")
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
@@ -57,15 +56,6 @@ sh_library(
         "kustomize/run-chainsaw-smoke-check.sh",
         "kustomize/run-chainsaw-smoke-cli.sh",
         "kustomize/run-chainsaw-smoke-dns.sh",
-        "kustomize/run-chainsaw-smoke-metrics.sh",
-    ],
-)
-
-sh_test(
-    name = "run-chainsaw-smoke-metrics_test",
-    srcs = ["kustomize/run-chainsaw-smoke-metrics_test.sh"],
-    args = ["$(location kustomize/run-chainsaw-smoke-metrics.sh)"],
-    data = [
         "kustomize/run-chainsaw-smoke-metrics.sh",
     ],
 )

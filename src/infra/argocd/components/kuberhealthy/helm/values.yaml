@@ -2,7 +2,7 @@
 
 fullnameOverride: kuberhealthy
 
-imageURL: docker.io/kuberhealthy/kuberhealthy:v2.7.1@sha256:3915fb0be76e244d2885851d55d7a8316134b944daf8b4cc85d32a3433facd43
+imageURL: docker.io/kuberhealthy/kuberhealthy:v3.0.17@sha256:4e55bbc72ab252115dec1f596d2441de3eabe565fb540c075e6a8b1a68674fa2
 
 resources:
   requests:
@@ -18,7 +18,7 @@ deployment:
   podAnnotations:
     automount-service-account-token: "true"
   env:
-    KH_EXTERNAL_REPORTING_URL: "http://kuberhealthy.kuberhealthy.svc.cluster.local:8080/externalCheckStatus"
+    KH_CHECK_REPORT_URL: "http://kuberhealthy.kuberhealthy.svc.cluster.local:8080"
 
 serviceAccount:
   annotations:
@@ -31,6 +31,9 @@ securityContext:
   fsGroup: 999
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
   seccompProfile:
     type: RuntimeDefault
 
@@ -40,14 +43,3 @@ podDisruptionBudget:
 service:
   externalPort: 8080
   type: ClusterIP
-
-# Disable default upstream checks: synthetic suites run via declarative Chainsaw KuberhealthyChecks
-check:
-  daemonset:
-    enabled: false
-  deployment:
-    enabled: false
-  dnsInternal:
-    enabled: false
-  dnsExternal:
-    enabled: false

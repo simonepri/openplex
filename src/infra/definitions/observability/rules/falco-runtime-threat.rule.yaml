@@ -30,7 +30,7 @@ spec:
                 aggregations:
                   - expression: "count()"
                 filter:
-                  expression: "k8s_container_name = 'falco' AND priority IN ('Critical', 'Emergency', 'Alert', 'Error')"
+                  expression: "k8s.container.name = 'falco' AND priority IN ('Critical', 'Emergency', 'Alert', 'Error')"
                 signal: logs
                 stepInterval: 1m
           queryType: builder

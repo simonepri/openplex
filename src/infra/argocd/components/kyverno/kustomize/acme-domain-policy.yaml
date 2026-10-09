@@ -37,13 +37,6 @@ spec:
                 - CREATE
                 - UPDATE
                 # keep-sorted end
-      exclude:
-        any:
-          - resources:
-              namespaces:
-                # keep-sorted start
-                - envoy-gateway-system
-                # keep-sorted end
       validate:
         message: >-
           Internal hostnames must not be requested from public ACME to protect Certificate Transparency privacy. Use cluster-local-ca instead.
@@ -73,13 +66,6 @@ spec:
                 # keep-sorted start
                 - CREATE
                 - UPDATE
-                # keep-sorted end
-      exclude:
-        any:
-          - resources:
-              namespaces:
-                # keep-sorted start
-                - envoy-gateway-system
                 # keep-sorted end
       validate:
         message: >-

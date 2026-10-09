@@ -5,6 +5,8 @@ kind: HTTPRoute
 metadata:
   name: velero-ui
   namespace: envoy-gateway-system
+  labels:
+    app.kubernetes.io/component: external-dns-source
 spec:
   parentRefs:
     - group: gateway.networking.k8s.io

@@ -1,4 +1,4 @@
-# Binds user-started workload names and labels to the exact Coder Pod whose pod-bound ServiceAccount token submitted them; Kyverno enforces the contract.
+# Binds user-started workload names and labels to the requesting user identity; Kyverno enforces the canonical naming contract.
 
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
@@ -25,89 +25,43 @@ spec:
                   app.kubernetes.io/part-of: team-lane
               operations: [CREATE]
             subjects:
-              - kind: ServiceAccount
-                name: coder-workspace
-                namespace: '*'
-      context: &callerPodContext
-        - name: callerPodName
+              - kind: User
+                name: 'cluster:user:*'
+      context: &workloadUserContext
+        - name: requestUser
           variable:
             jmesPath: >-
-              request.userInfo.extra."authentication.kubernetes.io/pod-name"[0] || ''
+              (request.userInfo.username || '') | regex_replace_all('^cluster:user:', @, '') | split(@, '@')[0] | regex_replace_all('[^a-z0-9]', @, '') | truncate(@, `15`)
             default: ''
-        - name: callerPodUID
-          variable:
-            jmesPath: >-
-              request.userInfo.extra."authentication.kubernetes.io/pod-uid"[0] || ''
-            default: ''
-        - name: callerPodNamespace
-          variable:
-            jmesPath: >-
-              split(request.userInfo.username, ':')[2] || ''
-            default: ''
-        - name: workloadNamespaceTeam
-          apiCall:
-            method: GET
-            urlPath: /api/v1/namespaces/{{ request.namespace }}
-            jmesPath: metadata.labels.team || ''
-        - name: callerPod
-          apiCall:
-            method: GET
-            urlPath: /api/v1/namespaces/{{ callerPodNamespace }}/pods/{{ callerPodName }}
-            jmesPath: >-
-              {namespace: metadata.namespace, uid: metadata.uid, serviceAccountName: spec.serviceAccountName, user: metadata.labels."com.coder.user.username" | regex_replace_all('[^a-z0-9]', @, '') | truncate(@, `15`)}
       preconditions:
         all:
-          - key: '{{ callerPod.uid }}'
-            operator: Equals
-            value: '{{ callerPodUID }}'
-          - key: '{{ callerPod.namespace }}'
-            operator: Equals
-            value: '{{ callerPodNamespace }}'
-          - key: '{{ callerPodNamespace }}'
-            operator: Equals
-            value: 'team-{{ workloadNamespaceTeam }}-workspaces'
-          - key: '{{ callerPod.serviceAccountName }}'
-            operator: Equals
-            value: coder-workspace
           - key: >-
-              {{ regex_match('^[a-z0-9]{1,15}$', callerPod.user) }}
+              {{ regex_match('^[a-z0-9]{1,15}$', requestUser) }}
             operator: Equals
             value: true
       mutate:
         patchStrategicMerge:
           metadata:
             labels:
-              user: '{{ callerPod.user }}'
+              user: '{{ requestUser }}'
     - name: validate-coder-workload-run
       match: *coderWorkload
-      context: *callerPodContext
+      context: *workloadUserContext
       validate:
         allowExistingViolations: false
         message: >-
-          User-started workloads must use the submitting Coder Pod identity and canonical <pipeline>-<user>-<run-id> name.
+          User-started workloads must use the submitting user identity and canonical <pipeline>-<user>-<run-id> name.
         deny:
           conditions:
             any:
-              - key: '{{ callerPod.uid }}'
-                operator: NotEquals
-                value: '{{ callerPodUID }}'
-              - key: '{{ callerPod.namespace }}'
-                operator: NotEquals
-                value: '{{ callerPodNamespace }}'
-              - key: '{{ callerPodNamespace }}'
-                operator: NotEquals
-                value: 'team-{{ workloadNamespaceTeam }}-workspaces'
-              - key: '{{ callerPod.serviceAccountName }}'
-                operator: NotEquals
-                value: coder-workspace
               - key: >-
-                  {{ regex_match('^[a-z0-9]{1,15}$', callerPod.user) }}
+                  {{ regex_match('^[a-z0-9]{1,15}$', requestUser) }}
                 operator: NotEquals
                 value: true
               - key: >-
                   {{ request.object.metadata.labels.user || '' }}
                 operator: NotEquals
-                value: '{{ callerPod.user }}'
+                value: '{{ requestUser }}'
               - key: >-
                   {{ regex_match('^[a-z0-9]([a-z0-9-]{0,13}[a-z0-9])?$', request.object.metadata.labels.pipeline || '') }}
                 operator: NotEquals
@@ -119,4 +73,4 @@ spec:
               - key: '{{ request.object.metadata.name }}'
                 operator: NotEquals
                 value: >-
-                  {{ request.object.metadata.labels.pipeline }}-{{ callerPod.user }}-{{ request.object.metadata.labels."run-id" }}
+                  {{ request.object.metadata.labels.pipeline }}-{{ requestUser }}-{{ request.object.metadata.labels."run-id" }}

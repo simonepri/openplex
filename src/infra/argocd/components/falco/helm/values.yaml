@@ -87,10 +87,25 @@ customRules:
   fleet-exceptions.yaml: |-
     - rule: Redirect STDOUT/STDIN to Network Connection in Container
       exceptions:
+        - name: argocd_repo_server_git
+          fields: [k8s.ns.name, container.image.repository, proc.name]
+          comps: [=, =, in]
+          values:
+            - [argocd, quay.io/argoproj/argocd, [argocd-repo-ser, argocd-repo-server, git, ssh]]
         - name: clickhouse_keeper_liveness_probe
           fields: [k8s.ns.name, container.image.repository, fd.sip, fd.rport]
           values:
             - [signoz, docker.io/clickhouse/clickhouse-keeper, 127.0.0.1, "2181"]
+        - name: coder_workspace_ssh
+          fields: [k8s.ns.name, container.image.repository, proc.name]
+          comps: [=, =, in]
+          values:
+            - [workspaces, 400920695547.dkr.ecr.us-west-2.amazonaws.com/src/infra/definitions/workspaces/templates/dev, [coder, coder-agent, sshd, sshd-session]]
+        - name: kuberhealthy_network_conformance
+          fields: [k8s.ns.name, container.image.repository, proc.name]
+          comps: [in, =, =]
+          values:
+            - [[networking-denied, networking-e2e], docker.io/library/busybox, httpd]
       override:
         exceptions: append
 
@@ -106,10 +121,45 @@ customRules:
     - rule: Contact K8S API Server From Container
       exceptions:
         - name: api_controllers
-          fields: [k8s.ns.name]
-          comps: [in]
+          fields: [k8s.ns.name, container.image.repository]
+          comps: [=, in]
           values:
-            - [[dex, kuberhealthy, kyverno-system]]
+            # keep-sorted start
+            - [argocd, [ghcr.io/dexidp/dex, quay.io/argoproj/argocd]]
+            - [buildbuddy, [ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar, ghcr.io/cloudnative-pg/postgresql]]
+            - [cert-manager-system, [quay.io/jetstack/cert-manager-controller, quay.io/jetstack/cert-manager-webhook, quay.io/jetstack/trust-manager]]
+            - [clickhouse-system, [docker.io/altinity/clickhouse-operator, docker.io/altinity/metrics-exporter]]
+            - [cnpg-system, [ghcr.io/cloudnative-pg/cloudnative-pg, ghcr.io/cloudnative-pg/plugin-barman-cloud]]
+            - [coder, [ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar, ghcr.io/cloudnative-pg/postgresql]]
+            - [descheduler-system, [registry.k8s.io/descheduler/descheduler]]
+            - [dex, [ghcr.io/dexidp/dex]]
+            - [dragonfly-system, [ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar, ghcr.io/cloudnative-pg/postgresql]]
+            - [envoy-gateway-system, [docker.io/envoyproxy/gateway]]
+            - [external-dns-system, [registry.k8s.io/external-dns/external-dns]]
+            - [external-secrets-system, [ghcr.io/external-secrets/external-secrets]]
+            - [k8s-cleaner-system, [docker.io/projectsveltos/k8s-cleaner]]
+            - [kargo, [ghcr.io/akuity/kargo]]
+            - [karpenter-system, [public.ecr.aws/karpenter/controller]]
+            - [keda-system, [ghcr.io/kedacore/http-add-on-interceptor, ghcr.io/kedacore/http-add-on-operator, ghcr.io/kedacore/http-add-on-scaler, ghcr.io/kedacore/keda, ghcr.io/kedacore/keda-admission-webhooks, ghcr.io/kedacore/keda-metrics-apiserver]]
+            - [kube-oidc-proxy-system, [ghcr.io/tremolosecurity/kube-oidc-proxy]]
+            - [kuberay-system, [quay.io/kuberay/operator]]
+            - [kuberhealthy, [docker.io/kuberhealthy/kuberhealthy, ghcr.io/kyverno/chainsaw]]
+            - [kueue-system, [registry.k8s.io/kueue/kueue]]
+            - [kyverno-system, [reg.kyverno.io/kyverno/background-controller, reg.kyverno.io/kyverno/cleanup-controller, reg.kyverno.io/kyverno/kyverno, reg.kyverno.io/kyverno/kyvernopre, reg.kyverno.io/kyverno/reports-controller]]
+            - [node-problem-detector, [registry.k8s.io/node-problem-detector/node-problem-detector]]
+            - [obi-system, [ghcr.io/open-telemetry/opentelemetry-ebpf-instrumentation/ebpf-instrument]]
+            - [opencost, [ghcr.io/opencost/opencost]]
+            - [otel-system, [ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib]]
+            - [parca, [ghcr.io/parca-dev/parca-agent]]
+            - [pvc-autoresizer-system, [ghcr.io/topolvm/pvc-autoresizer]]
+            - [signoz, [ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar, ghcr.io/cloudnative-pg/postgresql, ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib, registry.k8s.io/kube-state-metrics/kube-state-metrics]]
+            - [signoz-operator-system, [docker.io/signoz/signoz-operator]]
+            - [tailscale-system, [docker.io/tailscale/k8s-operator, docker.io/tailscale/tailscale]]
+            - [trivy-system, [docker.io/aquasec/trivy-operator, ghcr.io/aquasecurity/node-collector]]
+            - [valkey-system, [ghcr.io/valkey-io/valkey-operator]]
+            - [velero-system, [docker.io/otwld/velero-ui]]
+            - [vpa-system, [registry.k8s.io/autoscaling/vpa-admission-controller, registry.k8s.io/autoscaling/vpa-recommender, registry.k8s.io/autoscaling/vpa-updater]]
+            # keep-sorted end
       override:
         exceptions: append
 falcosidekick:
@@ -122,7 +172,9 @@ serviceMonitor:
 podLabels:
   app.kubernetes.io/component: runtime-security
 podPriorityClassName: node-agents
+automountServiceAccountToken: false
 serviceAccount:
+  automountServiceAccountToken: false
   create: false
   name: falco
 rbac:
