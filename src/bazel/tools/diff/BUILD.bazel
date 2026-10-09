@@ -10,37 +10,6 @@ package(default_visibility = ["//visibility:public"])
 package_sources()
 
 py_library(
-    name = "hash_cache",
-    srcs = ["hash_cache.py"],
-)
-
-py_test(
-    name = "hash_cache_test",
-    size = "small",
-    srcs = ["hash_cache_test.py"],
-    deps = [
-        ":hash_cache",
-    ],
-)
-
-py_library(
-    name = "impacted",
-    srcs = ["impacted.py"],
-    deps = [
-        ":hash_cache",
-    ],
-)
-
-py_test(
-    name = "impacted_test",
-    size = "small",
-    srcs = ["impacted_test.py"],
-    deps = [
-        ":impacted",
-    ],
-)
-
-py_library(
     name = "git_diff",
     srcs = ["git_diff.py"],
 )
@@ -89,7 +58,6 @@ py_library(
         ":bazel_diff",
         ":gate_diff",
         ":git_diff",
-        ":impacted",
     ],
 )
 

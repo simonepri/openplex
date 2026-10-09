@@ -1,13 +1,12 @@
-"""Command-line interface for diff-aware Bazel test, check, fix, and publish execution.
+"""Command-line interface for diff-aware Bazel target and argument resolution.
 
-Resolves changed files, evaluates affected targets and packages, and dispatches Bazel commands.
+Resolves changed files, evaluates affected targets and packages, and prints them to stdout.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -32,7 +31,6 @@ try:
         detect_git_baseline,
         get_changed_files,
     )
-    from src.bazel.tools.diff.impacted import get_impacted_targets
 except ImportError:  # pragma: no cover
     try:
         from .bazel_diff import (  # type: ignore[no-redef]
@@ -51,7 +49,6 @@ except ImportError:  # pragma: no cover
             detect_git_baseline,
             get_changed_files,
         )
-        from .impacted import get_impacted_targets  # type: ignore[no-redef]
     except ImportError:  # pragma: no cover
         from bazel_diff import (  # type: ignore[no-redef]
             CORE_FILES,
@@ -69,7 +66,6 @@ except ImportError:  # pragma: no cover
             detect_git_baseline,
             get_changed_files,
         )
-        from impacted import get_impacted_targets  # type: ignore[no-redef]
 
 FLAGS_WITH_VALUES: frozenset[str] = frozenset({
     "-c",
@@ -99,8 +95,14 @@ def parse_cli_args(args: Sequence[str], repo_root: Path | None = None) -> Parsed
     if not args:
         return ParsedArgs(subcommand="test", run_all=False, explicit_targets=[], bazel_flags=[])
 
-    subcommand = args[0] if args[0] in {"test", "check", "fix", "publish"} else "test"
-    rest = list(args[1:]) if args[0] in {"test", "check", "fix", "publish"} else list(args)
+    subcommand = (
+        args[0] if args[0] in {"test", "targets", "build", "check", "fix", "publish"} else "test"
+    )
+    rest = (
+        list(args[1:])
+        if args[0] in {"test", "targets", "build", "check", "fix", "publish"}
+        else list(args)
+    )
 
     run_all = False
     explicit_targets: list[str] = []
@@ -143,39 +145,14 @@ def parse_cli_args(args: Sequence[str], repo_root: Path | None = None) -> Parsed
     )
 
 
-def run_system_command(cmd: Sequence[str], cwd: Path | None = None) -> int:
-    """Execute a system command and return the exit code."""
-    workspace_dir = cwd or (
-        Path(os.environ["BUILD_WORKSPACE_DIRECTORY"])
-        if "BUILD_WORKSPACE_DIRECTORY" in os.environ
-        else None
-    )
-    res = subprocess.run(cmd, cwd=workspace_dir, check=False)
-    return res.returncode
-
-
-def _get_output_flags(bazel_flags: Sequence[str]) -> list[str]:
-    """Return the BAZEL_OUTPUT_ROOT --output_user_root flag unless the caller passed one.
-
-    Without BAZEL_OUTPUT_ROOT, Bazel's default root applies, so commands share
-    the server that plain `bazel` starts instead of killing it.
-    """
-    output_root = os.environ.get("BAZEL_OUTPUT_ROOT")
-    if not output_root or any(flag.startswith("--output_user_root") for flag in bazel_flags):
-        return []
-    return [f"--output_user_root={output_root}"]
-
-
-def run_test(
+def resolve_test_targets(
     repo_root: Path,
     parsed: ParsedArgs,
     *,
-    runner: Callable[[Sequence[str]], int] = run_system_command,
-    impacted_fn: Callable[..., Any] | None = None,
+    diff_fn: Callable[..., Any] | None = None,
     query_fn: Callable[..., list[str]] | None = None,
-) -> int:
-    """Execute test subcommand based on explicit targets or affected workspace changes."""
-    output_flags = _get_output_flags(parsed.bazel_flags)
+) -> list[str]:
+    """Resolve test targets affected by workspace changes or explicit patterns."""
     targets = (
         ["//..."]
         if (parsed.run_all and not parsed.explicit_targets)
@@ -183,8 +160,7 @@ def run_test(
     )
 
     if targets:
-        cmd = ["bazel", *output_flags, "test", *parsed.bazel_flags, "--", *targets]
-        return runner(cmd)
+        return targets
 
     base_ref, _ = detect_git_baseline(repo_root)
     if not base_ref:
@@ -192,249 +168,312 @@ def run_test(
             "[INFO] No git baseline detected; running full test suite",
             file=sys.stderr,
         )
-        cmd = ["bazel", *output_flags, "test", *parsed.bazel_flags, "--", "//..."]
-        return runner(cmd)
+        return ["//..."]
 
     changed_files = get_changed_files(repo_root, base_ref=base_ref)
     if not changed_files:
-        print("No changed files detected. All targets are up to date.")
-        return 0
+        return []
 
     if any(f in CORE_FILES for f in changed_files):
         print("[INFO] Toolchain files modified; running full test suite", file=sys.stderr)
-        cmd = ["bazel", *output_flags, "test", *parsed.bazel_flags, "--", "//..."]
-        return runner(cmd)
+        return ["//..."]
 
     run_query = query_fn or run_bazel_query
-    candidates: list[str] = []
+    get_diff = diff_fn or get_bazel_diff
+    diff_res = get_diff(repo_root, changed_files, query_fn=run_query)
+    candidates = diff_res.affected_tests
     selected_tests: list[str] = []
-    engine_name = "bazel-diff"
-
-    try:
-        get_impacted = impacted_fn or get_impacted_targets
-        output_root = os.environ.get("BAZEL_OUTPUT_ROOT")
-        impacted_res = get_impacted(
-            repo_root,
-            base_ref,
-            bazel_output_root=output_root,
-        )
-        candidates = [str(label) for label in impacted_res.all_targets]
-    except Exception as exc:
-        print(
-            f"[WARNING] bazel-diff failed: {exc}; falling back to bazel query engine",
-            file=sys.stderr,
-        )
-        engine_name = "bazel query"
-        diff_res = get_bazel_diff(repo_root, changed_files, query_fn=run_query)
-        candidates = diff_res.affected_tests
 
     # Explicit labels make `bazel test` run tests tagged manual, which `//...` skips.
     if candidates:
         target_set = " ".join(f'"{c}"' for c in candidates)
         selected_tests = run_query(
             repo_root,
-            f"kind('.*_test', set({target_set})) except attr(tags, '\\bmanual\\b', set({target_set}))",
+            f"kind('.*_test', set({target_set})) except attr(tags, '\\\\bmanual\\\\b', set({target_set}))",
             bazel_output_root=os.environ.get("BAZEL_OUTPUT_ROOT"),
         )
 
     print(
-        f"[INFO] Using {engine_name} engine (base commit: {base_ref}); selected {len(selected_tests)} test(s)",
+        f"[INFO] Using bazel query engine (base commit: {base_ref}); selected {len(selected_tests)} test(s)",
         file=sys.stderr,
     )
+    return selected_tests
 
-    if not selected_tests:
-        print("No affected tests detected for changed files.")
+
+def resolve_build_targets(
+    repo_root: Path,
+    parsed: ParsedArgs,
+    *,
+    diff_fn: Callable[..., Any] | None = None,
+    query_fn: Callable[..., list[str]] | None = None,
+) -> list[str]:
+    """Resolve build targets affected by workspace changes or explicit patterns."""
+    targets = (
+        ["//..."]
+        if (parsed.run_all and not parsed.explicit_targets)
+        else list(parsed.explicit_targets)
+    )
+
+    if targets:
+        return targets
+
+    base_ref, _ = detect_git_baseline(repo_root)
+    if not base_ref:
+        print(
+            "[INFO] No git baseline detected; building full codebase",
+            file=sys.stderr,
+        )
+        return ["//..."]
+
+    changed_files = get_changed_files(repo_root, base_ref=base_ref)
+    if not changed_files:
+        return []
+
+    if any(f in CORE_FILES for f in changed_files):
+        print("[INFO] Toolchain files modified; building full codebase", file=sys.stderr)
+        return ["//..."]
+
+    run_query = query_fn or run_bazel_query
+    get_diff = diff_fn or get_bazel_diff
+    diff_res = get_diff(repo_root, changed_files, query_fn=run_query)
+    candidates = diff_res.affected_targets
+    selected_targets: list[str] = []
+
+    if candidates:
+        target_set = " ".join(f'"{c}"' for c in candidates)
+        selected_targets = run_query(
+            repo_root,
+            f"set({target_set}) except kind('source file', set({target_set})) except attr(tags, '\\\\bmanual\\\\b', set({target_set}))",
+            bazel_output_root=os.environ.get("BAZEL_OUTPUT_ROOT"),
+        )
+
+    print(
+        f"[INFO] Using bazel query engine (base commit: {base_ref}); selected {len(selected_targets)} target(s)",
+        file=sys.stderr,
+    )
+    return selected_targets
+
+
+def run_targets(
+    repo_root: Path,
+    parsed: ParsedArgs,
+    *,
+    runner: Callable[[list[str]], int] | None = None,
+    diff_fn: Callable[..., Any] | None = None,
+    query_fn: Callable[..., list[str]] | None = None,
+) -> int:
+    """Resolve and output affected build targets."""
+    selected_targets = resolve_build_targets(
+        repo_root,
+        parsed,
+        diff_fn=diff_fn,
+        query_fn=query_fn,
+    )
+    if not selected_targets:
         return 0
 
-    cmd = ["bazel", *output_flags, "test", *parsed.bazel_flags, "--", *selected_tests]
-    return runner(cmd)
+    if runner is not None:
+        return runner(selected_targets)
+
+    for target in selected_targets:
+        print(target)
+    return 0
+
+
+def run_test(
+    repo_root: Path,
+    parsed: ParsedArgs,
+    *,
+    runner: Callable[[list[str]], int] | None = None,
+    diff_fn: Callable[..., Any] | None = None,
+    query_fn: Callable[..., list[str]] | None = None,
+) -> int:
+    """Resolve test targets and print them to stdout or forward to runner."""
+    selected_tests = resolve_test_targets(repo_root, parsed, diff_fn=diff_fn, query_fn=query_fn)
+    if not selected_tests:
+        return 0
+
+    if runner is not None:
+        return runner(selected_tests)
+
+    for target in selected_tests:
+        print(target)
+    return 0
+
+
+def resolve_check_targets(
+    repo_root: Path,
+    parsed: ParsedArgs,
+    *,
+    diff_fn: Callable[..., Any] | None = None,
+) -> list[str]:
+    """Resolve check arguments/packages based on explicit targets or affected workspace changes."""
+    if parsed.run_all:
+        return ["--all"]
+    if parsed.explicit_targets:
+        return list(parsed.explicit_targets)
+
+    changed_files = get_changed_files(repo_root)
+    if not changed_files:
+        return []
+
+    get_diff = diff_fn or get_bazel_diff
+    diff_res = get_diff(repo_root, changed_files)
+    core_changed = diff_res.is_global or any(is_core_file(f) for f in changed_files)
+    affected_packages: list[str] = [
+        str(pkg) for pkg in diff_res.affected_packages if pkg != "//..."
+    ]
+
+    if core_changed:
+        return ["--all"]
+    if affected_packages:
+        return affected_packages
+
+    has_triggered_gates = bool(
+        filter_gates(list(GATE_TRIGGERS.keys()), changed_files, repo_root=repo_root)
+    )
+    return ["--all"] if has_triggered_gates else []
 
 
 def run_check(
     repo_root: Path,
     parsed: ParsedArgs,
     *,
-    runner: Callable[[Sequence[str]], int] = run_system_command,
+    runner: Callable[[list[str]], int] | None = None,
+    diff_fn: Callable[..., Any] | None = None,
 ) -> int:
-    """Execute check subcommand with full repository, target-scoped, or diff-filtered packages."""
-    output_flags = _get_output_flags(parsed.bazel_flags)
+    """Resolve check arguments/packages and print them to stdout or forward to runner."""
+    targets = resolve_check_targets(repo_root, parsed, diff_fn=diff_fn)
+    if not targets:
+        return 0
 
+    if runner is not None:
+        return runner(targets)
+
+    for target in targets:
+        print(target)
+    return 0
+
+
+def resolve_fix_targets(
+    repo_root: Path,
+    parsed: ParsedArgs,
+    *,
+    diff_fn: Callable[..., Any] | None = None,
+) -> list[str]:
+    """Resolve fix arguments/packages based on explicit targets or affected workspace changes."""
     if parsed.run_all:
-        cmd = ["bazel", *output_flags, "run", *parsed.bazel_flags, "//:check", "--", "--all"]
-        return runner(cmd)
-
+        return ["--all"]
     if parsed.explicit_targets:
-        cmd = [
-            "bazel",
-            *output_flags,
-            "run",
-            *parsed.bazel_flags,
-            "//:check",
-            "--",
-            *parsed.explicit_targets,
-        ]
-        return runner(cmd)
+        return list(parsed.explicit_targets)
 
     changed_files = get_changed_files(repo_root)
     if not changed_files:
-        print("No changed files detected. All checks passed.")
-        return 0
+        return []
 
-    diff_res = get_bazel_diff(repo_root, changed_files)
+    active_generators = filter_generators(changed_files)
+    get_diff = diff_fn or get_bazel_diff
+    diff_res = get_diff(repo_root, changed_files)
     core_changed = diff_res.is_global or any(is_core_file(f) for f in changed_files)
-    affected_packages = [pkg for pkg in diff_res.affected_packages if pkg != "//..."]
+    affected_packages: list[str] = [
+        str(pkg) for pkg in diff_res.affected_packages if pkg != "//..."
+    ]
 
     if core_changed:
-        filtered_args = ["--all"]
-    elif affected_packages:
-        filtered_args = affected_packages
-    else:
-        triggered_gates = filter_gates(
-            list(GATE_TRIGGERS.keys()), changed_files, repo_root=repo_root
-        )
-        if not triggered_gates:
-            print("No changed files detected. All checks passed.")
-            return 0
-        filtered_args = []
-
-    if filtered_args:
-        cmd = ["bazel", *output_flags, "run", *parsed.bazel_flags, "//:check", "--", *filtered_args]
-    else:
-        cmd = ["bazel", *output_flags, "run", *parsed.bazel_flags, "//:check"]
-    return runner(cmd)
+        return ["--all"]
+    if affected_packages:
+        return affected_packages
+    return ["--all"] if active_generators else []
 
 
 def run_fix(
     repo_root: Path,
     parsed: ParsedArgs,
     *,
-    runner: Callable[[Sequence[str]], int] = run_system_command,
+    runner: Callable[[list[str]], int] | None = None,
+    diff_fn: Callable[..., Any] | None = None,
 ) -> int:
-    """Execute fix subcommand passing through --all or targets or invoking affected fix generators."""
-    output_flags = _get_output_flags(parsed.bazel_flags)
-
-    if parsed.run_all:
-        cmd = ["bazel", *output_flags, "run", *parsed.bazel_flags, "//:fix", "--", "--all"]
-        return runner(cmd)
-
-    if parsed.explicit_targets:
-        cmd = [
-            "bazel",
-            *output_flags,
-            "run",
-            *parsed.bazel_flags,
-            "//:fix",
-            "--",
-            *parsed.explicit_targets,
-        ]
-        return runner(cmd)
-
-    changed_files = get_changed_files(repo_root)
-    if not changed_files:
-        print("No changed files detected. All targets are up to date.")
+    """Resolve fix arguments/packages and print them to stdout or forward to runner."""
+    targets = resolve_fix_targets(repo_root, parsed, diff_fn=diff_fn)
+    if not targets:
         return 0
 
-    active_generators = filter_generators(changed_files)
-    diff_res = get_bazel_diff(repo_root, changed_files)
-    core_changed = diff_res.is_global or any(is_core_file(f) for f in changed_files)
-    affected_packages = [pkg for pkg in diff_res.affected_packages if pkg != "//..."]
+    full_args = list(parsed.bazel_flags) + targets
+    if runner is not None:
+        return runner(full_args)
 
-    if core_changed:
-        cmd = ["bazel", *output_flags, "run", *parsed.bazel_flags, "//:fix", "--", "--all"]
-    elif affected_packages:
-        cmd = [
-            "bazel",
-            *output_flags,
-            "run",
-            *parsed.bazel_flags,
-            "//:fix",
-            "--",
-            *affected_packages,
-        ]
-    else:
-        if not active_generators:
-            print("No changed files detected. All targets are up to date.")
-            return 0
-        cmd = ["bazel", *output_flags, "run", *parsed.bazel_flags, "//:fix"]
-    return runner(cmd)
-
-
-def _publish_targets(
-    targets: Sequence[str],
-    output_flags: Sequence[str],
-    bazel_flags: Sequence[str],
-    runner: Callable[[Sequence[str]], int],
-) -> int:
-    for target in targets:
-        rc = runner(["bazel", *output_flags, "run", *bazel_flags, target])
-        if rc != 0:
-            return rc
+    for arg in full_args:
+        print(arg)
     return 0
 
 
-def _publish_all_targets(
-    repo_root: Path,
-    output_flags: Sequence[str],
-    bazel_flags: Sequence[str],
-    runner: Callable[[Sequence[str]], int],
-) -> int:
-    """Execute all publish targets across examples, infra, and third-party."""
-    query_expr = (
-        'kind(".*", //src/examples/... + //src/infra/... + //src/third_party/...) intersect'
-        ' attr("name", "publish", //...)'
-    )
-    targets = sorted(run_bazel_query(repo_root, query_expr))
-    if not targets:
-        print("No image publish targets found.")
-        return 0
-    return _publish_targets(targets, output_flags, bazel_flags, runner)
-
-
-def run_publish(
+def resolve_publish_targets(
     repo_root: Path,
     parsed: ParsedArgs,
-    runner: Callable[[Sequence[str]], int] = run_system_command,
-) -> int:
-    """Execute publish subcommand for explicit targets, repository all, or affected image targets."""
-    output_flags = _get_output_flags(parsed.bazel_flags)
-
+    *,
+    diff_fn: Callable[..., Any] | None = None,
+    query_fn: Callable[..., list[str]] | None = None,
+) -> list[str]:
+    """Resolve image publish targets based on explicit targets, repository all, or affected changes."""
     if parsed.explicit_targets:
-        return _publish_targets(parsed.explicit_targets, output_flags, parsed.bazel_flags, runner)
+        return list(parsed.explicit_targets)
 
+    run_query = query_fn or run_bazel_query
     changed_files = get_changed_files(repo_root)
     if not changed_files and not parsed.run_all:
-        print("No changed files detected. All targets are up to date.")
-        return 0
+        return []
 
-    diff_res = get_bazel_diff(repo_root, changed_files)
+    get_diff = diff_fn or get_bazel_diff
+    diff_res = get_diff(repo_root, changed_files)
     if parsed.run_all or any(is_core_file(f) for f in changed_files) or diff_res.is_global:
-        return _publish_all_targets(repo_root, output_flags, parsed.bazel_flags, runner)
+        query_expr = (
+            'kind(".*", //src/examples/... + //src/infra/... + //src/third_party/...) intersect'
+            ' attr("name", "publish", //...)'
+        )
+        return sorted(run_query(repo_root, query_expr))
 
     if not diff_res.direct_targets:
-        print("No changed image targets detected. All targets are up to date.")
-        return 0
+        return []
 
     target_set = " ".join(f'"{t}"' for t in diff_res.direct_targets)
     query_expr = (
         f'kind(".*", rdeps(//..., set({target_set}), 10)) intersect attr("name", "publish", //...)'
     )
-    targets = sorted(run_bazel_query(repo_root, query_expr))
+    return sorted(run_query(repo_root, query_expr))
+
+
+def run_publish(
+    repo_root: Path,
+    parsed: ParsedArgs,
+    *,
+    runner: Callable[[list[str]], int] | None = None,
+    diff_fn: Callable[..., Any] | None = None,
+    query_fn: Callable[..., list[str]] | None = None,
+) -> int:
+    """Resolve publish targets and print them to stdout or forward to runner."""
+    targets = resolve_publish_targets(repo_root, parsed, diff_fn=diff_fn, query_fn=query_fn)
     if not targets:
-        print("No changed image targets detected. All targets are up to date.")
         return 0
 
-    return _publish_targets(targets, output_flags, parsed.bazel_flags, runner)
+    if runner is not None:
+        return runner(targets)
+
+    for target in targets:
+        print(target)
+    return 0
 
 
 def dispatch(
     repo_root: Path,
     parsed: ParsedArgs,
     *,
-    runner: Callable[[Sequence[str]], int] = run_system_command,
+    runner: Callable[[list[str]], int] | None = None,
 ) -> int:
-    """Dispatch the parsed subcommand to test, check, fix, or publish logic."""
+    """Dispatch the parsed subcommand to test, build, targets, check, fix, or publish target resolution."""
     if parsed.subcommand == "test":
         return run_test(repo_root, parsed, runner=runner)
+    if parsed.subcommand in {"targets", "build"}:
+        return run_targets(repo_root, parsed, runner=runner)
     if parsed.subcommand == "check":
         return run_check(repo_root, parsed, runner=runner)
     if parsed.subcommand == "fix":

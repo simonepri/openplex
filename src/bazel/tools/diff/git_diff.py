@@ -79,7 +79,7 @@ def is_ci_push_to_main(env: Mapping[str, str] | None = None) -> bool:
     return buildbuddy_push or github_push
 
 
-# LINT.ThenChange(//src/bazel/rules/lint_aspect/defs.bzl:ci_push_to_main)
+# LINT.ThenChange(//src/bazel/rules/lint_aspect/format.bzl:ci_push_to_main)
 
 CI_PUSH_BASE_ENV_VARS: Sequence[str] = (
     "BEFORE_COMMIT",

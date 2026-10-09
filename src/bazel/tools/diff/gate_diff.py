@@ -138,9 +138,6 @@ GATE_TRIGGERS: dict[str, list[str]] = {
         "*.yaml",
         "*.json",
     ],
-    "//src/bazel/checks:cyclo": [
-        "*.go",
-    ],
     "//src/infra/argocd:lfs_guard_test": [
         ".gitattributes",
         "src/infra/argocd/**",

@@ -25,7 +25,6 @@ try:
         run_publish,
         run_test,
     )
-    from src.bazel.tools.diff.impacted import BazelDiffError, ImpactedResult, ImpactedTarget
 except ImportError:  # pragma: no cover
     try:
         from .bazel_diff import BazelDiffResult, BazelQueryError  # type: ignore[no-redef]
@@ -39,11 +38,6 @@ except ImportError:  # pragma: no cover
             run_publish,
             run_test,
         )
-        from .impacted import (  # type: ignore[no-redef]
-            BazelDiffError,
-            ImpactedResult,
-            ImpactedTarget,
-        )
     except ImportError:  # pragma: no cover
         from bazel_diff import BazelDiffResult, BazelQueryError  # type: ignore[no-redef]
         from cli import (  # type: ignore[no-redef]
@@ -55,11 +49,6 @@ except ImportError:  # pragma: no cover
             run_fix,
             run_publish,
             run_test,
-        )
-        from impacted import (  # type: ignore[no-redef]
-            BazelDiffError,
-            ImpactedResult,
-            ImpactedTarget,
         )
 
 
@@ -202,11 +191,7 @@ class CliDispatchTest(unittest.TestCase):
         code = run_test(self.repo_root, parsed, runner=fake_runner)
 
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 1)
-        self.assertIn("test", commands[0])
-        self.assertIn("-c", commands[0])
-        self.assertIn("fastbuild", commands[0])
-        self.assertIn("//src/foo:foo_test", commands[0])
+        self.assertEqual(commands, [["//src/foo:foo_test"]])
         mock_changed.assert_not_called()
 
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
@@ -226,47 +211,22 @@ class CliDispatchTest(unittest.TestCase):
         code = run_test(self.repo_root, parsed, runner=fake_runner)
 
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 1)
-        self.assertIn("//...", commands[0])
+        self.assertEqual(commands, [["//..."]])
         mock_changed.assert_not_called()
-
-    def test_run_test_output_root_diverges_from_plain_bazel(self) -> None:
-        parsed = ParsedArgs(subcommand="test", run_all=True, explicit_targets=[], bazel_flags=[])
-        commands: list[list[str]] = []
-
-        def fake_runner(cmd: Sequence[str]) -> int:
-            commands.append(list(cmd))
-            return 0
-
-        cases = (
-            (
-                {"BAZEL_OUTPUT_ROOT": "/state/bazel"},
-                ["bazel", "--output_user_root=/state/bazel", "test"],
-            ),
-            ({}, ["bazel", "test"]),
-        )
-        for env, expected in cases:
-            with self.subTest(env=env), mock.patch.dict("os.environ", env, clear=True):
-                commands.clear()
-                run_test(self.repo_root, parsed, runner=fake_runner)
-                self.assertEqual(commands[0][: len(expected)], expected)
 
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
     def test_run_test_no_changed_files(self, mock_changed: mock.MagicMock) -> None:
         mock_changed.return_value = []
         commands: list[Sequence[str]] = []
 
-        out = io.StringIO()
-        with redirect_stdout(out):
-            code = run_test(
-                self.repo_root,
-                ParsedArgs(subcommand="test", run_all=False, explicit_targets=[], bazel_flags=[]),
-                runner=lambda cmd: commands.append(list(cmd)) or 0,
-            )
+        code = run_test(
+            self.repo_root,
+            ParsedArgs(subcommand="test", run_all=False, explicit_targets=[], bazel_flags=[]),
+            runner=lambda cmd: commands.append(list(cmd)) or 0,
+        )
 
         self.assertEqual(code, 0)
         self.assertEqual(commands, [])
-        self.assertIn("No changed files detected. All targets are up to date.", out.getvalue())
 
     @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
@@ -285,69 +245,18 @@ class CliDispatchTest(unittest.TestCase):
         )
         commands: list[Sequence[str]] = []
 
-        out = io.StringIO()
-        with redirect_stdout(out):
-            code = run_test(
-                self.repo_root,
-                ParsedArgs(subcommand="test", run_all=False, explicit_targets=[], bazel_flags=[]),
-                runner=lambda cmd: commands.append(list(cmd)) or 0,
-            )
+        code = run_test(
+            self.repo_root,
+            ParsedArgs(subcommand="test", run_all=False, explicit_targets=[], bazel_flags=[]),
+            runner=lambda cmd: commands.append(list(cmd)) or 0,
+        )
 
         self.assertEqual(code, 0)
         self.assertEqual(commands, [])
-        self.assertIn("No affected tests detected for changed files.", out.getvalue())
-
-    @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
-    def test_run_test_executes_affected_tests_via_bazel_diff(
-        self,
-        mock_changed: mock.MagicMock,
-    ) -> None:
-        mock_changed.return_value = ["src/pkg/lib.py"]
-        fake_impacted = ImpactedResult(
-            all_targets=["//src/pkg:lib", "//src/pkg:lib_test"],
-            direct_targets=["//src/pkg:lib"],
-            targets=[
-                ImpactedTarget(label="//src/pkg:lib", target_distance=0, package_distance=0),
-                ImpactedTarget(label="//src/pkg:lib_test", target_distance=1, package_distance=0),
-            ],
-        )
-        commands: list[Sequence[str]] = []
-
-        def fake_runner(cmd: Sequence[str]) -> int:
-            commands.append(cmd)
-            return 0
-
-        err_out = io.StringIO()
-        with (
-            redirect_stdout(io.StringIO()),
-            mock.patch("sys.stderr", err_out),
-            mock.patch(
-                "src.bazel.tools.diff.cli.get_impacted_targets",
-                return_value=fake_impacted,
-            ),
-            mock.patch(
-                "src.bazel.tools.diff.cli.run_bazel_query",
-                return_value=["//src/pkg:lib_test"],
-            ) as mock_query,
-        ):
-            code = run_test(
-                self.repo_root,
-                ParsedArgs(subcommand="test", run_all=False, explicit_targets=[], bazel_flags=[]),
-                runner=fake_runner,
-            )
-
-        self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 1)
-        self.assertIn("test", commands[0])
-        self.assertIn("//src/pkg:lib_test", commands[0])
-        self.assertIn("except attr(tags, '\\bmanual\\b'", mock_query.call_args.args[1])
-        self.assertIn("[INFO] Using bazel-diff engine", err_out.getvalue())
-        self.assertIn("base commit: HEAD", err_out.getvalue())
-        self.assertIn("selected 1 test(s)", err_out.getvalue())
 
     @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
-    def test_run_test_fallback_to_bazel_query_on_bazel_diff_error(
+    def test_run_test_executes_affected_tests_via_bazel_query(
         self,
         mock_changed: mock.MagicMock,
         mock_diff: mock.MagicMock,
@@ -355,7 +264,7 @@ class CliDispatchTest(unittest.TestCase):
         mock_changed.return_value = ["src/pkg/lib.py"]
         mock_diff.return_value = BazelDiffResult(
             direct_targets=["//src/pkg:lib"],
-            affected_targets=["//src/pkg:lib_test"],
+            affected_targets=["//src/pkg:lib", "//src/pkg:lib_test"],
             affected_tests=["//src/pkg:lib_test"],
             affected_packages=["//src/pkg/..."],
             is_global=False,
@@ -371,13 +280,9 @@ class CliDispatchTest(unittest.TestCase):
             redirect_stdout(io.StringIO()),
             mock.patch("sys.stderr", err_out),
             mock.patch(
-                "src.bazel.tools.diff.cli.get_impacted_targets",
-                side_effect=BazelDiffError("simulated bazel-diff failure"),
-            ),
-            mock.patch(
                 "src.bazel.tools.diff.cli.run_bazel_query",
                 return_value=["//src/pkg:lib_test"],
-            ),
+            ) as mock_query,
         ):
             code = run_test(
                 self.repo_root,
@@ -386,10 +291,8 @@ class CliDispatchTest(unittest.TestCase):
             )
 
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 1)
-        self.assertIn("test", commands[0])
-        self.assertIn("//src/pkg:lib_test", commands[0])
-        self.assertIn("[WARNING] bazel-diff failed", err_out.getvalue())
+        self.assertEqual(commands, [["//src/pkg:lib_test"]])
+        self.assertIn("except attr(tags, '\\\\bmanual\\\\b'", mock_query.call_args.args[1])
         self.assertIn("[INFO] Using bazel query engine", err_out.getvalue())
         self.assertIn("base commit: HEAD", err_out.getvalue())
         self.assertIn("selected 1 test(s)", err_out.getvalue())
@@ -422,19 +325,23 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("//...", commands[0])
         self.assertIn("[INFO] No git baseline detected", err_out.getvalue())
 
+    @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.detect_git_baseline")
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
     def test_run_test_ci_push_to_main_uses_affected_path(
         self,
         mock_changed: mock.MagicMock,
         mock_baseline: mock.MagicMock,
+        mock_diff: mock.MagicMock,
     ) -> None:
         mock_baseline.return_value = ("abc1234", "HEAD")
         mock_changed.return_value = ["src/infra/tools/storage_sync/manifest.py"]
-        fake_impacted = ImpactedResult(
-            all_targets=["//src/infra/tools/storage_sync:storage_sync_test"],
+        mock_diff.return_value = BazelDiffResult(
             direct_targets=["//src/infra/tools/storage_sync:storage_sync"],
-            targets=[],
+            affected_targets=["//src/infra/tools/storage_sync:storage_sync_test"],
+            affected_tests=["//src/infra/tools/storage_sync:storage_sync_test"],
+            affected_packages=["//src/infra/tools/storage_sync/..."],
+            is_global=False,
         )
         commands: list[Sequence[str]] = []
 
@@ -448,10 +355,6 @@ class CliDispatchTest(unittest.TestCase):
             mock.patch.dict("os.environ", env, clear=True),
             redirect_stdout(io.StringIO()),
             mock.patch("sys.stderr", err_out),
-            mock.patch(
-                "src.bazel.tools.diff.cli.get_impacted_targets",
-                return_value=fake_impacted,
-            ),
             mock.patch(
                 "src.bazel.tools.diff.cli.run_bazel_query",
                 return_value=["//src/infra/tools/storage_sync:storage_sync_test"],
@@ -496,22 +399,22 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("//...", commands[0])
         self.assertIn("[INFO] Toolchain files modified", err_out.getvalue())
 
+    @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
     def test_run_test_query_failure_raises(
         self,
         mock_changed: mock.MagicMock,
+        mock_diff: mock.MagicMock,
     ) -> None:
         mock_changed.return_value = ["src/pkg/lib.py"]
-        fake_impacted = ImpactedResult(
-            all_targets=["//src/pkg:lib"],
+        mock_diff.return_value = BazelDiffResult(
             direct_targets=["//src/pkg:lib"],
-            targets=[],
+            affected_targets=["//src/pkg:lib"],
+            affected_tests=["//src/pkg:lib_test"],
+            affected_packages=["//src/pkg/..."],
+            is_global=False,
         )
         with (
-            mock.patch(
-                "src.bazel.tools.diff.cli.get_impacted_targets",
-                return_value=fake_impacted,
-            ),
             mock.patch(
                 "src.bazel.tools.diff.cli.run_bazel_query",
                 side_effect=BazelQueryError("query failed"),
@@ -540,11 +443,7 @@ class CliDispatchTest(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 1)
-        self.assertEqual(
-            commands[0][-4:],
-            ["run", "//:check", "--", "--all"],
-        )
+        self.assertEqual(commands, [["--all"]])
 
     def test_run_check_explicit_target(self) -> None:
         commands: list[Sequence[str]] = []
@@ -565,28 +464,21 @@ class CliDispatchTest(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 1)
-        self.assertEqual(
-            commands[0][-4:],
-            ["run", "//:check", "--", "//src/pkg/..."],
-        )
+        self.assertEqual(commands, [["//src/pkg/..."]])
 
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
     def test_run_check_no_changed_files(self, mock_changed: mock.MagicMock) -> None:
         mock_changed.return_value = []
         commands: list[Sequence[str]] = []
 
-        out = io.StringIO()
-        with redirect_stdout(out):
-            code = run_check(
-                self.repo_root,
-                ParsedArgs(subcommand="check", run_all=False, explicit_targets=[], bazel_flags=[]),
-                runner=lambda cmd: commands.append(list(cmd)) or 0,
-            )
+        code = run_check(
+            self.repo_root,
+            ParsedArgs(subcommand="check", run_all=False, explicit_targets=[], bazel_flags=[]),
+            runner=lambda cmd: commands.append(list(cmd)) or 0,
+        )
 
         self.assertEqual(code, 0)
         self.assertEqual(commands, [])
-        self.assertIn("No changed files detected. All checks passed.", out.getvalue())
 
     @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
@@ -616,11 +508,7 @@ class CliDispatchTest(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 1)
-        self.assertEqual(
-            commands[0][-4:],
-            ["run", "//:check", "--", "//src/pkg/..."],
-        )
+        self.assertEqual(commands, [["//src/pkg/..."]])
 
     @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
@@ -650,10 +538,7 @@ class CliDispatchTest(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
-        self.assertEqual(
-            commands[0][-4:],
-            ["run", "//:check", "--", "--all"],
-        )
+        self.assertEqual(commands, [["--all"]])
 
     def test_run_fix_all_and_explicit_target(self) -> None:
         commands: list[Sequence[str]] = []
@@ -667,7 +552,7 @@ class CliDispatchTest(unittest.TestCase):
             ParsedArgs(subcommand="fix", run_all=True, explicit_targets=[], bazel_flags=[]),
             runner=fake_runner,
         )
-        self.assertEqual(commands[0][-4:], ["run", "//:fix", "--", "--all"])
+        self.assertEqual(commands[0], ["--all"])
 
         run_fix(
             self.repo_root,
@@ -679,7 +564,7 @@ class CliDispatchTest(unittest.TestCase):
             ),
             runner=fake_runner,
         )
-        self.assertEqual(commands[1][-4:], ["run", "//:fix", "--", "//src/pkg/..."])
+        self.assertEqual(commands[1], ["//src/pkg/..."])
 
     @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
@@ -709,7 +594,7 @@ class CliDispatchTest(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
-        self.assertEqual(commands[0][-4:], ["run", "//:fix", "--", "//src/pkg/..."])
+        self.assertEqual(commands[0], ["//src/pkg/..."])
 
     @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
@@ -739,7 +624,7 @@ class CliDispatchTest(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
-        self.assertEqual(commands[0][-2:], ["run", "//:fix"])
+        self.assertEqual(commands[0], ["--all"])
 
     @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.get_changed_files")
@@ -789,10 +674,7 @@ class CliDispatchTest(unittest.TestCase):
         code = run_publish(self.repo_root, parsed, runner=fake_runner)
 
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 1)
-        self.assertIn("run", commands[0])
-        self.assertIn("--stamp", commands[0])
-        self.assertIn("//src/infra/docker:publish", commands[0])
+        self.assertEqual(commands, [["//src/infra/docker:publish"]])
         mock_changed.assert_not_called()
 
         fail_runner = mock.MagicMock(return_value=1)
@@ -804,19 +686,14 @@ class CliDispatchTest(unittest.TestCase):
         mock_changed.return_value = []
         commands: list[Sequence[str]] = []
 
-        out = io.StringIO()
-        with redirect_stdout(out):
-            code = run_publish(
-                self.repo_root,
-                ParsedArgs(
-                    subcommand="publish", run_all=False, explicit_targets=[], bazel_flags=[]
-                ),
-                runner=lambda cmd: commands.append(list(cmd)) or 0,
-            )
+        code = run_publish(
+            self.repo_root,
+            ParsedArgs(subcommand="publish", run_all=False, explicit_targets=[], bazel_flags=[]),
+            runner=lambda cmd: commands.append(list(cmd)) or 0,
+        )
 
         self.assertEqual(code, 0)
         self.assertEqual(commands, [])
-        self.assertIn("No changed files detected. All targets are up to date.", out.getvalue())
 
     @mock.patch("src.bazel.tools.diff.cli.get_bazel_diff")
     @mock.patch("src.bazel.tools.diff.cli.run_bazel_query")
@@ -842,9 +719,7 @@ class CliDispatchTest(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 2)
-        self.assertIn("//src/examples:publish", commands[0])
-        self.assertIn("//src/infra:publish", commands[1])
+        self.assertEqual(commands, [["//src/examples:publish", "//src/infra:publish"]])
         expected_query = (
             'kind(".*", //src/examples/... + //src/infra/... + //src/third_party/...) intersect'
             ' attr("name", "publish", //...)'
@@ -860,17 +735,12 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(code_fail, 3)
 
         mock_query.return_value = []
-        out = io.StringIO()
-        with redirect_stdout(out):
-            code_empty = run_publish(
-                self.repo_root,
-                ParsedArgs(
-                    subcommand="publish", run_all=False, explicit_targets=[], bazel_flags=[]
-                ),
-                runner=fake_runner,
-            )
+        code_empty = run_publish(
+            self.repo_root,
+            ParsedArgs(subcommand="publish", run_all=False, explicit_targets=[], bazel_flags=[]),
+            runner=fake_runner,
+        )
         self.assertEqual(code_empty, 0)
-        self.assertIn("No image publish targets found.", out.getvalue())
 
         mock_changed.return_value = []
         mock_query.return_value = ["//src/infra:publish"]
@@ -931,10 +801,9 @@ class CliDispatchTest(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 1)
-        self.assertIn("//src/infra/docker:publish", commands[0])
+        self.assertEqual(commands, [["//src/infra/docker:publish"]])
         expected_query = (
-            'kind(".*", rdeps(//..., set(//src/infra/docker:image), 10)) intersect'
+            'kind(".*", rdeps(//..., set("//src/infra/docker:image"), 10)) intersect'
             ' attr("name", "publish", //...)'
         )
         mock_query.assert_called_once_with(self.repo_root, expected_query)
@@ -954,19 +823,14 @@ class CliDispatchTest(unittest.TestCase):
             affected_packages=[],
             is_global=False,
         )
-        out = io.StringIO()
-        with redirect_stdout(out):
-            code_no_direct = run_publish(
-                self.repo_root,
-                ParsedArgs(
-                    subcommand="publish", run_all=False, explicit_targets=[], bazel_flags=[]
-                ),
-                runner=fake_runner,
-            )
-        self.assertEqual(code_no_direct, 0)
-        self.assertIn(
-            "No changed image targets detected. All targets are up to date.", out.getvalue()
+        commands.clear()
+        code_no_direct = run_publish(
+            self.repo_root,
+            ParsedArgs(subcommand="publish", run_all=False, explicit_targets=[], bazel_flags=[]),
+            runner=fake_runner,
         )
+        self.assertEqual(code_no_direct, 0)
+        self.assertEqual(commands, [])
 
         mock_diff.return_value = BazelDiffResult(
             direct_targets=["//src/infra/docker:image"],
@@ -976,19 +840,14 @@ class CliDispatchTest(unittest.TestCase):
             is_global=False,
         )
         mock_query.return_value = []
-        out = io.StringIO()
-        with redirect_stdout(out):
-            code_no_publish = run_publish(
-                self.repo_root,
-                ParsedArgs(
-                    subcommand="publish", run_all=False, explicit_targets=[], bazel_flags=[]
-                ),
-                runner=fake_runner,
-            )
-        self.assertEqual(code_no_publish, 0)
-        self.assertIn(
-            "No changed image targets detected. All targets are up to date.", out.getvalue()
+        commands.clear()
+        code_no_publish = run_publish(
+            self.repo_root,
+            ParsedArgs(subcommand="publish", run_all=False, explicit_targets=[], bazel_flags=[]),
+            runner=fake_runner,
         )
+        self.assertEqual(code_no_publish, 0)
+        self.assertEqual(commands, [])
 
     @mock.patch("src.bazel.tools.diff.cli.run_publish")
     def test_dispatch_publish(self, mock_run_publish: mock.MagicMock) -> None:
@@ -1015,3 +874,7 @@ class CliDispatchTest(unittest.TestCase):
         code = main(["cli.py", "test", "--all"])
         self.assertEqual(code, 0)
         mock_dispatch.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -211,13 +211,6 @@ class GateDiffFilteringTest(unittest.TestCase):
                 self.assertIn("//src/bazel/checks:dups", triggered)
         self.assertEqual(filter_gates(gates, ["docs/readme.md"]), [])
 
-    def test_go_source_triggers_cyclo_gate(self) -> None:
-        gates = ["//src/bazel/checks:cyclo", "//src/bazel/checks:kubescape"]
-        triggered = filter_gates(gates, ["src/pkg/service.go"])
-        self.assertIn("//src/bazel/checks:cyclo", triggered)
-        self.assertEqual(filter_gates(gates, ["src/app/main.py"]), [])
-        self.assertEqual(filter_gates(gates, ["package.json"]), [])
-
     def test_core_file_change_triggers_all_gates(self) -> None:
         for core_file in CORE_FILES:
             with self.subTest(core_file=core_file):
