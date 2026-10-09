@@ -33,7 +33,6 @@ CONCEPT_ICONS = frozenset({
     "person",
     "pvc",
     "terminal",
-    "vpa",
     # keep-sorted end
 })
 
@@ -44,12 +43,13 @@ EDGE = "#c9bfa6"
 # Size in pixels when a page shows the logo without sizing it.
 DISPLAY_SIZE = 320
 CENTRE = 500.0
-OUTER_RADIUS = 438.0
-INNER_RADIUS = 346.0
+OUTER_RADIUS = 446.0
+MIDDLE_RADIUS = 372.0
+INNER_RADIUS = 298.0
 MAX_ICON_SIZE = 62.0
 # Share of the distance between neighbouring icon centres that one icon fills.
-ICON_FILL = 0.71
-RULE_GAP = 24.0
+ICON_FILL = 0.74
+RULE_GAP = 22.0
 WORDMARK_FILL = 0.78
 # Below this mean saturation an icon counts as grey and joins the end of the ring.
 GREY_LIMIT = 0.12
@@ -241,8 +241,8 @@ def _wordmark(svg: str, rule_radius: float) -> str:
 def emblem(icons: dict[str, str], wordmark: str) -> str:
     """Return the logo for the given icons, keyed by tool name."""
     ordered = sorted(icons.items(), key=lambda item: (ring_position(item[1]), item[0]))
-    # Every other icon drops to the inner ring, so both rings walk the colour wheel.
-    outer, inner = ordered[0::2], ordered[1::2]
+    # Every third icon drops to the next ring, so all three rings walk the colour wheel.
+    outer, middle, inner = ordered[0::3], ordered[1::3], ordered[2::3]
     size = min(MAX_ICON_SIZE, ICON_FILL * 2 * math.pi * INNER_RADIUS / max(len(inner), 1))
     rule_radius = INNER_RADIUS - size / 2 - RULE_GAP
     parts = [
@@ -251,8 +251,9 @@ def emblem(icons: dict[str, str], wordmark: str) -> str:
         f' width="{DISPLAY_SIZE}" height="{DISPLAY_SIZE}" viewBox="0 0 1000 1000">',
         "<title>OpenPlex</title>",
         f'<circle cx="500" cy="500" r="496" fill="{PAPER}" stroke="{EDGE}" stroke-width="4"/>',
-        *_ring(outer, OUTER_RADIUS, size, 0),
-        *_ring(inner, INNER_RADIUS, size, 0.5),
+        *_ring(outer, OUTER_RADIUS, size, 0.0),
+        *_ring(middle, MIDDLE_RADIUS, size, 0.5),
+        *_ring(inner, INNER_RADIUS, size, 0.0),
         f'<circle cx="500" cy="500" r="{rule_radius:.2f}" fill="none" stroke="{INK}" stroke-width="10"/>',
         _wordmark(wordmark, rule_radius),
         "</svg>",
