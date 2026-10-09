@@ -31,6 +31,13 @@ resource "aws_kms_key" "secrets" {
   enable_key_rotation     = true
 }
 
+resource "aws_kms_alias" "secrets" {
+  count = var.enable_kms_secrets_encryption ? 1 : 0
+
+  name          = "alias/${var.kms_alias_prefix}${module.interface.names.cluster}-secrets"
+  target_key_id = aws_kms_key.secrets[0].key_id
+}
+
 resource "aws_kms_key" "cloudwatch" {
   count = var.enable_control_plane_logging ? 1 : 0
 
@@ -69,6 +76,13 @@ resource "aws_kms_key" "cloudwatch" {
   })
 }
 
+resource "aws_kms_alias" "cloudwatch" {
+  count = var.enable_control_plane_logging ? 1 : 0
+
+  name          = "alias/${var.kms_alias_prefix}${module.interface.names.cluster}-cloudwatch"
+  target_key_id = aws_kms_key.cloudwatch[0].key_id
+}
+
 resource "aws_cloudwatch_log_group" "cluster" {
   count = var.enable_control_plane_logging ? 1 : 0
 
@@ -78,7 +92,8 @@ resource "aws_cloudwatch_log_group" "cluster" {
 }
 
 resource "aws_iam_role" "cluster" {
-  name = "${module.interface.names.cluster}-cluster"
+  name                 = "${var.iam_name_prefix}${module.interface.names.cluster}-cluster"
+  permissions_boundary = var.iam_permissions_boundary
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -100,7 +115,8 @@ resource "aws_iam_role_policy_attachment" "cluster" {
 }
 
 resource "aws_iam_role" "nodes" {
-  name = "${module.interface.names.cluster}-nodes"
+  name                 = "${var.iam_name_prefix}${module.interface.names.cluster}-nodes"
+  permissions_boundary = var.iam_permissions_boundary
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -129,6 +145,35 @@ resource "aws_iam_role_policy_attachment" "nodes_cni" {
 resource "aws_iam_role_policy_attachment" "nodes_registry" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
   role       = aws_iam_role.nodes.name
+}
+
+# nosemgrep: repository.security.eks-node-role-disallowed-policy
+resource "aws_iam_role_policy" "nodes_cni_cloudwatch" {
+  name = "${var.iam_name_prefix}${module.interface.names.cluster}-nodes-cni-cloudwatch"
+  role = aws_iam_role.nodes.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:DescribeLogGroups"]
+        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ]
+        Resource = [
+          "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${module.interface.names.cluster}/cluster",
+          "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/${module.interface.names.cluster}/cluster:log-stream:aws-network-policy-agent-audit-*",
+        ]
+      },
+    ]
+  })
 }
 
 resource "aws_eks_cluster" "this" {
@@ -195,6 +240,11 @@ resource "aws_eks_addon" "vpc_cni" {
   # subnets stay small and the per-node pod limit is set by kubelet maxPods instead of the ENI address count.
   configuration_values = local.pod_custom_networking ? jsonencode({
     enableNetworkPolicy = var.enable_network_policy ? "true" : "false"
+    nodeAgent = {
+      enablePolicyEventLogs = "true"
+      enableCloudWatchLogs  = "true"
+      logLevel              = "info"
+    }
     env = {
       AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG = "true"
       ENI_CONFIG_LABEL_DEF               = "topology.kubernetes.io/zone"
@@ -213,6 +263,11 @@ resource "aws_eks_addon" "vpc_cni" {
     }
     }) : jsonencode({
     enableNetworkPolicy = var.enable_network_policy ? "true" : "false"
+    nodeAgent = {
+      enablePolicyEventLogs = "true"
+      enableCloudWatchLogs  = "true"
+      logLevel              = "info"
+    }
   })
 
   # Switching networking modes waits for aws-node to roll across every node; the provider default of 20m aborts mid-roll.
@@ -223,6 +278,7 @@ resource "aws_eks_addon" "vpc_cni" {
   depends_on = [
     aws_eks_cluster.this,
     aws_iam_role_policy_attachment.nodes_cni,
+    aws_iam_role_policy.nodes_cni_cloudwatch,
   ]
 }
 
@@ -238,10 +294,19 @@ data "aws_subnet" "pod" {
 resource "aws_launch_template" "system" {
   name_prefix = "${aws_eks_cluster.this.name}-system-"
 
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      encrypted   = true
+      volume_type = "gp3"
+    }
+  }
+
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 2
+    http_put_response_hop_limit = 1
   }
 
   # Managed node groups merge this nodeadm NodeConfig into their own bootstrap; prefix delegation lifts the ENI limit.
@@ -305,6 +370,7 @@ resource "aws_eks_node_group" "system" {
     aws_iam_role_policy_attachment.nodes_worker,
     aws_iam_role_policy_attachment.nodes_cni,
     aws_iam_role_policy_attachment.nodes_registry,
+    aws_iam_role_policy.nodes_cni_cloudwatch,
     # Nodes must boot after the CNI networking mode they will use is configured.
     aws_eks_addon.vpc_cni,
   ]
@@ -373,15 +439,64 @@ resource "aws_eks_access_entry" "nodes" {
   type          = "EC2_LINUX"
 }
 
+resource "aws_eks_access_entry" "atlantis_plan" {
+  count = var.enable_access_config && length(trimspace(var.atlantis_plan_role_arn)) > 0 ? 1 : 0
+
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = var.atlantis_plan_role_arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "atlantis_plan" {
+  count = var.enable_access_config && length(trimspace(var.atlantis_plan_role_arn)) > 0 ? 1 : 0
+
+  cluster_name  = aws_eks_cluster.this.name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSAdminViewPolicy"
+  principal_arn = var.atlantis_plan_role_arn
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [
+    aws_eks_access_entry.atlantis_plan,
+  ]
+}
+
+resource "aws_eks_access_entry" "atlantis_apply" {
+  count = var.enable_access_config && length(trimspace(var.atlantis_apply_role_arn)) > 0 ? 1 : 0
+
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = var.atlantis_apply_role_arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "atlantis_apply" {
+  count = var.enable_access_config && length(trimspace(var.atlantis_apply_role_arn)) > 0 ? 1 : 0
+
+  cluster_name  = aws_eks_cluster.this.name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = var.atlantis_apply_role_arn
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [
+    aws_eks_access_entry.atlantis_apply,
+  ]
+}
+
 resource "aws_iam_instance_profile" "karpenter" {
-  name = "KarpenterNodeInstanceProfile-${module.interface.names.cluster}"
+  name = "${var.iam_name_prefix}${module.interface.names.cluster}-karpenter-node"
   role = aws_iam_role.nodes.name
 }
 
 resource "aws_iam_role" "ebs_csi" {
   count = var.enable_addons && var.enable_ebs_csi ? 1 : 0
 
-  name = "EBSCSI-${module.interface.names.cluster}"
+  name                 = "${var.iam_name_prefix}${module.interface.names.cluster}-ebs-csi"
+  permissions_boundary = var.iam_permissions_boundary
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -423,6 +538,22 @@ resource "aws_eks_addon" "ebs_csi" {
   addon_name                  = "aws-ebs-csi-driver"
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
+
+  configuration_values = jsonencode({
+    controller = merge(
+      {
+        volumeModificationFeature = {
+          enabled = true
+        }
+      },
+      length(var.tags) > 0 ? {
+        extraVolumeTags = var.tags
+      } : {},
+    )
+    node = {
+      metadataSources = "kubernetes"
+    }
+  })
 
   depends_on = [
     aws_eks_node_group.system,

@@ -126,3 +126,54 @@ variable "karpenter_interruption_retention_seconds" {
   type        = number
   default     = 300
 }
+
+variable "iam_name_prefix" {
+  description = "Prefix applied to IAM role and instance profile names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.iam_name_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.iam_name_prefix))
+    error_message = "iam_name_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "kms_alias_prefix" {
+  description = "Prefix applied to KMS key alias names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.kms_alias_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.kms_alias_prefix))
+    error_message = "kms_alias_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "iam_permissions_boundary" {
+  description = "ARN of the permissions boundary policy applied to IAM roles."
+  type        = string
+  default     = null
+}
+
+variable "tags" {
+  description = "Tags applied to cluster resources and controller add-ons."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for k in keys(var.tags) : can(regex("^[a-z0-9]+(-[a-z0-9]+)*$", k))])
+    error_message = "All tag keys must be lowercase kebab-case."
+  }
+}
+
+variable "atlantis_plan_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during plan operations for EKS access."
+  type        = string
+  default     = ""
+}
+
+variable "atlantis_apply_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during apply operations for EKS access."
+  type        = string
+  default     = ""
+}
