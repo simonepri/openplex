@@ -129,7 +129,10 @@ spec:
       ports:
         - {protocol: TCP, port: 8443}
     - to:
+        - ipBlock: {cidr: 10.0.0.0/8}
+        - ipBlock: {cidr: 172.16.0.0/12}
         - ipBlock: {cidr: 172.31.0.11/32}
+        - ipBlock: {cidr: 192.168.0.0/16}
       ports:
         - {protocol: TCP, port: 443}
     - to:

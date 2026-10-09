@@ -105,6 +105,8 @@ spec:
             - --skip-auth-strip-headers=true
             - --skip-provider-button=true
             - --standard-logging=true
+            # Allocation queries for the home page take about a minute; the 30s default cut them off.
+            - --upstream-timeout=180s
             - --upstream=http://opencost:9090
             - --use-system-trust-store=true
             - --provider-ca-file=/etc/ssl/local-ca/ca.crt

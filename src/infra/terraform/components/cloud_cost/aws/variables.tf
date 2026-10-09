@@ -5,6 +5,39 @@ variable "cluster_name" {
   type        = string
 }
 
+variable "account_id" {
+  description = "AWS account ID for globally unique bucket naming."
+  type        = string
+}
+
+variable "iam_name_prefix" {
+  description = "Prefix for IAM resource names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.iam_name_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.iam_name_prefix))
+    error_message = "The iam_name_prefix must be at most 16 characters and contain only lowercase letters, digits, and hyphens."
+  }
+}
+
+variable "kms_alias_prefix" {
+  description = "Prefix applied to KMS key alias names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.kms_alias_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.kms_alias_prefix))
+    error_message = "kms_alias_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "iam_permissions_boundary" {
+  description = "ARN of the permissions boundary managed policy to attach to IAM roles."
+  type        = string
+  default     = null
+}
+
 variable "cluster_oidc_issuer_url" {
   description = "OIDC issuer URL of the cluster."
   type        = string
