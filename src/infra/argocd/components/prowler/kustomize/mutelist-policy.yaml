@@ -1,0 +1,66 @@
+# Audited architectural risk acceptances and compensating controls for Prowler CSPM (CIS AWS Foundations Benchmark v3.0).
+
+Mutelist:
+  Accounts:
+    "*":
+      Checks:
+        # S3 MFA Delete cannot be managed via Terraform/IaC and blocks automated CI/CD and lifecycle expiration. S3 Object Lock, KMS encryption, versioning, and bucket policies enforce immutability.
+        "s3_bucket_no_mfa_delete":
+          Regions: ["*"]
+          Resources: ["*"]
+
+        # Security auditing and detection alerting are centralized in SigNoz (ClickHouse) via the cloud-telemetry collector rather than legacy AWS CloudWatch metric filters and SNS topics.
+        "cloudwatch_.*":
+          Regions: ["*"]
+          Resources: ["*"]
+
+        # AWS VPC Network ACLs are stateless subnet filters; wide open rules avoid breaking outbound ephemeral NAT return traffic. Ingress security is enforced statefully by Security Groups and Cilium NetworkPolicies.
+        "ec2_networkacl_.*":
+          Regions: ["*"]
+          Resources: ["*"]
+
+        # Workload infrastructure is restricted to us-west-2. Non-primary regions are restricted by AWS Organization SCPs to eliminate redundant per-recorder costs.
+        "config_.*":
+          Regions: ["*"]
+          Resources: ["*"]
+        "config_recorder_all_regions_enabled":
+          Regions: ["*"]
+          Resources: ["*"]
+
+        # Continuous CSPM and vulnerability auditing are handled by in-cluster Prowler and Trivy rather than paid multi-region AWS Security Hub subscriptions.
+        "securityhub_.*":
+          Regions: ["*"]
+          Resources: ["*"]
+        "securityhub_enabled":
+          Regions: ["*"]
+          Resources: ["*"]
+
+        # VPC peering routes entire VPC CIDR for cross-cluster Kubernetes mesh transport; least-privilege isolation is enforced statefully via Security Groups and Cilium ClusterMesh policies.
+        "vpc_peering_routing_tables_with_least_privilege":
+          Regions: ["*"]
+          Resources: ["*"]
+
+        # Account-wide S3 object logging causes severe cost spikes on high-throughput cache and telemetry buckets; selective S3 data events are targeted at sensitive state and backup buckets.
+        "cloudtrail_s3_dataevents_.*":
+          Regions: ["*"]
+          Resources: ["*"]
+
+        # Dedicated CloudTrail audit bucket is immutable via S3 Object Lock and KMS encryption. OpenTofu provisions dedicated S3 server access logging.
+        "cloudtrail_logs_s3_bucket_access_logging_enabled":
+          Regions: ["*"]
+          Resources: ["*"]
+
+        # User ctrl-aws-usw2-renovate-ecr-read is an automated machine user strictly scoped to read-only ECR authorization and batch image enumeration.
+        "iam_policy_attached_only_to_group_or_roles":
+          Regions: ["*"]
+          Resources: [".*ctrl-aws-usw2-renovate-ecr-read.*"]
+
+        # Managed AdministratorAccess policy is required for research platform bootstrap and cluster management roles.
+        "iam_aws_attached_policy_no_administrative_privileges":
+          Regions: ["*"]
+          Resources: ["*"]
+
+        # Legacy tailscale subnet router root volume provisioned prior to default account EBS encryption.
+        "ec2_ebs_volume_encryption":
+          Regions: ["us-west-2"]
+          Resources: ["vol-0364947748749b495"]

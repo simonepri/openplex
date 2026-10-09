@@ -38,20 +38,50 @@ spec:
           automountServiceAccountToken: false
           securityContext:
             runAsNonRoot: true
-            runAsUser: 10001
-            runAsGroup: 10001
-            fsGroup: 10001
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
             seccompProfile: {type: RuntimeDefault}
           containers:
             - name: prowler
-              image: docker.io/toniblyx/prowler:v4-latest@sha256:c56d3abe529570796ccf20b9fe61d621d0f6821071e9d34b46c96e9d5792a63a
+              image: docker.io/toniblyx/prowler:5.44.0@sha256:9dbcc3c9abd71ec6d37610e6a5a2c45279bc6488caf8aaa948a9e8e368622d30
+              env:
+                # Prowler 5 installs its CLI in a virtualenv that the image PATH omits.
+                - name: PATH
+                  value: /home/prowler/.venv/bin:/usr/local/bin:/usr/bin:/bin
               command:
-                - prowler
+                - /bin/sh
+                - -c
+                - |
+                  prowler "$@"
+                  rc=$?
+                  if [ $rc -ne 0 ]; then
+                    exit $rc
+                  fi
+                  python3 -c '
+                  import json, os
+
+                  output_dir = os.environ.get("PROWLER_OUTPUT_DIR", "/home/prowler/output")
+                  for root, _, files in os.walk(output_dir):
+                      for f in sorted(files):
+                          if f.endswith(".ocsf.json"):
+                              path = os.path.join(root, f)
+                              with open(path, "r", encoding="utf-8") as fp:
+                                  data = json.load(fp)
+                              items = data if isinstance(data, list) else [data]
+                              for item in items:
+                                  print(json.dumps(item))
+                  '
+                - --
+              args:
                 - aws
                 - --compliance
                 - cis_3.0_aws
                 - -M
-                - json
+                - json-ocsf
+                - --ignore-exit-code-3
+                - --mutelist-file
+                - /etc/prowler/mutelist.yaml
               resources:
                 requests:
                   cpu: 100m
@@ -69,8 +99,14 @@ spec:
                   mountPath: /tmp
                 - name: output
                   mountPath: /home/prowler/output
+                - name: mutelist
+                  mountPath: /etc/prowler
+                  readOnly: true
           volumes:
             - name: tmp
               emptyDir: {sizeLimit: 256Mi}
             - name: output
               emptyDir: {sizeLimit: 256Mi}
+            - name: mutelist
+              configMap:
+                name: prowler-mutelist

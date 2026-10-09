@@ -10,3 +10,9 @@ resources:
   - network-policy.yaml
   - service-account.yaml
   # keep-sorted end
+
+configMapGenerator:
+  - name: prowler-mutelist
+    files:
+      - mutelist.yaml=mutelist-policy.yaml
+
