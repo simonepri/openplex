@@ -19,30 +19,39 @@ spec:
     jsonSpec: |-
       {
         "schemaVersion": "v6",
-        "image": "",
+        "image": "/assets/Logos/nvidia-dcgm",
         "name": "team-workloads",
         "tags": [
-          {"key": "category", "value": "compute"},
-          {"key": "category", "value": "workloads"}
+          {
+            "key": "category",
+            "value": "compute"
+          },
+          {
+            "key": "category",
+            "value": "workloads"
+          }
         ],
         "spec": {
           "display": {
             "name": "Team Workloads",
-            "description": "Cluster compute capacity, GPU model pools (H200, L4), active GPU/CPU/RAM utilization vs total capacity, container requests and limits, and Kueue queue states."
+            "description": "Cluster compute capacity, GPU allocations by availability class, Kueue workload queues, GPU efficiency, and Coder developer workspaces."
           },
           "variables": [
             {
               "kind": "ListVariable",
               "spec": {
-                "name": "cell",
-                "display": {"name": "Cell", "description": "Worker cell or cluster"},
+                "name": "cluster",
+                "display": {
+                  "name": "Cluster",
+                  "description": "Filter by Kubernetes cluster name"
+                },
                 "allowAllValue": true,
                 "allowMultiple": true,
                 "sort": "alphabetical-asc",
                 "plugin": {
                   "kind": "signoz/QueryVariable",
                   "spec": {
-                    "queryValue": "SELECT DISTINCT JSONExtractString(labels, 'cluster') AS cluster FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name = 'DCGM_FI_DEV_GPU_UTIL' AND cluster != '' ORDER BY cluster"
+                    "queryValue": "SELECT DISTINCT JSONExtractString(labels, 'k8s.cluster.name') AS cluster FROM signoz_metrics.distributed_time_series_v4_1day WHERE metric_name = 'kube_pod_labels' AND cluster != '' ORDER BY cluster"
                   }
                 }
               }
@@ -51,384 +60,98 @@ spec:
               "kind": "ListVariable",
               "spec": {
                 "name": "team",
-                "display": {"name": "Team", "description": "Team"},
+                "display": {
+                  "name": "Team",
+                  "description": "Filter by workload team"
+                },
                 "allowAllValue": true,
                 "allowMultiple": true,
                 "sort": "alphabetical-asc",
                 "plugin": {
                   "kind": "signoz/QueryVariable",
                   "spec": {
-                    "queryValue": "SELECT DISTINCT JSONExtractString(labels, 'label_team') AS team FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name = 'kube_pod_labels' AND team != '' ORDER BY team"
+                    "queryValue": "SELECT DISTINCT JSONExtractString(labels, 'label_team') AS team FROM signoz_metrics.distributed_time_series_v4_1day WHERE metric_name = 'kube_pod_labels' AND team != '' ORDER BY team"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "ListVariable",
+              "spec": {
+                "name": "class",
+                "display": {
+                  "name": "Class",
+                  "description": "Filter by availability class (ha, ma, wa, be)"
+                },
+                "defaultValue": [
+                  "ha",
+                  "ma",
+                  "wa",
+                  "be"
+                ],
+                "allowAllValue": true,
+                "allowMultiple": true,
+                "sort": "none",
+                "plugin": {
+                  "kind": "signoz/CustomVariable",
+                  "spec": {
+                    "customValue": "ha,ma,wa,be"
                   }
                 }
               }
             }
           ],
           "panels": {
-            "stat-gpu-usage-out-of-total": {
-              "kind": "Panel",
-              "spec": {
-                "display": {"name": "GPU Allocation (Assigned / Total)", "description": "Total GPUs assigned to running workloads out of total cluster allocatable GPUs"},
-                "plugin": {
-                  "kind": "signoz/NumberPanel",
-                  "spec": {
-                    "visualization": {"timePreference": "global_time"},
-                    "formatting": {"unit": "none", "decimalPrecision": "0"},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "sum(kube_pod_container_resource_requests{resource=\"nvidia.com/gpu\"}) or vector(0)"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "stat-vram-usage-out-of-total": {
-              "kind": "Panel",
-              "spec": {
-                "display": {"name": "VRAM In Use (Used / Total MiB)", "description": "Total active GPU framebuffer memory used across physical accelerators"},
-                "plugin": {
-                  "kind": "signoz/NumberPanel",
-                  "spec": {
-                    "visualization": {"timePreference": "global_time"},
-                    "formatting": {"unit": "megabytes", "decimalPrecision": "1"},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "sum(DCGM_FI_DEV_FB_USED) or vector(0)"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "stat-cpu-usage-out-of-total": {
-              "kind": "Panel",
-              "spec": {
-                "display": {"name": "CPU Usage (Cores Used / Allocatable)", "description": "Active container CPU usage rate in cores across cluster workloads"},
-                "plugin": {
-                  "kind": "signoz/NumberPanel",
-                  "spec": {
-                    "visualization": {"timePreference": "global_time"},
-                    "formatting": {"unit": "none", "decimalPrecision": "1"},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "sum(rate(container_cpu_usage_seconds_total{container!=\"\",container!=\"POD\"}[5m])) or vector(0)"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "stat-ram-usage-out-of-total": {
-              "kind": "Panel",
-              "spec": {
-                "display": {"name": "RAM Usage (Working Set Used / Allocatable)", "description": "Active container working set memory consumption across cluster workloads"},
-                "plugin": {
-                  "kind": "signoz/NumberPanel",
-                  "spec": {
-                    "visualization": {"timePreference": "global_time"},
-                    "formatting": {"unit": "By", "decimalPrecision": "2"},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "sum(container_memory_working_set_bytes{container!=\"\",container!=\"POD\"}) or vector(0)"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "stat-kueue-workloads": {
-              "kind": "Panel",
-              "spec": {
-                "display": {"name": "Kueue Pending Workloads", "description": "Active queued backlogs waiting for quota or accelerator capacity"},
-                "plugin": {
-                  "kind": "signoz/NumberPanel",
-                  "spec": {
-                    "visualization": {"timePreference": "global_time"},
-                    "formatting": {"unit": "none", "decimalPrecision": "0"},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "sum(kueue_pending_workloads) or vector(0)"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "stat-total-gpus": {
-              "kind": "Panel",
-              "spec": {
-                "display": {"name": "Total Physical GPUs", "description": "Total allocatable GPU accelerators detected across all nodes"},
-                "plugin": {
-                  "kind": "signoz/NumberPanel",
-                  "spec": {
-                    "visualization": {"timePreference": "global_time"},
-                    "formatting": {"unit": "none", "decimalPrecision": "0"},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "count(DCGM_FI_DEV_GPU_UTIL) or sum(kube_node_status_allocatable{resource=\"nvidia.com/gpu\"}) or vector(0)"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "gpu-utilization-over-time": {
+            "dash-capacity-intro": {
               "kind": "Panel",
               "spec": {
                 "display": {
-                  "name": "Average GPU Compute Utilization (%)",
-                  "description": "Active compute and tensor core utilization percentage grouped by model"
+                  "name": "Capacity & cluster headroom",
+                  "description": "Capacity overview and headline numbers"
                 },
                 "plugin": {
-                  "kind": "signoz/TimeSeriesPanel",
+                  "kind": "signoz/TextPanel",
                   "spec": {
-                    "visualization": {"timePreference": "global_time", "fillSpans": false},
-                    "formatting": {"unit": "percent", "decimalPrecision": "1"},
-                    "chartAppearance": {
-                      "lineInterpolation": "linear",
-                      "showPoints": false,
-                      "lineStyle": "solid",
-                      "fillMode": "none",
-                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    "mode": "markdown",
+                    "text": "Allocatable GPU accelerators, active assignments by availability class, available headroom, queued demand, and idle GPU capacity.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
                     },
-                    "axes": {"softMin": 0, "softMax": 100, "isLogScale": false},
-                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "avg by (modelName) (DCGM_FI_DEV_GPU_UTIL)"
-                        }
-                      }
+                    "headerOptions": {
+                      "hide": true
                     }
                   }
-                ]
+                },
+                "queries": []
               }
             },
-            "vram-utilization-over-time": {
+            "dash-capacity-gpus-allocatable": {
               "kind": "Panel",
               "spec": {
                 "display": {
-                  "name": "VRAM Utilization (Used vs Total Capacity)",
-                  "description": "GPU framebuffer memory used vs total physical capacity in MiB"
+                  "name": "GPUs allocatable",
+                  "description": "Total allocatable GPU accelerators detected across cluster nodes"
                 },
                 "plugin": {
-                  "kind": "signoz/TimeSeriesPanel",
+                  "kind": "signoz/NumberPanel",
                   "spec": {
-                    "visualization": {"timePreference": "global_time", "fillSpans": false},
-                    "formatting": {"unit": "megabytes", "decimalPrecision": "1"},
-                    "chartAppearance": {
-                      "lineInterpolation": "linear",
-                      "showPoints": false,
-                      "lineStyle": "solid",
-                      "fillMode": "none",
-                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
+                    "visualization": {
+                      "timePreference": "global_time"
                     },
-                    "axes": {"softMin": 0, "softMax": null, "isLogScale": false},
-                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "label_replace(sum(DCGM_FI_DEV_FB_USED), \"series\", \"Used\", \"\", \"\") or label_replace(sum(DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE), \"series\", \"Total Capacity\", \"\", \"\")",
-                          "legend": "{{series}}"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "cpu-utilization-over-time": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "CPU Utilization (Used Cores vs Total Allocatable)",
-                  "description": "Active container CPU usage rate in cores vs total cluster node allocatable capacity"
-                },
-                "plugin": {
-                  "kind": "signoz/TimeSeriesPanel",
-                  "spec": {
-                    "visualization": {"timePreference": "global_time", "fillSpans": false},
-                    "formatting": {"unit": "none", "decimalPrecision": "1"},
-                    "chartAppearance": {
-                      "lineInterpolation": "linear",
-                      "showPoints": false,
-                      "lineStyle": "solid",
-                      "fillMode": "none",
-                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
-                    },
-                    "axes": {"softMin": 0, "softMax": null, "isLogScale": false},
-                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "label_replace(sum(rate(container_cpu_usage_seconds_total{container!=\"\",container!=\"POD\"}[5m])), \"series\", \"Used Cores\", \"\", \"\") or label_replace(sum(kube_node_status_allocatable{resource=\"cpu\"}), \"series\", \"Total Allocatable Cores\", \"\", \"\")",
-                          "legend": "{{series}}"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "ram-utilization-over-time": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "RAM Utilization (Working Set vs Total Allocatable)",
-                  "description": "Active container working set memory vs total cluster node allocatable capacity"
-                },
-                "plugin": {
-                  "kind": "signoz/TimeSeriesPanel",
-                  "spec": {
-                    "visualization": {"timePreference": "global_time", "fillSpans": false},
-                    "formatting": {"unit": "By", "decimalPrecision": "2"},
-                    "chartAppearance": {
-                      "lineInterpolation": "linear",
-                      "showPoints": false,
-                      "lineStyle": "solid",
-                      "fillMode": "none",
-                      "spanGaps": {"fillOnlyBelow": false, "fillLessThan": ""}
-                    },
-                    "axes": {"softMin": 0, "softMax": null, "isLogScale": false},
-                    "legend": {"position": "bottom", "mode": "list", "customColors": null},
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "label_replace(sum(container_memory_working_set_bytes{container!=\"\",container!=\"POD\"}), \"series\", \"Working Set Used\", \"\", \"\") or label_replace(sum(kube_node_status_allocatable{resource=\"memory\"}), \"series\", \"Total Allocatable\", \"\", \"\")",
-                          "legend": "{{series}}"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "workloads-table": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Active Workloads & Resource Utilization",
-                  "description": "Per-pod breakdown of assigned GPUs, compute utilization, VRAM usage, and CPU/RAM requests vs limits"
-                },
-                "plugin": {
-                  "kind": "signoz/TablePanel",
-                  "spec": {
                     "formatting": {
-                      "columnUnits": {
-                        "gpus_requested": "none",
-                        "avg_gpu_util_pct": "percent",
-                        "vram_used_mib": "megabytes",
-                        "cpu_req_cores": "none",
-                        "cpu_limit_cores": "none",
-                        "mem_req_gib": "decgabytes",
-                        "mem_limit_gib": "decgabytes"
-                      },
-                      "decimalPrecision": "2"
+                      "unit": "none",
+                      "decimalPrecision": "0"
                     },
-                    "thresholds": []
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#16263d",
+                        "format": "background"
+                      }
+                    ]
                   }
                 },
                 "queries": [
@@ -440,7 +163,940 @@ spec:
                         "kind": "signoz/ClickHouseSQL",
                         "spec": {
                           "name": "A",
-                          "query": "SELECT JSONExtractString(ts.labels, 'namespace') AS namespace, coalesce(nullIf(JSONExtractString(ts.labels, 'label_app_kubernetes_io_name'), ''), JSONExtractString(ts.labels, 'pod')) AS workload, JSONExtractString(ts.labels, 'label_team') AS team, round(maxIf(s.value, s.metric_name = 'kube_pod_container_resource_requests' AND JSONExtractString(ts.labels, 'resource') = 'nvidia.com/gpu'), 0) AS gpus_requested, if(isNaN(round(avgIf(s.value, s.metric_name = 'DCGM_FI_DEV_GPU_UTIL'), 1)), 0, round(avgIf(s.value, s.metric_name = 'DCGM_FI_DEV_GPU_UTIL'), 1)) AS avg_gpu_util_pct, round(sumIf(s.value, s.metric_name = 'DCGM_FI_DEV_FB_USED'), 1) AS vram_used_mib, round(sumIf(s.value, s.metric_name = 'kube_pod_container_resource_requests' AND JSONExtractString(ts.labels, 'resource') = 'cpu'), 2) AS cpu_req_cores, round(sumIf(s.value, s.metric_name = 'kube_pod_container_resource_limits' AND JSONExtractString(ts.labels, 'resource') = 'cpu'), 2) AS cpu_limit_cores, round(sumIf(s.value, s.metric_name = 'kube_pod_container_resource_requests' AND JSONExtractString(ts.labels, 'resource') = 'memory') / (1024 * 1024 * 1024), 2) AS mem_req_gib, round(sumIf(s.value, s.metric_name = 'kube_pod_container_resource_limits' AND JSONExtractString(ts.labels, 'resource') = 'memory') / (1024 * 1024 * 1024), 2) AS mem_limit_gib FROM signoz_metrics.distributed_samples_v4 s GLOBAL JOIN (SELECT fingerprint, any(labels) AS labels FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name IN ('kube_pod_container_resource_requests', 'kube_pod_container_resource_limits', 'DCGM_FI_DEV_GPU_UTIL', 'DCGM_FI_DEV_FB_USED') GROUP BY fingerprint) ts ON s.fingerprint = ts.fingerprint WHERE s.unix_milli >= toUnixTimestamp64Milli(now64() - INTERVAL 15 MINUTE) AND s.metric_name IN ('kube_pod_container_resource_requests', 'kube_pod_container_resource_limits', 'DCGM_FI_DEV_GPU_UTIL', 'DCGM_FI_DEV_FB_USED') GROUP BY namespace, workload, team ORDER BY gpus_requested DESC, avg_gpu_util_pct DESC LIMIT 100"
+                          "query": "SELECT toUInt64(coalesce(sum(v), 0)) AS value\nFROM (\n  SELECT fingerprint, argMax(value, unix_milli) AS v\n  FROM signoz_metrics.distributed_samples_v4\n  WHERE metric_name = 'kube_node_status_allocatable'\n    AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n  GROUP BY fingerprint\n) s\nGLOBAL JOIN (\n  SELECT fingerprint\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_node_status_allocatable'\n    AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n  GROUP BY fingerprint\n) ts ON s.fingerprint = ts.fingerprint"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-capacity-assigned-hama": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Assigned ha+ma",
+                  "description": "GPUs assigned to active team workloads with high-availability or medium-availability classes"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH active_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN ('ha', 'ma')\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND (JSONExtractString(labels, 'namespace'), JSONExtractString(labels, 'pod'), JSONExtractString(labels, 'k8s.cluster.name')) GLOBAL NOT IN (\n      SELECT\n        JSONExtractString(ts.lbl, 'namespace') AS namespace,\n        JSONExtractString(ts.lbl, 'pod') AS pod,\n        JSONExtractString(ts.lbl, 'cluster') AS cluster\n      FROM signoz_metrics.distributed_samples_v4 s\n      GLOBAL JOIN (\n        SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n        FROM signoz_metrics.distributed_time_series_v4_1day\n        WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n          AND metric_name = 'kube_pod_status_phase'\n          AND JSONExtractString(labels, 'phase') NOT IN ('Running', 'Pending')\n          AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n        GROUP BY fingerprint\n      ) ts ON s.fingerprint = ts.fingerprint\n      WHERE s.metric_name = 'kube_pod_status_phase'\n        AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY namespace, pod, cluster\n      HAVING argMax(s.value, s.unix_milli) = 1\n    )\n  GROUP BY namespace, pod, cluster\n),\npod_requests AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'namespace') AS namespace,\n    JSONExtractString(ts.lbl, 'pod') AS pod,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    sum(s.v) AS gpus\n  FROM (\n    SELECT fingerprint, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'kube_pod_container_resource_requests'\n      AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n    GROUP BY fingerprint\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_container_resource_requests'\n      AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GROUP BY namespace, pod, cluster\n)\nSELECT toUInt64(coalesce(sum(pr.gpus), 0)) AS value\nFROM active_pods ap\nGLOBAL INNER JOIN pod_requests pr ON ap.namespace = pr.namespace AND ap.pod = pr.pod AND ap.cluster = pr.cluster"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-capacity-assigned-wabe": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Assigned wa+be",
+                  "description": "GPUs assigned to active team workloads with workload-aware or best-effort classes"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#16263d",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH active_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN ('wa', 'be')\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND (JSONExtractString(labels, 'namespace'), JSONExtractString(labels, 'pod'), JSONExtractString(labels, 'k8s.cluster.name')) GLOBAL NOT IN (\n      SELECT\n        JSONExtractString(ts.lbl, 'namespace') AS namespace,\n        JSONExtractString(ts.lbl, 'pod') AS pod,\n        JSONExtractString(ts.lbl, 'cluster') AS cluster\n      FROM signoz_metrics.distributed_samples_v4 s\n      GLOBAL JOIN (\n        SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n        FROM signoz_metrics.distributed_time_series_v4_1day\n        WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n          AND metric_name = 'kube_pod_status_phase'\n          AND JSONExtractString(labels, 'phase') NOT IN ('Running', 'Pending')\n          AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n        GROUP BY fingerprint\n      ) ts ON s.fingerprint = ts.fingerprint\n      WHERE s.metric_name = 'kube_pod_status_phase'\n        AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY namespace, pod, cluster\n      HAVING argMax(s.value, s.unix_milli) = 1\n    )\n  GROUP BY namespace, pod, cluster\n),\npod_requests AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'namespace') AS namespace,\n    JSONExtractString(ts.lbl, 'pod') AS pod,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    sum(s.v) AS gpus\n  FROM (\n    SELECT fingerprint, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'kube_pod_container_resource_requests'\n      AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n    GROUP BY fingerprint\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_container_resource_requests'\n      AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GROUP BY namespace, pod, cluster\n)\nSELECT toUInt64(coalesce(sum(pr.gpus), 0)) AS value\nFROM active_pods ap\nGLOBAL INNER JOIN pod_requests pr ON ap.namespace = pr.namespace AND ap.pod = pr.pod AND ap.cluster = pr.cluster"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-capacity-free-now": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Free now",
+                  "description": "Immediately available allocatable GPUs not assigned to any active team workload"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 1,
+                        "operator": "below",
+                        "unit": "",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      },
+                      {
+                        "value": 1,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH alloc AS (\n  SELECT toInt64(coalesce(sum(v), 0)) AS alloc_gpus\n  FROM (\n    SELECT fingerprint, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'kube_node_status_allocatable'\n      AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n    GROUP BY fingerprint\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_node_status_allocatable'\n      AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n),\nactive_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND (JSONExtractString(labels, 'namespace'), JSONExtractString(labels, 'pod'), JSONExtractString(labels, 'k8s.cluster.name')) GLOBAL NOT IN (\n      SELECT\n        JSONExtractString(ts.lbl, 'namespace') AS namespace,\n        JSONExtractString(ts.lbl, 'pod') AS pod,\n        JSONExtractString(ts.lbl, 'cluster') AS cluster\n      FROM signoz_metrics.distributed_samples_v4 s\n      GLOBAL JOIN (\n        SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n        FROM signoz_metrics.distributed_time_series_v4_1day\n        WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n          AND metric_name = 'kube_pod_status_phase'\n          AND JSONExtractString(labels, 'phase') NOT IN ('Running', 'Pending')\n          AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n        GROUP BY fingerprint\n      ) ts ON s.fingerprint = ts.fingerprint\n      WHERE s.metric_name = 'kube_pod_status_phase'\n        AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY namespace, pod, cluster\n      HAVING argMax(s.value, s.unix_milli) = 1\n    )\n  GROUP BY namespace, pod, cluster\n),\nassigned AS (\n  SELECT toInt64(coalesce(sum(pr.gpus), 0)) AS assigned_gpus\n  FROM active_pods ap\n  GLOBAL INNER JOIN (\n    SELECT\n      JSONExtractString(ts.lbl, 'namespace') AS namespace,\n      JSONExtractString(ts.lbl, 'pod') AS pod,\n      JSONExtractString(ts.lbl, 'cluster') AS cluster,\n      sum(s.v) AS gpus\n    FROM (\n      SELECT fingerprint, argMax(value, unix_milli) AS v\n      FROM signoz_metrics.distributed_samples_v4\n      WHERE metric_name = 'kube_pod_container_resource_requests'\n        AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY fingerprint\n    ) s\n    GLOBAL JOIN (\n      SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n      FROM signoz_metrics.distributed_time_series_v4_1day\n      WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n        AND metric_name = 'kube_pod_container_resource_requests'\n        AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n        AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      GROUP BY fingerprint\n    ) ts ON s.fingerprint = ts.fingerprint\n    GROUP BY namespace, pod, cluster\n  ) pr ON ap.namespace = pr.namespace AND ap.pod = pr.pod AND ap.cluster = pr.cluster\n)\nSELECT toUInt64(greatest(0, alloc.alloc_gpus - assigned.assigned_gpus)) AS value\nFROM alloc CROSS JOIN assigned"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-capacity-free-after-preemption": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Free after wa/be preemption",
+                  "description": "GPUs available if all preemptible (wa/be) workloads are evicted (allocatable - ha/ma assigned)"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 1,
+                        "operator": "below",
+                        "unit": "",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "value": 1,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH alloc AS (\n  SELECT toInt64(coalesce(sum(v), 0)) AS alloc_gpus\n  FROM (\n    SELECT fingerprint, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'kube_node_status_allocatable'\n      AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n    GROUP BY fingerprint\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_node_status_allocatable'\n      AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n),\nactive_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN ('ha', 'ma')\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND (JSONExtractString(labels, 'namespace'), JSONExtractString(labels, 'pod'), JSONExtractString(labels, 'k8s.cluster.name')) GLOBAL NOT IN (\n      SELECT\n        JSONExtractString(ts.lbl, 'namespace') AS namespace,\n        JSONExtractString(ts.lbl, 'pod') AS pod,\n        JSONExtractString(ts.lbl, 'cluster') AS cluster\n      FROM signoz_metrics.distributed_samples_v4 s\n      GLOBAL JOIN (\n        SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n        FROM signoz_metrics.distributed_time_series_v4_1day\n        WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n          AND metric_name = 'kube_pod_status_phase'\n          AND JSONExtractString(labels, 'phase') NOT IN ('Running', 'Pending')\n          AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n        GROUP BY fingerprint\n      ) ts ON s.fingerprint = ts.fingerprint\n      WHERE s.metric_name = 'kube_pod_status_phase'\n        AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY namespace, pod, cluster\n      HAVING argMax(s.value, s.unix_milli) = 1\n    )\n  GROUP BY namespace, pod, cluster\n),\nassigned AS (\n  SELECT toInt64(coalesce(sum(pr.gpus), 0)) AS assigned_gpus\n  FROM active_pods ap\n  GLOBAL INNER JOIN (\n    SELECT\n      JSONExtractString(ts.lbl, 'namespace') AS namespace,\n      JSONExtractString(ts.lbl, 'pod') AS pod,\n      JSONExtractString(ts.lbl, 'cluster') AS cluster,\n      sum(s.v) AS gpus\n    FROM (\n      SELECT fingerprint, argMax(value, unix_milli) AS v\n      FROM signoz_metrics.distributed_samples_v4\n      WHERE metric_name = 'kube_pod_container_resource_requests'\n        AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY fingerprint\n    ) s\n    GLOBAL JOIN (\n      SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n      FROM signoz_metrics.distributed_time_series_v4_1day\n      WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n        AND metric_name = 'kube_pod_container_resource_requests'\n        AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n        AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      GROUP BY fingerprint\n    ) ts ON s.fingerprint = ts.fingerprint\n    GROUP BY namespace, pod, cluster\n  ) pr ON ap.namespace = pr.namespace AND ap.pod = pr.pod AND ap.cluster = pr.cluster\n)\nSELECT toUInt64(greatest(0, alloc.alloc_gpus - assigned.assigned_gpus)) AS value\nFROM alloc CROSS JOIN assigned"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-capacity-pending-gpus": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Pending GPUs",
+                  "description": "GPUs requested by Kueue workloads still waiting for quota, from the collector's 5-minute workload snapshot"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toUInt64(sum(gpus)) AS value\nFROM (\n  SELECT\n    argMax(body, timestamp) AS workload,\n    arrayExists(c -> JSONExtractString(c, 'type') IN ('QuotaReserved', 'Finished') AND JSONExtractString(c, 'status') = 'True', JSONExtractArrayRaw(workload, 'status', 'conditions')) AS placed,\n    arraySum(ps -> JSONExtractUInt(ps, 'count') * arraySum(c -> toUInt64OrZero(trim(BOTH '\"' FROM JSONExtractRaw(c, 'resources', 'requests', 'nvidia.com/gpu'))), JSONExtractArrayRaw(ps, 'template', 'spec', 'containers')), JSONExtractArrayRaw(workload, 'spec', 'podSets')) AS gpus\n  FROM signoz_logs.distributed_logs_v2\n  WHERE ts_bucket_start BETWEEN $end_timestamp - 2400 AND $end_timestamp\n    AND timestamp BETWEEN ($end_timestamp - 600) * 1000000000 AND $end_timestamp_nano\n    AND attributes_string['log.source'] = 'kueue-workload'\n    AND resources_string['k8s.cluster.name'] IN $cluster\n    AND attributes_string['kueue.team'] IN $team\n    AND attributes_string['kueue.queue'] IN $class\n  GROUP BY resources_string['k8s.cluster.name'], attributes_string['kueue.workload.namespace'], attributes_string['kueue.workload.name']\n)\nWHERE NOT placed"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-capacity-assigned-idle": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "GPUs assigned but idle",
+                  "description": "GPUs assigned to active team pods whose average DCGM utilization over the range is below 10%"
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH active_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND (JSONExtractString(labels, 'namespace'), JSONExtractString(labels, 'pod'), JSONExtractString(labels, 'k8s.cluster.name')) GLOBAL NOT IN (\n      SELECT\n        JSONExtractString(ts.lbl, 'namespace') AS namespace,\n        JSONExtractString(ts.lbl, 'pod') AS pod,\n        JSONExtractString(ts.lbl, 'cluster') AS cluster\n      FROM signoz_metrics.distributed_samples_v4 s\n      GLOBAL JOIN (\n        SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n        FROM signoz_metrics.distributed_time_series_v4_1day\n        WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n          AND metric_name = 'kube_pod_status_phase'\n          AND JSONExtractString(labels, 'phase') NOT IN ('Running', 'Pending')\n          AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n        GROUP BY fingerprint\n      ) ts ON s.fingerprint = ts.fingerprint\n      WHERE s.metric_name = 'kube_pod_status_phase'\n        AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY namespace, pod, cluster\n      HAVING argMax(s.value, s.unix_milli) = 1\n    )\n  GROUP BY namespace, pod, cluster\n),\ngpu_pods AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'namespace') AS namespace,\n    JSONExtractString(ts.lbl, 'pod') AS pod,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    sum(s.v) AS gpus\n  FROM (\n    SELECT fingerprint, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'kube_pod_container_resource_requests'\n      AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n    GROUP BY fingerprint\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_container_resource_requests'\n      AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GROUP BY namespace, pod, cluster\n  HAVING gpus > 0\n),\nteam_gpu_pods AS (\n  SELECT ap.namespace AS namespace, ap.pod AS pod, ap.cluster AS cluster, gp.gpus AS gpus\n  FROM active_pods ap\n  GLOBAL INNER JOIN gpu_pods gp ON ap.namespace = gp.namespace AND ap.pod = gp.pod AND ap.cluster = gp.cluster\n),\ndcgm_util AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'namespace') AS namespace,\n    JSONExtractString(ts.lbl, 'pod') AS pod,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    avg(s.value) AS avg_util\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'DCGM_FI_DEV_GPU_UTIL'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'DCGM_FI_DEV_GPU_UTIL'\n    AND s.unix_milli >= $start_timestamp * 1000 AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY namespace, pod, cluster\n)\nSELECT toUInt64(coalesce(sumIf(tgp.gpus, coalesce(du.avg_util, 0) < 10), 0)) AS value\nFROM team_gpu_pods tgp\nGLOBAL LEFT JOIN dcgm_util du ON tgp.namespace = du.namespace AND tgp.pod = du.pod AND tgp.cluster = du.cluster"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-teams-intro": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Team compute footprint",
+                  "description": "Footprint across research and engineering teams"
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "Active compute footprint across research and engineering teams: GPU capacity by availability class, CPU cores, and memory requests.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-teams-gpus-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Assigned GPUs by team over time",
+                  "description": "Stacked area chart of total requested GPUs aggregated by team across active workloads"
+                },
+                "plugin": {
+                  "kind": "signoz/AreaChartPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "solid",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": {
+                        "examples": "#3987e5"
+                      }
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH active_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'label_team') AS team,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n  GROUP BY namespace, pod, team, cluster\n),\nper_series AS (\n  SELECT\n    toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 15 MINUTE) AS ts,\n    ap.team AS team,\n    s.fingerprint AS fingerprint,\n    avg(s.value) AS series_val\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_container_resource_requests'\n      AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GLOBAL INNER JOIN active_pods ap ON JSONExtractString(ts.lbl, 'namespace') = ap.namespace AND JSONExtractString(ts.lbl, 'pod') = ap.pod AND JSONExtractString(ts.lbl, 'cluster') = ap.cluster\n  WHERE s.metric_name = 'kube_pod_container_resource_requests'\n    AND s.unix_milli >= $start_timestamp * 1000 AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY ts, team, fingerprint\n)\nSELECT\n  ts,\n  team,\n  toUInt64(coalesce(sum(series_val), 0)) AS value\nFROM per_series\nGROUP BY ts, team\nORDER BY ts, team"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-teams-summary-table": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Team resource allocations",
+                  "description": "Current resource allocations per team: dedicated (ha+ma) GPUs, preemptible (wa+be) GPUs, CPU cores, and memory"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "ha_ma_gpus": "none",
+                        "wa_be_gpus": "none",
+                        "cpu_cores": "none",
+                        "memory_bytes": "By"
+                      },
+                      "decimalPrecision": "2"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "ha_ma_gpus",
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "none",
+                        "color": "#16263d",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH active_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'label_team') AS team,\n    JSONExtractString(labels, 'label_availability_class') AS class,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND (JSONExtractString(labels, 'namespace'), JSONExtractString(labels, 'pod'), JSONExtractString(labels, 'k8s.cluster.name')) GLOBAL NOT IN (\n      SELECT\n        JSONExtractString(ts.lbl, 'namespace') AS namespace,\n        JSONExtractString(ts.lbl, 'pod') AS pod,\n        JSONExtractString(ts.lbl, 'cluster') AS cluster\n      FROM signoz_metrics.distributed_samples_v4 s\n      GLOBAL JOIN (\n        SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n        FROM signoz_metrics.distributed_time_series_v4_1day\n        WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n          AND metric_name = 'kube_pod_status_phase'\n          AND JSONExtractString(labels, 'phase') NOT IN ('Running', 'Pending')\n          AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n        GROUP BY fingerprint\n      ) ts ON s.fingerprint = ts.fingerprint\n      WHERE s.metric_name = 'kube_pod_status_phase'\n        AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY namespace, pod, cluster\n      HAVING argMax(s.value, s.unix_milli) = 1\n    )\n  GROUP BY namespace, pod, team, class, cluster\n),\npod_reqs AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'namespace') AS namespace,\n    JSONExtractString(ts.lbl, 'pod') AS pod,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    JSONExtractString(ts.lbl, 'resource') AS res,\n    argMax(s.value, s.unix_milli) AS val\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name'), 'resource', JSONExtractString(labels, 'resource')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_container_resource_requests'\n      AND JSONExtractString(labels, 'resource') IN ('nvidia.com/gpu', 'cpu', 'memory')\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'kube_pod_container_resource_requests'\n    AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n  GROUP BY namespace, pod, cluster, res, s.fingerprint\n)\nSELECT\n  ap.team AS team,\n  toUInt64(coalesce(sumIf(pr.val, pr.res = 'nvidia.com/gpu' AND ap.class IN ('ha', 'ma')), 0)) AS ha_ma_gpus,\n  toUInt64(coalesce(sumIf(pr.val, pr.res = 'nvidia.com/gpu' AND ap.class IN ('wa', 'be')), 0)) AS wa_be_gpus,\n  round(coalesce(sumIf(pr.val, pr.res = 'cpu'), 0), 2) AS cpu_cores,\n  toUInt64(coalesce(sumIf(pr.val, pr.res = 'memory'), 0)) AS memory_bytes\nFROM active_pods ap\nGLOBAL INNER JOIN pod_reqs pr ON ap.namespace = pr.namespace AND ap.pod = pr.pod AND ap.cluster = pr.cluster\nGROUP BY team\nORDER BY ha_ma_gpus DESC, cpu_cores DESC"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-queue-intro": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Kueue workload backlogs",
+                  "description": "Queued demand and admission telemetry"
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "Pending workload backlogs and queue admission events from the Kueue scheduler across availability classes and priority tiers.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-queue-pending-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Pending workloads over time by team",
+                  "description": "Stacked bar chart of active queued workloads waiting in Kueue cluster queues grouped by team"
+                },
+                "plugin": {
+                  "kind": "signoz/BarChartPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "stackedBarChart": true
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": {
+                        "examples": "#3987e5"
+                      }
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH per_series AS (\n  SELECT\n    toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 15 MINUTE) AS ts,\n    arrayStringConcat(arraySlice(splitByChar('-', JSONExtractString(ts.lbl, 'cluster_queue')), 2, length(splitByChar('-', JSONExtractString(ts.lbl, 'cluster_queue'))) - 2), '-') AS team,\n    s.fingerprint AS fingerprint,\n    avg(s.value) AS series_val\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('cluster_queue', JSONExtractString(labels, 'cluster_queue'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kueue_pending_workloads'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'kueue_pending_workloads'\n    AND s.unix_milli >= $start_timestamp * 1000 AND s.unix_milli <= $end_timestamp * 1000\n    AND team IN $team\n    AND splitByChar('-', JSONExtractString(ts.lbl, 'cluster_queue'))[-1] IN $class\n  GROUP BY ts, team, fingerprint\n)\nSELECT\n  ts,\n  team,\n  toUInt64(coalesce(sum(series_val), 0)) AS value\nFROM per_series\nGROUP BY ts, team\nORDER BY ts, team"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-queue-pending-workloads-list": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Latest pending Kueue workloads",
+                  "description": "Recent Kueue workload state transitions (Pending, QuotaReserved, Evicted) with requested GPU count and reason"
+                },
+                "plugin": {
+                  "kind": "signoz/ListPanel",
+                  "spec": {
+                    "selectFields": [
+                      {
+                        "name": "timestamp",
+                        "signal": "logs"
+                      },
+                      {
+                        "name": "kueue.team",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "kueue.workload.name",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "kueue.priority_class",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "kueue.gpus",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "kueue.reason",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "raw",
+                    "spec": {
+                      "plugin": {
+                        "kind": "signoz/BuilderQuery",
+                        "spec": {
+                          "name": "A",
+                          "signal": "logs",
+                          "aggregations": [
+                            {
+                              "expression": "count()"
+                            }
+                          ],
+                          "filter": {
+                            "expression": "log.source = 'kueue-workload' AND kueue.state IN ('Pending','QuotaReserved','Evicted') AND kueue.team IN $team AND (kueue.priority_class IN $class OR kueue.priority_class = '') AND k8s.cluster.name IN $cluster"
+                          },
+                          "groupBy": [],
+                          "order": [
+                            {
+                              "key": {
+                                "name": "timestamp"
+                              },
+                              "direction": "desc"
+                            },
+                            {
+                              "key": {
+                                "name": "id"
+                              },
+                              "direction": "desc"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-nodes-intro": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Physical GPU nodes",
+                  "description": "Hardware accelerator capacity and Karpenter status"
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "Physical GPU node allocations: accelerator model classes, Karpenter provisioning capacity type, allocated GPUs, and headroom.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-nodes-gpu-nodes-table": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "GPU nodes capacity and allocations",
+                  "description": "Per-node accelerator model, Karpenter provisioner type, allocated vs allocatable GPUs, free capacity, and preemptible load"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "free_gpus": "none",
+                        "preemptible_gpus": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "free_gpus",
+                        "value": 1,
+                        "operator": "below",
+                        "unit": "none",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH node_alloc AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'node') AS node,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    toUInt64(argMax(s.value, s.unix_milli)) AS alloc_gpus\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('node', JSONExtractString(labels, 'node'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_node_status_allocatable'\n      AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'kube_node_status_allocatable'\n    AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n  GROUP BY node, cluster\n  HAVING alloc_gpus > 0\n),\nnode_labels AS (\n  SELECT\n    JSONExtractString(labels, 'node') AS node,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster,\n    any(JSONExtractString(labels, 'label_gpu_class')) AS gpu_class,\n    any(JSONExtractString(labels, 'label_karpenter_sh_capacity_type')) AS capacity_type\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_node_labels'\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n  GROUP BY node, cluster\n),\nactive_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'label_availability_class') AS class,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND (JSONExtractString(labels, 'namespace'), JSONExtractString(labels, 'pod'), JSONExtractString(labels, 'k8s.cluster.name')) GLOBAL NOT IN (\n      SELECT\n        JSONExtractString(ts.lbl, 'namespace') AS namespace,\n        JSONExtractString(ts.lbl, 'pod') AS pod,\n        JSONExtractString(ts.lbl, 'cluster') AS cluster\n      FROM signoz_metrics.distributed_samples_v4 s\n      GLOBAL JOIN (\n        SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n        FROM signoz_metrics.distributed_time_series_v4_1day\n        WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n          AND metric_name = 'kube_pod_status_phase'\n          AND JSONExtractString(labels, 'phase') NOT IN ('Running', 'Pending')\n          AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n        GROUP BY fingerprint\n      ) ts ON s.fingerprint = ts.fingerprint\n      WHERE s.metric_name = 'kube_pod_status_phase'\n        AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY namespace, pod, cluster\n      HAVING argMax(s.value, s.unix_milli) = 1\n    )\n  GROUP BY namespace, pod, class, cluster\n),\npod_node_map AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'node') AS node,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_info'\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n  GROUP BY namespace, pod, node, cluster\n),\npod_gpu_requests AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'namespace') AS namespace,\n    JSONExtractString(ts.lbl, 'pod') AS pod,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    toUInt64(sum(s.v)) AS gpus\n  FROM (\n    SELECT fingerprint, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'kube_pod_container_resource_requests'\n      AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n    GROUP BY fingerprint\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_container_resource_requests'\n      AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GROUP BY namespace, pod, cluster\n),\nnode_gpu_usage AS (\n  SELECT\n    pnm.node AS node,\n    pnm.cluster AS cluster,\n    sum(pgr.gpus) AS used_gpus,\n    sumIf(pgr.gpus, ap.class IN ('wa', 'be')) AS preemptible_gpus\n  FROM active_pods ap\n  GLOBAL INNER JOIN pod_node_map pnm ON ap.namespace = pnm.namespace AND ap.pod = pnm.pod AND ap.cluster = pnm.cluster\n  GLOBAL INNER JOIN pod_gpu_requests pgr ON ap.namespace = pgr.namespace AND ap.pod = pgr.pod AND ap.cluster = pgr.cluster\n  GROUP BY node, cluster\n)\nSELECT\n  na.node AS node,\n  coalesce(nullIf(nl.gpu_class, ''), '-') AS gpu_class,\n  coalesce(nullIf(nl.capacity_type, ''), '-') AS capacity_type,\n  concat(toString(coalesce(ngu.used_gpus, 0)), ' / ', toString(na.alloc_gpus)) AS used_allocatable,\n  toUInt64(greatest(0, toInt64(na.alloc_gpus) - toInt64(coalesce(ngu.used_gpus, 0)))) AS free_gpus,\n  toUInt64(coalesce(ngu.preemptible_gpus, 0)) AS preemptible_gpus\nFROM node_alloc na\nGLOBAL LEFT JOIN node_labels nl ON na.node = nl.node AND na.cluster = nl.cluster\nGLOBAL LEFT JOIN node_gpu_usage ngu ON na.node = ngu.node AND na.cluster = ngu.cluster\nORDER BY na.node"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-efficiency-intro": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "GPU utilization & efficiency",
+                  "description": "DCGM compute and tensor core utilization"
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "Active GPU compute and tensor core utilization from NVIDIA DCGM telemetry mapped to team workloads, identifying underutilized jobs.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-efficiency-gpu-util-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "GPU compute utilization by team",
+                  "description": "Average percentage of GPU compute and tensor cores utilized over time grouped by team"
+                },
+                "plugin": {
+                  "kind": "signoz/AreaChartPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "percent",
+                      "decimalPrecision": "1"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "solid",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": 100,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": {
+                        "examples": "#3987e5"
+                      }
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH team_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'label_team') AS team,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n  GROUP BY namespace, pod, team, cluster\n)\nSELECT\n  toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 15 MINUTE) AS ts,\n  tp.team AS team,\n  round(avg(s.value), 1) AS value\nFROM signoz_metrics.distributed_samples_v4 s\nGLOBAL JOIN (\n  SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'DCGM_FI_DEV_GPU_UTIL'\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n  GROUP BY fingerprint\n) ts ON s.fingerprint = ts.fingerprint\nGLOBAL INNER JOIN team_pods tp ON JSONExtractString(ts.lbl, 'namespace') = tp.namespace AND JSONExtractString(ts.lbl, 'pod') = tp.pod AND JSONExtractString(ts.lbl, 'cluster') = tp.cluster\nWHERE s.metric_name = 'DCGM_FI_DEV_GPU_UTIL'\n  AND s.unix_milli >= $start_timestamp * 1000 AND s.unix_milli <= $end_timestamp * 1000\nGROUP BY ts, team\nORDER BY ts, team"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-efficiency-low-util-jobs-table": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Workloads with low GPU utilization",
+                  "description": "Jobs holding GPU allocations with average DCGM compute utilization below 20%"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "gpus": "none",
+                        "avg_util_pct": "percent"
+                      },
+                      "decimalPrecision": "1"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "avg_util_pct",
+                        "value": 10,
+                        "operator": "below",
+                        "unit": "percent",
+                        "color": "#7a2020",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH active_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'label_team') AS team,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'label_team') != ''\n    AND JSONExtractString(labels, 'label_team') IN $team\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND (JSONExtractString(labels, 'namespace'), JSONExtractString(labels, 'pod'), JSONExtractString(labels, 'k8s.cluster.name')) GLOBAL NOT IN (\n      SELECT\n        JSONExtractString(ts.lbl, 'namespace') AS namespace,\n        JSONExtractString(ts.lbl, 'pod') AS pod,\n        JSONExtractString(ts.lbl, 'cluster') AS cluster\n      FROM signoz_metrics.distributed_samples_v4 s\n      GLOBAL JOIN (\n        SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n        FROM signoz_metrics.distributed_time_series_v4_1day\n        WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n          AND metric_name = 'kube_pod_status_phase'\n          AND JSONExtractString(labels, 'phase') NOT IN ('Running', 'Pending')\n          AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n        GROUP BY fingerprint\n      ) ts ON s.fingerprint = ts.fingerprint\n      WHERE s.metric_name = 'kube_pod_status_phase'\n        AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY namespace, pod, cluster\n      HAVING argMax(s.value, s.unix_milli) = 1\n    )\n  GROUP BY namespace, pod, team, cluster\n),\ngpu_requests AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'namespace') AS namespace,\n    JSONExtractString(ts.lbl, 'pod') AS pod,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    toUInt64(sum(s.v)) AS gpus\n  FROM (\n    SELECT fingerprint, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'kube_pod_container_resource_requests'\n      AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n    GROUP BY fingerprint\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_container_resource_requests'\n      AND JSONExtractString(labels, 'resource') = 'nvidia.com/gpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GROUP BY namespace, pod, cluster\n  HAVING gpus > 0\n),\ndcgm_util AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'namespace') AS namespace,\n    JSONExtractString(ts.lbl, 'pod') AS pod,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    avg(s.value) AS avg_util\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'DCGM_FI_DEV_GPU_UTIL'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'DCGM_FI_DEV_GPU_UTIL'\n    AND s.unix_milli >= $start_timestamp * 1000 AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY namespace, pod, cluster\n)\nSELECT\n  concat(ap.namespace, '/', ap.pod) AS workload,\n  ap.team AS team,\n  gr.gpus AS gpus,\n  round(coalesce(du.avg_util, 0), 1) AS avg_util_pct\nFROM active_pods ap\nGLOBAL INNER JOIN gpu_requests gr ON ap.namespace = gr.namespace AND ap.pod = gr.pod AND ap.cluster = gr.cluster\nGLOBAL LEFT JOIN dcgm_util du ON ap.namespace = du.namespace AND ap.pod = du.pod AND ap.cluster = du.cluster\nWHERE coalesce(du.avg_util, 0) < 20\nORDER BY avg_util_pct ASC, gpus DESC\nLIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-workspaces-intro": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Developer workspaces",
+                  "description": "Coder workspace compute allocations"
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "Coder developer workspace environments: active workspace counts, container CPU and memory requests, and assigned GPU accelerators.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-workspaces-user-table": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Coder workspaces by user",
+                  "description": "Active Coder workspaces, requested CPU cores, memory bytes, and GPU allocations grouped by user"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "workspaces": "none",
+                        "cpu_cores": "none",
+                        "memory_bytes": "By",
+                        "gpus": "none"
+                      },
+                      "decimalPrecision": "2"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "gpus",
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "none",
+                        "color": "#16263d",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH workspace_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'label_com_coder_user_username') AS user,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'namespace') = 'workspaces'\n    AND JSONExtractString(labels, 'label_com_coder_user_username') != ''\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n    AND (JSONExtractString(labels, 'namespace'), JSONExtractString(labels, 'pod'), JSONExtractString(labels, 'k8s.cluster.name')) GLOBAL NOT IN (\n      SELECT\n        JSONExtractString(ts.lbl, 'namespace') AS namespace,\n        JSONExtractString(ts.lbl, 'pod') AS pod,\n        JSONExtractString(ts.lbl, 'cluster') AS cluster\n      FROM signoz_metrics.distributed_samples_v4 s\n      GLOBAL JOIN (\n        SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n        FROM signoz_metrics.distributed_time_series_v4_1day\n        WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n          AND metric_name = 'kube_pod_status_phase'\n          AND JSONExtractString(labels, 'phase') NOT IN ('Running', 'Pending')\n          AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n        GROUP BY fingerprint\n      ) ts ON s.fingerprint = ts.fingerprint\n      WHERE s.metric_name = 'kube_pod_status_phase'\n        AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n      GROUP BY namespace, pod, cluster\n      HAVING argMax(s.value, s.unix_milli) = 1\n    )\n  GROUP BY namespace, pod, user, cluster\n),\npod_requests AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'namespace') AS namespace,\n    JSONExtractString(ts.lbl, 'pod') AS pod,\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    JSONExtractString(ts.lbl, 'resource') AS res,\n    argMax(s.value, s.unix_milli) AS val\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name'), 'resource', JSONExtractString(labels, 'resource')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_container_resource_requests'\n      AND JSONExtractString(labels, 'resource') IN ('nvidia.com/gpu', 'cpu', 'memory')\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'kube_pod_container_resource_requests'\n    AND s.unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n  GROUP BY namespace, pod, cluster, res, s.fingerprint\n)\nSELECT\n  wp.user AS user,\n  toUInt64(count(DISTINCT wp.pod)) AS workspaces,\n  round(coalesce(sumIf(pr.val, pr.res = 'cpu'), 0), 2) AS cpu_cores,\n  toUInt64(coalesce(sumIf(pr.val, pr.res = 'memory'), 0)) AS memory_bytes,\n  toUInt64(coalesce(sumIf(pr.val, pr.res = 'nvidia.com/gpu'), 0)) AS gpus\nFROM workspace_pods wp\nGLOBAL INNER JOIN pod_requests pr ON wp.namespace = pr.namespace AND wp.pod = pr.pod AND wp.cluster = pr.cluster\nGROUP BY user\nORDER BY workspaces DESC, cpu_cores DESC"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-workspaces-cpu-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Workspace CPU usage over time by user",
+                  "description": "Stacked area chart of requested CPU cores across active developer workspaces grouped by user"
+                },
+                "plugin": {
+                  "kind": "signoz/AreaChartPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "1"
+                    },
+                    "chartAppearance": {
+                      "lineInterpolation": "linear",
+                      "showPoints": false,
+                      "lineStyle": "solid",
+                      "fillMode": "solid",
+                      "spanGaps": {
+                        "fillOnlyBelow": false,
+                        "fillLessThan": ""
+                      }
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": {
+                        "simone": "#199e70",
+                        "nima": "#d95926"
+                      }
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH workspace_pods AS (\n  SELECT\n    JSONExtractString(labels, 'namespace') AS namespace,\n    JSONExtractString(labels, 'pod') AS pod,\n    JSONExtractString(labels, 'label_com_coder_user_username') AS user,\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_pod_labels'\n    AND JSONExtractString(labels, 'namespace') = 'workspaces'\n    AND JSONExtractString(labels, 'label_com_coder_user_username') != ''\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    AND JSONExtractString(labels, 'label_availability_class') IN $class\n  GROUP BY namespace, pod, user, cluster\n),\nper_series AS (\n  SELECT\n    toStartOfInterval(toDateTime(intDiv(s.unix_milli, 1000)), INTERVAL 15 MINUTE) AS ts,\n    wp.user AS user,\n    s.fingerprint AS fingerprint,\n    avg(s.value) AS series_val\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'pod', JSONExtractString(labels, 'pod'), 'cluster', JSONExtractString(labels, 'k8s.cluster.name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_container_resource_requests'\n      AND JSONExtractString(labels, 'resource') = 'cpu'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GLOBAL INNER JOIN workspace_pods wp ON JSONExtractString(ts.lbl, 'namespace') = wp.namespace AND JSONExtractString(ts.lbl, 'pod') = wp.pod AND JSONExtractString(ts.lbl, 'cluster') = wp.cluster\n  WHERE s.metric_name = 'kube_pod_container_resource_requests'\n    AND s.unix_milli >= $start_timestamp * 1000 AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY ts, user, fingerprint\n)\nSELECT\n  ts,\n  user,\n  round(coalesce(sum(series_val), 0), 2) AS value\nFROM per_series\nGROUP BY ts, user\nORDER BY ts, user"
                         }
                       }
                     }
@@ -453,18 +1109,276 @@ spec:
             {
               "kind": "Grid",
               "spec": {
+                "display": {
+                  "title": "0 \u00b7 Capacity",
+                  "collapse": {
+                    "open": true
+                  }
+                },
                 "items": [
-                  {"x": 0, "y": 0, "width": 2, "height": 3, "content": {"$ref": "#/spec/panels/stat-gpu-usage-out-of-total"}},
-                  {"x": 2, "y": 0, "width": 2, "height": 3, "content": {"$ref": "#/spec/panels/stat-vram-usage-out-of-total"}},
-                  {"x": 4, "y": 0, "width": 2, "height": 3, "content": {"$ref": "#/spec/panels/stat-cpu-usage-out-of-total"}},
-                  {"x": 6, "y": 0, "width": 2, "height": 3, "content": {"$ref": "#/spec/panels/stat-ram-usage-out-of-total"}},
-                  {"x": 8, "y": 0, "width": 2, "height": 3, "content": {"$ref": "#/spec/panels/stat-total-gpus"}},
-                  {"x": 10, "y": 0, "width": 2, "height": 3, "content": {"$ref": "#/spec/panels/stat-kueue-workloads"}},
-                  {"x": 0, "y": 3, "width": 6, "height": 6, "content": {"$ref": "#/spec/panels/gpu-utilization-over-time"}},
-                  {"x": 6, "y": 3, "width": 6, "height": 6, "content": {"$ref": "#/spec/panels/vram-utilization-over-time"}},
-                  {"x": 0, "y": 9, "width": 6, "height": 6, "content": {"$ref": "#/spec/panels/cpu-utilization-over-time"}},
-                  {"x": 6, "y": 9, "width": 6, "height": 6, "content": {"$ref": "#/spec/panels/ram-utilization-over-time"}},
-                  {"x": 0, "y": 15, "width": 12, "height": 10, "content": {"$ref": "#/spec/panels/workloads-table"}}
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-capacity-intro"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 2,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-capacity-gpus-allocatable"
+                    }
+                  },
+                  {
+                    "x": 2,
+                    "y": 1,
+                    "width": 2,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-capacity-assigned-hama"
+                    }
+                  },
+                  {
+                    "x": 4,
+                    "y": 1,
+                    "width": 2,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-capacity-assigned-wabe"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 1,
+                    "width": 2,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-capacity-free-now"
+                    }
+                  },
+                  {
+                    "x": 8,
+                    "y": 1,
+                    "width": 2,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-capacity-free-after-preemption"
+                    }
+                  },
+                  {
+                    "x": 10,
+                    "y": 1,
+                    "width": 2,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-capacity-pending-gpus"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 4,
+                    "width": 2,
+                    "height": 3,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-capacity-assigned-idle"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "1 \u00b7 Teams",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-teams-intro"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-teams-gpus-over-time"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 7,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-teams-summary-table"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "2 \u00b7 Queue",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-queue-intro"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-queue-pending-over-time"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 7,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-queue-pending-workloads-list"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "3 \u00b7 Nodes",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-nodes-intro"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 12,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-nodes-gpu-nodes-table"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "4 \u00b7 Efficiency",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-efficiency-intro"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-efficiency-gpu-util-over-time"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 7,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-efficiency-low-util-jobs-table"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "5 \u00b7 Workspaces",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-workspaces-intro"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-workspaces-user-table"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 7,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-workspaces-cpu-over-time"
+                    }
+                  }
                 ]
               }
             }

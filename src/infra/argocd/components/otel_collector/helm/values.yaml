@@ -9,10 +9,26 @@ clusterRole:
     - apiGroups: [""]
       resources:
         # keep-sorted start
+        - endpoints
         - nodes/pods
         - nodes/proxy
         - nodes/stats
         - pods
+        - services
+        # keep-sorted end
+      verbs:
+        # keep-sorted start
+        - get
+        - list
+        - watch
+        # keep-sorted end
+    - apiGroups:
+        # keep-sorted start
+        - kueue.x-k8s.io
+        # keep-sorted end
+      resources:
+        # keep-sorted start
+        - workloads
         # keep-sorted end
       verbs:
         # keep-sorted start
@@ -25,12 +41,12 @@ extraEnvs:
     value: ""
 image:
   repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
-  tag: 0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+  tag: 0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
 extraVolumes:
   # keep-sorted start
-  - name: cluster-ca
+  - name: control-ca
     configMap:
-      name: cluster-local-ca
+      name: otel-collector-control-ca
   # Read-only host filesystem and kernel process views for the host_metrics
   # receiver scrapers (CPU, load, memory, filesystem, disk, network).
   - name: host-proc
@@ -40,8 +56,8 @@ extraVolumes:
     # keep-sorted end
 extraVolumeMounts:
   # keep-sorted start
-  - name: cluster-ca
-    mountPath: /etc/cluster-ca
+  - name: control-ca
+    mountPath: /etc/control-ca
     readOnly: true
   - name: host-proc
     mountPath: /hostfs/proc
@@ -82,7 +98,15 @@ networkPolicy:
   enabled: true
 service:
   enabled: true
+  # Senders reach the collector on their own node, the only one whose
+  # k8s_attributes cache knows the sending pod.
+  internalTrafficPolicy: Local
 priorityClassName: node-agents
+# Node-local receivers and the local Service route need a collector on every
+# tainted node, including the system nodes that host cluster add-ons.
+tolerations:
+  - {key: CriticalAddonsOnly, operator: Exists, effect: NoSchedule}
+  - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
 terminationGracePeriodSeconds: 60
 livenessProbe:
   httpGet: {path: /, port: 13133}
@@ -233,6 +257,16 @@ config:
         k8s.replication_controller.desired: {enabled: false}
         k8s.resource_quota.hard_limit: {enabled: false}
         k8s.resource_quota.used: {enabled: false}
+    # Snapshot every Kueue Workload on the leader-elected collector so the
+    # latest pull holds each workload's current state; clusters without the
+    # Kueue CRD skip the object instead of failing.
+    k8sobjects:
+      error_mode: ignore
+      objects:
+        - name: workloads
+          group: kueue.x-k8s.io
+          mode: pull
+          interval: 5m
     # The preset defaults omit persistent-volume statistics. Volume metrics
     # are node-local kubelet data, so enabling the group does not add an API
     # informer or a second exporter deployment.
@@ -717,6 +751,39 @@ config:
               - action: keep
                 source_labels: [__meta_kubernetes_pod_ready]
                 regex: "true"
+    prometheus/kueue:
+      config:
+        global:
+          scrape_interval: 60s
+          scrape_timeout: 10s
+        scrape_configs:
+          - job_name: kueue
+            scheme: https
+            metrics_path: /metrics
+            bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+            tls_config:
+              insecure_skip_verify: true
+            kubernetes_sd_configs:
+              - role: endpoints
+                namespaces:
+                  names: [kueue-system]
+            relabel_configs:
+              - action: keep
+                source_labels: [__meta_kubernetes_service_name]
+                regex: kueue-controller-manager-metrics-service
+              - action: keep
+                source_labels: [__meta_kubernetes_endpoint_node_name]
+                regex: ${env:K8S_NODE_NAME}
+              - action: keep
+                source_labels: [__meta_kubernetes_endpoint_ready]
+                regex: "true"
+              - action: keep
+                source_labels: [__address__]
+                regex: .*:8443
+            metric_relabel_configs:
+              - action: keep
+                source_labels: [__name__]
+                regex: kueue_pending_workloads|kueue_admitted_active_workloads|kueue_cluster_queue_resource_usage|kueue_cluster_queue_nominal_quota
     prometheus/opencost:
       config:
         global:
@@ -795,6 +862,12 @@ config:
             key: app.kubernetes.io/name
             tag_name: service.name
           - from: pod
+            key: com.coder.user.username
+            tag_name: coder.user.name
+          - from: pod
+            key: com.coder.workspace.name
+            tag_name: coder.workspace.name
+          - from: pod
             key: ray.io/cluster
             tag_name: ray.cluster.name
     # The leader-elected k8sobjects receiver emits the watched Event as a raw
@@ -844,6 +917,24 @@ config:
             - set(log.severity_text, "INFO") where log.body["object"]["type"] == "Normal"
             - set(log.severity_number, SEVERITY_NUMBER_INFO) where log.body["object"]["type"] == "Normal"
             - set(log.body, log.body["object"]["note"]) where IsString(log.body["object"]["note"])
+        # Kueue Workload objects keep their identity as attributes and their
+        # full object as a JSON body, from which queries derive admission
+        # state and requested GPUs across every condition and pod set.
+        - conditions:
+            - >-
+              log.attributes["k8s.resource.name"] == "workloads" and IsMap(log.body) and IsMap(log.body["metadata"])
+          statements:
+            - set(log.attributes["log.source"], "kueue-workload")
+            - set(log.attributes["kueue.workload.name"], log.body["metadata"]["name"])
+            - set(log.attributes["kueue.workload.namespace"], log.body["metadata"]["namespace"])
+            - set(resource.attributes["k8s.namespace.name"], log.body["metadata"]["namespace"])
+            - >-
+              set(log.attributes["kueue.queue"], log.body["spec"]["queueName"]) where IsMap(log.body["spec"]) and IsString(log.body["spec"]["queueName"])
+            - >-
+              set(log.attributes["kueue.team"], ExtractPatterns(log.body["metadata"]["namespace"], "^team-(?P<team>.+)-workloads$")["team"]) where IsMatch(log.body["metadata"]["namespace"], "^team-.+-workloads$")
+            - set(log.severity_text, "INFO")
+            - set(log.severity_number, SEVERITY_NUMBER_INFO)
+            - set(log.body, String(log.body))
     # Project heterogeneous application encoders onto the OpenTelemetry log
     # data model. Producer fields and log.original remain available as
     # evidence; only parser-temporary fields are removed.
@@ -1036,7 +1127,7 @@ config:
           - filter/cnpg_settings
           - resource/cluster_name
           - batch
-        receivers: [otlp, prometheus, prometheus/annotations, prometheus/coredns, prometheus/dcgm, prometheus/opencost, prometheus/torch_compile_cache]
+        receivers: [otlp, prometheus, prometheus/annotations, prometheus/coredns, prometheus/dcgm, prometheus/kueue, prometheus/opencost, prometheus/torch_compile_cache]
       metrics/host:
         exporters: [otlphttp/signoz]
         processors:

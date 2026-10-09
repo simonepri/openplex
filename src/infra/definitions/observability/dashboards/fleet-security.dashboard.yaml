@@ -1,4 +1,4 @@
-# Defines the fleet-security dashboard displaying vulnerability scans and runtime policy violations.
+# Defines the fleet-security dashboard displaying runtime threats, ingress denials, admission policy blocks, posture findings, vulnerabilities, and CIS compliance.
 
 apiVersion: resources.signoz.io/v1alpha1
 kind: Dashboard
@@ -19,7 +19,7 @@ spec:
     jsonSpec: |-
       {
         "schemaVersion": "v6",
-        "image": "",
+        "image": "/assets/Icons/siren",
         "name": "fleet-security",
         "tags": [
           {
@@ -36,11 +36,56 @@ spec:
             {
               "kind": "ListVariable",
               "spec": {
+                "name": "cluster",
+                "display": {
+                  "name": "Cluster",
+                  "description": "Filter by Kubernetes cluster name"
+                },
+                "allowAllValue": true,
+                "allowMultiple": true,
+                "sort": "alphabetical-asc",
+                "plugin": {
+                  "kind": "signoz/QueryVariable",
+                  "spec": {
+                    "queryValue": "SELECT DISTINCT resources_string['k8s.cluster.name'] AS cluster FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start >= toUnixTimestamp(now() - INTERVAL 24 HOUR) AND resources_string['k8s.cluster.name'] != '' ORDER BY cluster"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "ListVariable",
+              "spec": {
+                "name": "namespace",
+                "display": {
+                  "name": "Namespace",
+                  "description": "Filter by Kubernetes namespace"
+                },
+                "allowAllValue": true,
+                "allowMultiple": true,
+                "sort": "alphabetical-asc",
+                "plugin": {
+                  "kind": "signoz/QueryVariable",
+                  "spec": {
+                    "queryValue": "SELECT DISTINCT JSONExtractString(labels, 'namespace') AS namespace FROM signoz_metrics.distributed_time_series_v4_1day WHERE namespace != '' ORDER BY namespace"
+                  }
+                }
+              }
+            },
+            {
+              "kind": "ListVariable",
+              "spec": {
                 "name": "priority",
                 "display": {
                   "name": "Falco priority",
                   "description": "Filter by Falco event priority level"
                 },
+                "defaultValue": [
+                  "Emergency",
+                  "Alert",
+                  "Critical",
+                  "Error",
+                  "Warning"
+                ],
                 "allowAllValue": true,
                 "allowMultiple": true,
                 "sort": "none",
@@ -54,200 +99,36 @@ spec:
             }
           ],
           "panels": {
-            "threats-over-time": {
+            "dash-posture-intro": {
               "kind": "Panel",
               "spec": {
                 "display": {
-                  "name": "Runtime security events over time",
-                  "description": "Falco events grouped by rule priority"
+                  "name": "Security posture",
+                  "description": "Section introduction and posture overview"
                 },
                 "plugin": {
-                  "kind": "signoz/TimeSeriesPanel",
+                  "kind": "signoz/TextPanel",
                   "spec": {
-                    "visualization": {
-                      "timePreference": "global_time",
-                      "fillSpans": false
+                    "mode": "markdown",
+                    "text": "Headline numbers for the selected range; tiles turn **amber** or **red** past their threshold.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
                     },
-                    "formatting": {
-                      "unit": "none",
-                      "decimalPrecision": "0"
-                    },
-                    "chartAppearance": {
-                      "lineInterpolation": "linear",
-                      "showPoints": false,
-                      "lineStyle": "solid",
-                      "fillMode": "none",
-                      "spanGaps": {
-                        "fillOnlyBelow": false,
-                        "fillLessThan": ""
-                      }
-                    },
-                    "axes": {
-                      "softMin": 0,
-                      "softMax": null,
-                      "isLogScale": false
-                    },
-                    "legend": {
-                      "position": "bottom",
-                      "mode": "list",
-                      "customColors": null
-                    },
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT toStartOfMinute(toDateTime(timestamp / 1000000000)) AS ts, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'falco' AND attributes_string['priority'] IN $priority GROUP BY ts ORDER BY ts"
-                        }
-                      }
+                    "headerOptions": {
+                      "hide": true
                     }
                   }
-                ]
+                },
+                "queries": []
               }
             },
-            "ingress-denials-over-time": {
+            "dash-posture-runtime-alerts": {
               "kind": "Panel",
               "spec": {
                 "display": {
-                  "name": "Ingress gateway security rejections",
-                  "description": "Envoy Gateway 401, 403, and 429 responses over time"
-                },
-                "plugin": {
-                  "kind": "signoz/TimeSeriesPanel",
-                  "spec": {
-                    "visualization": {
-                      "timePreference": "global_time",
-                      "fillSpans": false
-                    },
-                    "formatting": {
-                      "unit": "none",
-                      "decimalPrecision": "0"
-                    },
-                    "chartAppearance": {
-                      "lineInterpolation": "linear",
-                      "showPoints": false,
-                      "lineStyle": "solid",
-                      "fillMode": "none",
-                      "spanGaps": {
-                        "fillOnlyBelow": false,
-                        "fillLessThan": ""
-                      }
-                    },
-                    "axes": {
-                      "softMin": 0,
-                      "softMax": null,
-                      "isLogScale": false
-                    },
-                    "legend": {
-                      "position": "bottom",
-                      "mode": "list",
-                      "customColors": null
-                    },
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT toStartOfMinute(toDateTime(timestamp / 1000000000)) AS ts, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'envoy' AND (attributes_string['response_code'] IN ('401', '403', '429') OR body LIKE '%\"response_code\":\"401\"%' OR body LIKE '%\"response_code\":\"403\"%' OR body LIKE '%\"response_code\":\"429\"%') GROUP BY ts ORDER BY ts"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "top-threat-rules": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Top security rules triggered",
-                  "description": "Count of runtime security violations by rule name"
-                },
-                "plugin": {
-                  "kind": "signoz/TablePanel",
-                  "spec": {
-                    "formatting": {
-                      "columnUnits": {
-                        "event_count": "none"
-                      },
-                      "decimalPrecision": "0"
-                    },
-                    "thresholds": []
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "scalar",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT attributes_string['rule'] AS rule, attributes_string['priority'] AS priority, count() AS event_count FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'falco' AND attributes_string['priority'] IN $priority GROUP BY rule, priority ORDER BY event_count DESC LIMIT 50"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "kyverno-admission-denials": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Admission policy blocks",
-                  "description": "Kyverno rejected workload submissions with policy, namespace, resource, and sample reason"
-                },
-                "plugin": {
-                  "kind": "signoz/TablePanel",
-                  "spec": {
-                    "formatting": {
-                      "columnUnits": {
-                        "block_count": "none"
-                      },
-                      "decimalPrecision": "0"
-                    },
-                    "thresholds": []
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "scalar",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT coalesce(nullIf(extract(body, 'policy[\":= ]+([a-zA-Z0-9_-]+)'), ''), nullIf(extract(body, 'clusterpolicy/([a-zA-Z0-9_-]+)'), ''), nullIf(extract(body, 'PolicyViolation[\":= ]+([a-zA-Z0-9_-]+)'), ''), 'Policy Violation') AS policy, coalesce(nullIf(extract(body, 'namespace[\":= ]+([a-zA-Z0-9_-]+)'), ''), nullIf(extract(body, 'resource[\":= ]+([a-zA-Z0-9_-]+)/'), ''), nullIf(resources_string['k8s.namespace.name'], 'kyverno'), 'cluster-scope') AS target_namespace, coalesce(nullIf(extract(body, 'resource[\":= ]+([^\", ]+)'), ''), nullIf(extract(body, '((?:Pod|Deployment|StatefulSet|DaemonSet|Job)/[a-zA-Z0-9_.-]+)'), ''), 'workload') AS resource, count() AS block_count, any(body) AS sample_reason FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND (((resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%fail (blocked)%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%')) OR body LIKE '%Warning PolicyViolation%') GROUP BY policy, target_namespace, resource ORDER BY block_count DESC LIMIT 50"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "exposed-secrets-detected": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Exposed secrets detected",
-                  "description": "Total container image exposed secrets across the fleet"
+                  "name": "Runtime alerts \u2265 Warning",
+                  "description": "Falco priority variable defaults to Warning. Two Notice rules make up 99.99% of raw volume: tune them in Falco."
                 },
                 "plugin": {
                   "kind": "signoz/NumberPanel",
@@ -259,7 +140,22 @@ spec:
                       "unit": "none",
                       "decimalPrecision": "0"
                     },
-                    "thresholds": null
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4a3608",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
                   }
                 },
                 "queries": [
@@ -268,10 +164,10 @@ spec:
                     "spec": {
                       "name": "A",
                       "plugin": {
-                        "kind": "signoz/PromQLQuery",
+                        "kind": "signoz/ClickHouseSQL",
                         "spec": {
                           "name": "A",
-                          "query": "sum(trivy_image_exposedsecrets) or vector(0)"
+                          "query": "SELECT count() AS value\nFROM signoz_logs.distributed_logs_v2\nWHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n  AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n  AND has(mapKeys(attributes_string), 'priority')\n  AND resources_string['k8s.container.name'] = 'falco'\n  AND resources_string['k8s.cluster.name'] IN $cluster\n  AND attributes_string['priority'] IN ('Emergency', 'Alert', 'Critical', 'Error', 'Warning')"
                         }
                       }
                     }
@@ -279,12 +175,2288 @@ spec:
                 ]
               }
             },
-            "trivy-vulnerabilities-by-severity": {
+            "dash-posture-critical-cves": {
               "kind": "Panel",
               "spec": {
                 "display": {
-                  "name": "Trivy vulnerabilities by severity",
-                  "description": "Active container image vulnerabilities grouped by severity level"
+                  "name": "Critical CVEs in running images",
+                  "description": "Deduplicate by image: the same image in N pods reports the same CVE N times."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4f1717",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toUInt64(coalesce(sum(crit_count), 0)) AS value\nFROM (\n  SELECT\n    coalesce(nullIf(JSONExtractString(ts.lb, 'image_digest'), ''), JSONExtractString(ts.lb, 'image_repository')) AS img,\n    max(v) AS crit_count\n  FROM (\n    SELECT fingerprint, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'trivy_image_vulnerabilities'\n      AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n    GROUP BY fingerprint\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('image_digest', JSONExtractString(labels, 'image_digest'), 'image_repository', JSONExtractString(labels, 'image_repository')))) AS lb\n    FROM signoz_metrics.distributed_time_series_v4\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'trivy_image_vulnerabilities'\n      AND JSONExtractString(labels, 'severity') = 'Critical'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GROUP BY img\n)"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-secrets-in-images": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Secrets baked into images",
+                  "description": "Exposed secrets detected by Trivy in running container images."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4f1717",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toUInt64(coalesce(sum(sec_count), 0)) AS value\nFROM (\n  SELECT\n    coalesce(nullIf(JSONExtractString(ts.lb, 'image_digest'), ''), JSONExtractString(ts.lb, 'image_repository')) AS img,\n    max(v) AS sec_count\n  FROM (\n    SELECT fingerprint, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'trivy_image_exposedsecrets'\n      AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n    GROUP BY fingerprint\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('image_digest', JSONExtractString(labels, 'image_digest'), 'image_repository', JSONExtractString(labels, 'image_repository')))) AS lb\n    FROM signoz_metrics.distributed_time_series_v4\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'trivy_image_exposedsecrets'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GROUP BY img\n)"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-internet-facing-hosts": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Internet-facing hosts",
+                  "description": "Hosts behind Envoy Gateway that received requests from public IPs (X-Forwarded-For)."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 1,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4a3608",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT uniqExactIf(\n  attributes_string['authority'],\n  trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]) != ''\n  AND isIPv4String(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]))\n  AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '10.0.0.0/8')\n  AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '172.16.0.0/12')\n  AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '192.168.0.0/16')\n  AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '127.0.0.0/8')\n  AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '100.64.0.0/10')\n) AS value\nFROM signoz_logs.distributed_logs_v2\nWHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n  AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n  AND has(mapKeys(attributes_string), 'x_forwarded_for')\n  AND resources_string['k8s.container.name'] = 'envoy'\n  AND resources_string['k8s.cluster.name'] IN $cluster"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-aws-cis-pass-rate": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "AWS CIS pass rate",
+                  "description": "AWS CIS v3.0 benchmark pass percentage from the latest Prowler scan."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "percent",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 90,
+                        "operator": "below",
+                        "unit": "",
+                        "color": "#4a3608",
+                        "format": "background"
+                      },
+                      {
+                        "value": 90,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT coalesce(\n  (\n    SELECT round(100.0 * pass / max2(1, pass + fail))\n    FROM (\n      SELECT\n        resources_string['k8s.pod.name'] AS pod,\n        max(timestamp) AS last_ts,\n        countIf(attributes_string['status_code'] = 'PASS') AS pass,\n        countIf(attributes_string['status_code'] = 'FAIL') AS fail\n      FROM signoz_logs.distributed_logs_v2\n      WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n        AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n        AND resource_fingerprint LIKE '%service.namespace=prowler%'\n        AND has(mapKeys(attributes_string), 'status_code')\n        AND resources_string['k8s.namespace.name'] = 'prowler'\n        AND attributes_string['status_code'] IN ('PASS', 'FAIL')\n      GROUP BY pod\n      ORDER BY last_ts DESC\n      LIMIT 1\n    )\n  ),\n  0\n) AS value"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-telemetry-gaps": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Telemetry gaps",
+                  "description": "Configured security sources that went silent longer than allowed. Not-yet-collected sources are listed in the Coverage section, not counted here."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4f1717",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH \n  clusters AS (\n    SELECT DISTINCT resources_string['k8s.cluster.name'] AS cluster\n    FROM signoz_logs.distributed_logs_v2\n    WHERE ts_bucket_start >= $end_timestamp - 172800\n      AND resources_string['k8s.cluster.name'] != ''\n      AND resources_string['k8s.cluster.name'] IN $cluster\n  ),\n  cluster_limits AS (\n    SELECT tupleElement(e, 1) AS source, tupleElement(e, 2) AS limit_min, c.cluster AS cluster\n    FROM (SELECT arrayJoin([\n      ('Falco runtime', 120),\n      ('Envoy access logs', 120),\n      ('kubernetes-audit', 120),\n      ('NetworkPolicy denials', 1000000000),\n      ('OBI flows', 120),\n      ('Trivy CVE metrics', 120),\n      ('Trivy config audit', 120),\n      ('Kyverno', 120),\n      ('cert-manager', 120)\n    ]) AS e) AS src\n    CROSS JOIN clusters AS c\n  ),\n  global_limits AS (\n    SELECT tupleElement(e, 1) AS source, tupleElement(e, 2) AS limit_min, 'aws' AS cluster\n    FROM (SELECT arrayJoin([\n      ('cloud-audit', 120),\n      ('network-flow', 120),\n      ('DNS logs', 120),\n      ('Prowler AWS CIS', 2160)\n    ]) AS e)\n  ),\n  expected AS (\n    SELECT * FROM cluster_limits\n    UNION ALL\n    SELECT * FROM global_limits\n  ),\n  seen AS (\n    SELECT multiIf(resources_string['k8s.container.name'] = 'falco', 'Falco runtime',\n                   resources_string['k8s.container.name'] = 'envoy', 'Envoy access logs', 'Prowler AWS CIS') AS source,\n      if(resources_string['k8s.namespace.name'] = 'prowler', 'aws', resources_string['k8s.cluster.name']) AS cluster, count() AS volume, max(timestamp) AS last_ns\n    FROM signoz_logs.distributed_logs_v2\n    WHERE ts_bucket_start BETWEEN $end_timestamp - 129600 - 1800 AND $end_timestamp\n      AND timestamp BETWEEN ($end_timestamp - 129600) * 1000000000 AND $end_timestamp * 1000000000\n      AND (resources_string['k8s.container.name'] IN ('falco', 'envoy') OR resources_string['k8s.namespace.name'] = 'prowler')\n      AND (resources_string['k8s.namespace.name'] = 'prowler' OR resources_string['k8s.cluster.name'] IN $cluster)\n    GROUP BY source, cluster\n    UNION ALL\n    SELECT multiIf(attributes_string['log.source'] = 'network-policy', 'NetworkPolicy denials',\n                   attributes_string['log.source'] = 'dns-query', 'DNS logs',\n                   attributes_string['log.source']) AS source,\n      if(attributes_string['log.source'] IN ('cloud-audit', 'network-flow', 'dns-query'), 'aws', resources_string['k8s.cluster.name']) AS cluster,\n      count(), max(timestamp)\n    FROM signoz_logs.distributed_logs_v2\n    WHERE ts_bucket_start BETWEEN $end_timestamp - 129600 - 1800 AND $end_timestamp\n      AND timestamp BETWEEN ($end_timestamp - 129600) * 1000000000 AND $end_timestamp * 1000000000\n      AND attributes_string['log.source'] IN ('kubernetes-audit', 'cloud-audit', 'network-flow', 'dns-query', 'network-policy')\n      AND (attributes_string['log.source'] IN ('cloud-audit', 'network-flow', 'dns-query') OR resources_string['k8s.cluster.name'] IN $cluster)\n    GROUP BY 1, 2\n    UNION ALL\n    SELECT multiIf(metric_name = 'trivy_image_vulnerabilities', 'Trivy CVE metrics',\n                   metric_name = 'trivy_resource_configaudits', 'Trivy config audit',\n                   metric_name = 'obi.network.flow.bytes', 'OBI flows',\n                   metric_name LIKE 'kyverno%', 'Kyverno', 'cert-manager'),\n      JSONExtractString(labels, 'k8s.cluster.name'), uniqExact(fingerprint), max(unix_milli) * 1000000\n    FROM signoz_metrics.distributed_time_series_v4\n    WHERE metric_name IN ('trivy_image_vulnerabilities', 'trivy_resource_configaudits', 'obi.network.flow.bytes',\n                          'kyverno_policy_results_total', 'certmanager_certificate_expiration_timestamp_seconds')\n      AND unix_milli BETWEEN ($end_timestamp - 129600) * 1000 AND $end_timestamp * 1000\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY 1, 2\n  ),\n  rows AS (\n    SELECT e.source AS source, e.cluster AS cluster, coalesce(s.volume, 0) AS volume,\n      if(isNull(s.last_ns) OR s.last_ns = 0, NULL, dateDiff('minute', toDateTime(intDiv(s.last_ns, 1000000000)), toDateTime($end_timestamp))) AS minutes_since_data,\n      if(isNull(s.last_ns) OR s.last_ns = 0 OR e.limit_min > 100000, NULL, round(100 * minutes_since_data / e.limit_min)) AS pct_of_allowed_delay,\n      if(e.source = 'NetworkPolicy denials', 'OK', if(isNull(s.last_ns) OR s.last_ns = 0 OR minutes_since_data > e.limit_min, 'STALE', 'OK')) AS status\n    FROM expected AS e\n    LEFT JOIN seen AS s ON s.source = e.source AND s.cluster = e.cluster\n  )\nSELECT countIf(status = 'STALE') AS value FROM rows"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-human-privileged-actions": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Human privileged actions",
+                  "description": "SSO users only (AWSReservedSSO roles) in Kubernetes audit; service accounts excluded."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4a3608",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value\nFROM signoz_logs.distributed_logs_v2\nWHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n  AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n  AND has(mapKeys(attributes_string), 'log.source')\n  AND attributes_string['log.source'] = 'kubernetes-audit'\n  AND (resources_string['k8s.cluster.name'] = '' OR resources_string['k8s.cluster.name'] IN $cluster)\n  AND attributes_string['k8s.audit.user'] LIKE '%assumed-role/AWSReservedSSO%'\n  AND (\n    attributes_string['k8s.audit.subresource'] IN ('exec', 'attach', 'portforward')\n    OR attributes_string['k8s.audit.resource'] = 'secrets'\n    OR attributes_string['k8s.audit.resource'] LIKE '%rolebindings'\n  )"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-aws-access-denied": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "AWS access denied",
+                  "description": "CloudTrail AccessDenied and Unauthorized events across AWS principals."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 100,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4a3608",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT count() AS value\nFROM signoz_logs.distributed_logs_v2\nWHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n  AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n  AND has(mapKeys(attributes_string), 'log.source')\n  AND attributes_string['log.source'] = 'cloud-audit'\n  AND (attributes_string['aws.error_code'] LIKE '%AccessDenied%' OR attributes_string['aws.error_code'] LIKE '%Unauthorized%')"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-admission-blocks": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Admission blocks",
+                  "description": "Kyverno enforce-mode rejections over the selected window. Network policy denials join this tile once VPC CNI policy event logs are on."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4a3608",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toUInt64(coalesce(sum(d), 0)) AS value\nFROM (\n  SELECT fingerprint, max(value) - min(value) AS d\n  FROM signoz_metrics.distributed_samples_v4\n  WHERE metric_name = 'kyverno_policy_results_total'\n    AND unix_milli BETWEEN $start_timestamp * 1000 AND $end_timestamp * 1000\n  GROUP BY fingerprint\n) s\nGLOBAL JOIN (\n  SELECT fingerprint\n  FROM signoz_metrics.distributed_time_series_v4\n  WHERE metric_name = 'kyverno_policy_results_total'\n    AND JSONExtractString(labels, 'rule_result') = 'fail'\n    AND JSONExtractString(labels, 'policy_validation_mode') = 'enforce'\n    AND JSONExtractString(labels, 'rule_execution_cause') = 'admission_request'\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n  GROUP BY fingerprint\n) ts ON s.fingerprint = ts.fingerprint"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-admin-policies-attached": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Admin policies attached",
+                  "description": "Prowler high-severity fails in AWS IAM and security configuration."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4f1717",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT coalesce(\n  (\n    SELECT toUInt64(fail_high)\n    FROM (\n      SELECT\n        resources_string['k8s.pod.name'] AS pod,\n        max(timestamp) AS last_ts,\n        countIf(attributes_string['status_code'] = 'FAIL' AND attributes_string['severity'] IN ('Critical', 'High')) AS fail_high\n      FROM signoz_logs.distributed_logs_v2\n      WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n        AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n        AND resource_fingerprint LIKE '%service.namespace=prowler%'\n        AND has(mapKeys(attributes_string), 'status_code')\n        AND resources_string['k8s.namespace.name'] = 'prowler'\n        AND attributes_string['status_code'] != ''\n      GROUP BY pod\n      ORDER BY last_ts DESC\n      LIMIT 1\n    )\n  ),\n  0\n) AS value"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-certificates-expiring": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Certificates < 14 days",
+                  "description": "cert-manager managed TLS certificates expiring within 14 days."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4a3608",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toUInt64(countIf(exp_ts > 0 AND exp_ts < $end_timestamp + 14 * 86400)) AS value\nFROM (\n  SELECT fingerprint, argMax(value, unix_milli) AS exp_ts\n  FROM signoz_metrics.distributed_samples_v4\n  WHERE metric_name = 'certmanager_certificate_expiration_timestamp_seconds'\n    AND unix_milli BETWEEN ($end_timestamp - 7200) * 1000 AND $end_timestamp * 1000\n  GROUP BY fingerprint\n) s\nGLOBAL JOIN (\n  SELECT fingerprint\n  FROM signoz_metrics.distributed_time_series_v4\n  WHERE metric_name = 'certmanager_certificate_expiration_timestamp_seconds'\n    AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n  GROUP BY fingerprint\n) ts ON s.fingerprint = ts.fingerprint"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-exposure-header": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "1 \u00b7 Exposure: what can an attacker reach?",
+                  "description": ""
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "Which hosts take internet traffic, who is knocking, and what the edge rejects. **Normal:** only intended hosts, flat rejections.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-exposure-internet-facing-hosts": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Internet-facing hosts",
+                  "description": "Hosts taking traffic from the internet, public IP count, request volume, and error rates"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "public_clients": "none",
+                        "requests": "none",
+                        "pct_denied": "percent",
+                        "pct_5xx": "percent"
+                      },
+                      "decimalPrecision": "1"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "public_clients",
+                        "value": 500,
+                        "operator": "above",
+                        "unit": "none",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "pct_denied",
+                        "value": 20,
+                        "operator": "above",
+                        "unit": "percent",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "pct_denied",
+                        "value": 5,
+                        "operator": "above",
+                        "unit": "percent",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]) AS client_ip, (client_ip != '' AND isIPv4String(client_ip) AND NOT isIPAddressInRange(client_ip, '10.0.0.0/8') AND NOT isIPAddressInRange(client_ip, '172.16.0.0/12') AND NOT isIPAddressInRange(client_ip, '192.168.0.0/16') AND NOT isIPAddressInRange(client_ip, '127.0.0.0/8') AND NOT isIPAddressInRange(client_ip, '100.64.0.0/10')) AS is_public SELECT attributes_string['authority'] AS host, uniqExactIf(client_ip, is_public) AS public_clients, count() AS requests, round(100 * countIf(attributes_number['response_code'] IN (401, 403)) / count(), 1) AS pct_denied FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND resources_string['k8s.container.name'] = 'envoy' AND resources_string['k8s.cluster.name'] IN $cluster GROUP BY host HAVING public_clients > 0 ORDER BY public_clients DESC LIMIT 10"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-exposure-edge-rejections-by-status": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Edge rejections by status",
+                  "description": "Envoy Gateway responses, per hour"
+                },
+                "plugin": {
+                  "kind": "signoz/BarChartPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false,
+                      "stackedBarChart": true
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": {
+                        "401": "#3987e5",
+                        "403": "#d95926",
+                        "429": "#199e70",
+                        "{code=\"401\"}": "#3987e5",
+                        "{code=\"403\"}": "#d95926",
+                        "{code=\"429\"}": "#199e70"
+                      }
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "legend": "{{code}}",
+                          "query": "SELECT toStartOfHour(toDateTime(timestamp / 1000000000)) AS ts, toString(toUInt16(attributes_number['response_code'])) AS code, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND resources_string['k8s.container.name'] = 'envoy' AND resources_string['k8s.cluster.name'] IN $cluster AND toUInt16(attributes_number['response_code']) IN (401, 403, 429) AND attributes_string['user_agent'] NOT LIKE 'openplex-conformance-probe%' AND attributes_string['user_agent'] NOT LIKE 'Python-urllib%' AND attributes_string['authority'] GLOBAL IN (SELECT DISTINCT attributes_string['authority'] FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND resources_string['k8s.container.name'] = 'envoy' AND resources_string['k8s.cluster.name'] IN $cluster AND has(mapKeys(attributes_string), 'x_forwarded_for') AND trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]) != '' AND isIPv4String(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1])) AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '10.0.0.0/8') AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '172.16.0.0/12') AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '192.168.0.0/16') AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '127.0.0.0/8') AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '100.64.0.0/10')) GROUP BY ts, code ORDER BY ts"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "B",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "B",
+                          "legend": "internal 401: {{host}}",
+                          "query": "SELECT toStartOfHour(toDateTime(timestamp / 1000000000)) AS ts, attributes_string['authority'] AS host, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND resources_string['k8s.container.name'] = 'envoy' AND resources_string['k8s.cluster.name'] IN $cluster AND toUInt16(attributes_number['response_code']) = 401 AND attributes_string['user_agent'] NOT LIKE 'openplex-conformance-probe%' AND attributes_string['user_agent'] NOT LIKE 'Python-urllib%' AND attributes_string['authority'] GLOBAL NOT IN (SELECT DISTINCT attributes_string['authority'] FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND resources_string['k8s.container.name'] = 'envoy' AND resources_string['k8s.cluster.name'] IN $cluster AND has(mapKeys(attributes_string), 'x_forwarded_for') AND trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]) != '' AND isIPv4String(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1])) AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '10.0.0.0/8') AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '172.16.0.0/12') AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '192.168.0.0/16') AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '127.0.0.0/8') AND NOT isIPAddressInRange(trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]), '100.64.0.0/10')) GROUP BY ts, host ORDER BY ts"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-exposure-top-public-ips": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Top public source IPs",
+                  "description": "Top public client IPs hitting Envoy, rejection counts, and targeted hosts"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "requests": "none",
+                        "rejected": "none",
+                        "hosts": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "rejected",
+                        "value": 50,
+                        "operator": "above",
+                        "unit": "none",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "rejected",
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "none",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH trim(splitByChar(',', attributes_string['x_forwarded_for'])[1]) AS ip SELECT ip, count() AS requests, countIf(toUInt16(attributes_number['response_code']) IN (401, 403, 429)) AS rejected FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND resources_string['k8s.container.name'] = 'envoy' AND resources_string['k8s.cluster.name'] IN $cluster AND attributes_string['user_agent'] NOT LIKE 'openplex-conformance-probe%' AND attributes_string['user_agent'] NOT LIKE 'Python-urllib%' AND ip != '' AND isIPv4String(ip) AND NOT isIPAddressInRange(ip, '10.0.0.0/8') AND NOT isIPAddressInRange(ip, '172.16.0.0/12') AND NOT isIPAddressInRange(ip, '192.168.0.0/16') AND NOT isIPAddressInRange(ip, '127.0.0.0/8') AND NOT isIPAddressInRange(ip, '100.64.0.0/10') GROUP BY ip ORDER BY rejected DESC, requests DESC LIMIT 8"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-exposure-rejected-vpc-flows-by-port": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Rejected VPC flows by port",
+                  "description": "Destination ports with rejected VPC flow logs and count of unique sources"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "n": "none",
+                        "sources": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "sources",
+                        "value": 10,
+                        "operator": "above",
+                        "unit": "none",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT attributes_string['flow_dstport'] AS port, count() AS n, uniqExact(attributes_string['flow_srcaddr']) AS sources FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND attributes_string['log.source'] = 'network-flow' AND attributes_string['flow_action'] = 'REJECT' GROUP BY port ORDER BY n DESC LIMIT 8"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-exposure-first-seen-domains": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "External domains seen for the first time",
+                  "description": "Domains queried in the selected window that were not seen in the 7 days prior"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "n": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT attributes_string['dns.query_name'] AS q, count() AS n, formatDateTime(min(toDateTime(timestamp / 1000000000)), '%m-%d %H:%i') AS first_seen FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN ($start_timestamp - 604800 - 1800) AND $end_timestamp AND timestamp BETWEEN ($start_timestamp_nano - 604800000000000) AND $end_timestamp_nano AND attributes_string['log.source'] = 'dns-query' AND attributes_string['dns.query_name'] != '' GROUP BY q HAVING min(timestamp) >= $start_timestamp_nano AND min(timestamp) > (SELECT min(timestamp) FROM signoz_logs.distributed_logs_v2 WHERE attributes_string['log.source'] = 'dns-query' AND attributes_string['dns.query_name'] != '') + 259200000000000 ORDER BY n DESC LIMIT 8"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-threats-header": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Threats: is something happening right now?",
+                  "description": ""
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "Runtime detections, humans in the clusters, risky cloud changes. **Normal:** nothing above Notice; every human action has a reason.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-threats-runtime-alerts-by-priority": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Runtime alerts by priority",
+                  "description": "Falco events per hour, stacked by priority"
+                },
+                "plugin": {
+                  "kind": "signoz/BarChartPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false,
+                      "stackedBarChart": true
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": {
+                        "Emergency": "#d03b3b",
+                        "Alert": "#d03b3b",
+                        "Critical": "#d03b3b",
+                        "Error": "#ec835a",
+                        "Warning": "#fab219",
+                        "Notice": "#5c5b57",
+                        "Informational": "#3a3a37"
+                      }
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "legend": "{{priority}}",
+                          "query": "SELECT toStartOfHour(toDateTime(timestamp / 1000000000)) AS ts, attributes_string['priority'] AS priority, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND resources_string['k8s.container.name'] = 'falco' AND resources_string['k8s.cluster.name'] IN $cluster AND attributes_string['priority'] IN $priority GROUP BY ts, priority ORDER BY ts"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-threats-noisiest-rules": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Noisiest rules",
+                  "description": "Top security rules triggered across all priorities (surfaces tuning backlog)"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "n": "none",
+                        "namespaces": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "n",
+                        "value": 1000.0,
+                        "operator": "above",
+                        "unit": "none",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT attributes_string['rule'] AS rule, attributes_string['priority'] AS p, count() AS n FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND resources_string['k8s.container.name'] = 'falco' AND resources_string['k8s.cluster.name'] IN $cluster AND rule != '' GROUP BY rule, p ORDER BY n DESC LIMIT 10"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-threats-latest-runtime-alerts": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Latest runtime alerts",
+                  "description": "Falco detections at the selected priorities, newest first. Open a row for the full event, including process, container and pod."
+                },
+                "plugin": {
+                  "kind": "signoz/ListPanel",
+                  "spec": {
+                    "selectFields": [
+                      {
+                        "name": "timestamp",
+                        "signal": "logs"
+                      },
+                      {
+                        "name": "priority",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "rule",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "k8s.cluster.name",
+                        "signal": "logs",
+                        "fieldContext": "resource",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "output",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "raw",
+                    "spec": {
+                      "plugin": {
+                        "kind": "signoz/BuilderQuery",
+                        "spec": {
+                          "name": "A",
+                          "signal": "logs",
+                          "aggregations": [
+                            {
+                              "expression": "count()"
+                            }
+                          ],
+                          "filter": {
+                            "expression": "k8s.container.name = 'falco' AND priority IN $priority AND k8s.cluster.name IN $cluster"
+                          },
+                          "groupBy": [],
+                          "order": [
+                            {
+                              "key": {
+                                "name": "timestamp"
+                              },
+                              "direction": "desc"
+                            },
+                            {
+                              "key": {
+                                "name": "id"
+                              },
+                              "direction": "desc"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-threats-humans-in-clusters": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Humans in the clusters",
+                  "description": "Interactive human kubectl operations (exec, secret reads, RBAC changes) via SSO"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "n": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT formatDateTime(max(toDateTime(timestamp / 1000000000)), '%m-%d %H:%i') AS t, replaceRegexpOne(attributes_string['k8s.audit.user'], '.*assumed-role/[^/]+/', '') AS user, concat(attributes_string['k8s.audit.resource'], if(attributes_string['k8s.audit.subresource'] != '', '/' || attributes_string['k8s.audit.subresource'], '')) AS what, attributes_string['k8s.audit.namespace'] AS ns, attributes_string['k8s.audit.name'] AS name, count() AS n FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND attributes_string['log.source'] = 'kubernetes-audit' AND resources_string['k8s.cluster.name'] IN $cluster AND attributes_string['k8s.audit.user'] LIKE '%assumed-role/AWSReservedSSO%' AND (attributes_string['k8s.audit.subresource'] IN ('exec', 'attach', 'portforward') OR attributes_string['k8s.audit.resource'] = 'secrets' OR attributes_string['k8s.audit.resource'] LIKE '%rolebindings') GROUP BY user, what, ns, name ORDER BY max(timestamp) DESC LIMIT 10"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-threats-risky-aws-changes": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Risky AWS changes",
+                  "description": "CloudTrail writes that grant access, weaken encryption or logging, or open security groups, plus anything by root. Open a row for the full event."
+                },
+                "plugin": {
+                  "kind": "signoz/ListPanel",
+                  "spec": {
+                    "selectFields": [
+                      {
+                        "name": "timestamp",
+                        "signal": "logs"
+                      },
+                      {
+                        "name": "aws.event_name",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "aws.principal_arn",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "aws.source_ip",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      },
+                      {
+                        "name": "aws.error_code",
+                        "signal": "logs",
+                        "fieldContext": "attribute",
+                        "fieldDataType": "string"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "raw",
+                    "spec": {
+                      "plugin": {
+                        "kind": "signoz/BuilderQuery",
+                        "spec": {
+                          "name": "A",
+                          "signal": "logs",
+                          "aggregations": [
+                            {
+                              "expression": "count()"
+                            }
+                          ],
+                          "filter": {
+                            "expression": "log.source = 'cloudtrail' AND aws.read_only = false AND (aws.event_name IN ('ConsoleLogin', 'CreateAccessKey', 'CreateUser', 'AttachUserPolicy', 'AttachRolePolicy', 'PutRolePolicy', 'UpdateAssumeRolePolicy', 'DisableKey', 'ScheduleKeyDeletion', 'PutBucketPolicy', 'DeleteBucketPolicy', 'AuthorizeSecurityGroupIngress', 'StopLogging', 'DeleteTrail') OR aws.principal_arn LIKE '%:root')"
+                          },
+                          "groupBy": [],
+                          "order": [
+                            {
+                              "key": {
+                                "name": "timestamp"
+                              },
+                              "direction": "desc"
+                            },
+                            {
+                              "key": {
+                                "name": "id"
+                              },
+                              "direction": "desc"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-threats-aws-access-denied": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "AWS access denied by principal",
+                  "description": "CloudTrail AccessDenied / Unauthorized events grouped by IAM principal"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "denied": "none",
+                        "apis": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "denied",
+                        "value": 100.0,
+                        "operator": "above",
+                        "unit": "none",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT replaceRegexpOne(attributes_string['aws.principal_arn'], '^arn:aws:sts::[0-9]+:assumed-role/', '') AS principal, count() AS denied, uniqExact(attributes_string['aws.event_name']) AS apis, any(attributes_string['aws.event_name']) AS example FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND attributes_string['log.source'] = 'cloud-audit' AND (attributes_string['aws.error_code'] LIKE '%AccessDenied%' OR attributes_string['aws.error_code'] LIKE '%Unauthorized%') GROUP BY principal ORDER BY denied DESC LIMIT 8"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-guardrails-header": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Guardrails overview",
+                  "description": ""
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "What admission and network policies stopped. **Normal:** a trickle of blocks; a steady stream from one namespace needs a fix.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-guardrails-admissions-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Blocked admissions by policy over time",
+                  "description": "Kyverno enforce-mode admission rejections grouped by policy name"
+                },
+                "plugin": {
+                  "kind": "signoz/BarChartPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false,
+                      "stackedBarChart": true
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": {
+                        "production-pod-security": "#3987e5",
+                        "service-account-token-hardening": "#d95926",
+                        "production-image-digest-pinning": "#199e70",
+                        "workload-vpa-generation-v2": "#c98500"
+                      }
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH ts_matches AS (SELECT fingerprint, any(JSONExtractString(labels, 'policy_name')) AS policy FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name = 'kyverno_policy_results_total' AND JSONExtractString(labels, 'rule_result') = 'fail' AND JSONExtractString(labels, 'policy_validation_mode') = 'enforce' AND JSONExtractString(labels, 'rule_execution_cause') = 'admission_request' AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster GROUP BY fingerprint) SELECT toStartOfHour(toDateTime(intDiv(s.unix_milli, 1000))) AS ts, m.policy AS policy, sum(if(s.value >= s.prev_value, s.value - s.prev_value, s.value)) AS value FROM (SELECT fingerprint, unix_milli, value, lagInFrame(value, 1, value) OVER (PARTITION BY fingerprint ORDER BY unix_milli) AS prev_value FROM signoz_metrics.distributed_samples_v4 WHERE metric_name = 'kyverno_policy_results_total' AND unix_milli >= ($start_timestamp - 300) * 1000 AND unix_milli <= $end_timestamp * 1000 AND fingerprint GLOBAL IN (SELECT fingerprint FROM ts_matches)) s GLOBAL JOIN ts_matches m ON s.fingerprint = m.fingerprint WHERE s.unix_milli >= $start_timestamp * 1000 GROUP BY ts, policy HAVING value > 0 ORDER BY ts, policy"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-guardrails-netpol-denials-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Network policy denials over time",
+                  "description": "Network policy dropped packets by destination namespace and port (data source being enabled on VPC CNI)"
+                },
+                "plugin": {
+                  "kind": "signoz/BarChartPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "fillSpans": false,
+                      "stackedBarChart": true
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "axes": {
+                      "softMin": 0,
+                      "softMax": null,
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": {}
+                    },
+                    "thresholds": []
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT toStartOfHour(toDateTime(intDiv(timestamp, 1000000000))) AS ts, concat(if(attributes_string['k8s.namespace.name'] != '', attributes_string['k8s.namespace.name'], attributes_string['dst_ip']), ':', attributes_string['dst_port']) AS destination, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano AND has(mapValues(attributes_string), 'network-policy') AND attributes_string['log.source'] = 'network-policy' AND resources_string['k8s.cluster.name'] IN $cluster GROUP BY ts, destination ORDER BY ts, destination"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-guardrails-blocked-resources": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "What was blocked, and where",
+                  "description": "Kyverno admission rejections and audit violations by cluster, policy, rule, namespace, and resource kind"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "count": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "count",
+                        "operator": "above",
+                        "value": 50,
+                        "unit": "",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH ts_matches AS (SELECT fingerprint, any(toJSONString(map('k8s.cluster.name', JSONExtractString(labels, 'k8s.cluster.name'), 'policy_name', JSONExtractString(labels, 'policy_name'), 'policy_validation_mode', JSONExtractString(labels, 'policy_validation_mode'), 'resource_kind', JSONExtractString(labels, 'resource_kind'), 'resource_namespace', JSONExtractString(labels, 'resource_namespace'), 'rule_name', JSONExtractString(labels, 'rule_name')))) AS lb FROM signoz_metrics.distributed_time_series_v4 WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'kyverno_policy_results_total' AND JSONExtractString(labels, 'rule_result') = 'fail' AND JSONExtractString(labels, 'rule_execution_cause') = 'admission_request' AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster GROUP BY fingerprint) SELECT JSONExtractString(m.lb, 'k8s.cluster.name') AS cluster, JSONExtractString(m.lb, 'policy_name') AS policy, JSONExtractString(m.lb, 'rule_name') AS rule, JSONExtractString(m.lb, 'resource_namespace') AS namespace, JSONExtractString(m.lb, 'resource_kind') AS kind, if(JSONExtractString(m.lb, 'policy_validation_mode') = 'enforce', 'blocked', 'audit only') AS outcome, sum(s.delta) AS count FROM (SELECT fingerprint, if(value >= prev_value, value - prev_value, value) AS delta FROM (SELECT fingerprint, unix_milli, value, lagInFrame(value, 1, value) OVER (PARTITION BY fingerprint ORDER BY unix_milli) AS prev_value FROM signoz_metrics.distributed_samples_v4 WHERE metric_name = 'kyverno_policy_results_total' AND unix_milli >= ($start_timestamp - 300) * 1000 AND unix_milli <= $end_timestamp * 1000 AND fingerprint GLOBAL IN (SELECT fingerprint FROM ts_matches)) WHERE unix_milli >= $start_timestamp * 1000) s GLOBAL JOIN ts_matches m ON s.fingerprint = m.fingerprint GROUP BY cluster, policy, rule, namespace, kind, outcome HAVING count > 0 ORDER BY count DESC LIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-guardrails-netpol-denials-table": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Network policy denials",
+                  "description": "Network policy drop events by source, destination, port, and protocol"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "count": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "count",
+                        "operator": "above",
+                        "value": 0,
+                        "unit": "",
+                        "color": "#7a2020",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH denials AS (\n  SELECT\n    id,\n    attributes_string['src_ip'] AS src_ip,\n    attributes_string['dst_ip'] AS dst_ip,\n    attributes_string['dst_port'] AS port,\n    attributes_string['protocol'] AS protocol,\n    timestamp,\n    resources_string['k8s.cluster.name'] AS cluster\n  FROM signoz_logs.distributed_logs_v2\n  WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n    AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n    AND has(mapValues(attributes_string), 'network-policy')\n    AND attributes_string['log.source'] = 'network-policy'\n    AND resources_string['k8s.cluster.name'] IN $cluster\n),\ndenial_ips AS (\n  SELECT DISTINCT arrayJoin([src_ip, dst_ip]) AS ip\n  FROM denials\n  WHERE ip != ''\n),\npod_lookup AS (\n  SELECT\n    JSONExtractString(ts.lbl, 'cluster') AS cluster,\n    JSONExtractString(ts.lbl, 'pod_ip') AS ip,\n    multiIf(\n      JSONExtractString(ts.lbl, 'host_network') = 'true', concat('node/', JSONExtractString(ts.lbl, 'node')),\n      JSONExtractString(ts.lbl, 'created_by_name') != '' AND JSONExtractString(ts.lbl, 'created_by_name') != '<none>', concat(JSONExtractString(ts.lbl, 'namespace'), '/', if(JSONExtractString(ts.lbl, 'created_by_kind') = 'ReplicaSet', replaceRegexpOne(JSONExtractString(ts.lbl, 'created_by_name'), '-[a-z0-9]{6,10}$', ''), JSONExtractString(ts.lbl, 'created_by_name'))),\n      concat(JSONExtractString(ts.lbl, 'namespace'), '/', JSONExtractString(ts.lbl, 'pod'))\n    ) AS workload,\n    toUInt64(min(s.unix_milli)) * 1000000 AS min_ts,\n    toUInt64(max(s.unix_milli)) * 1000000 AS max_ts\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map(\n      'cluster', JSONExtractString(labels, 'k8s.cluster.name'),\n      'pod_ip', JSONExtractString(labels, 'pod_ip'),\n      'namespace', JSONExtractString(labels, 'namespace'),\n      'pod', JSONExtractString(labels, 'pod'),\n      'created_by_kind', JSONExtractString(labels, 'created_by_kind'),\n      'created_by_name', JSONExtractString(labels, 'created_by_name'),\n      'node', JSONExtractString(labels, 'node'),\n      'host_network', JSONExtractString(labels, 'host_network')\n    ))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp - 300, $end_timestamp - 7200) - 172800) * 1000\n      AND metric_name = 'kube_pod_info'\n      AND JSONExtractString(labels, 'pod_ip') GLOBAL IN (SELECT ip FROM denial_ips)\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'kube_pod_info'\n    AND s.unix_milli >= ($start_timestamp - 300) * 1000\n    AND s.unix_milli <= ($end_timestamp + 300) * 1000\n  GROUP BY cluster, ip, workload\n),\nservice_lookup AS (\n  SELECT\n    JSONExtractString(labels, 'k8s.cluster.name') AS cluster,\n    JSONExtractString(labels, 'cluster_ip') AS ip,\n    concat(JSONExtractString(labels, 'namespace'), '/', JSONExtractString(labels, 'service')) AS workload,\n    toUInt64(0) AS min_ts,\n    toUInt64(18446744073709551615) AS max_ts\n  FROM signoz_metrics.distributed_time_series_v4_1day\n  WHERE unix_milli >= (least($start_timestamp - 300, $end_timestamp - 7200) - 172800) * 1000\n    AND metric_name = 'kube_service_info'\n    AND JSONExtractString(labels, 'cluster_ip') GLOBAL IN (SELECT ip FROM denial_ips)\n  GROUP BY cluster, ip, workload\n),\nworkloads AS (\n  SELECT cluster, ip, workload, min_ts, max_ts FROM pod_lookup\n  UNION ALL\n  SELECT cluster, ip, workload, min_ts, max_ts FROM service_lookup\n),\nresolved AS (\n  SELECT\n    d.id,\n    d.port,\n    d.protocol,\n    argMax(if(src_w.workload = '', concat(d.src_ip, ' (unresolved)'), concat(src_w.cluster, ': ', src_w.workload)), src_w.max_ts) AS source,\n    argMax(if(dst_w.workload = '', concat(d.dst_ip, ' (unresolved)'), concat(dst_w.cluster, ': ', dst_w.workload)), dst_w.max_ts) AS destination\n  FROM denials d\n  LEFT JOIN workloads src_w ON d.src_ip = src_w.ip AND d.timestamp >= src_w.min_ts AND d.timestamp <= src_w.max_ts\n  LEFT JOIN workloads dst_w ON d.dst_ip = dst_w.ip AND d.timestamp >= dst_w.min_ts AND d.timestamp <= dst_w.max_ts\n  GROUP BY d.id, d.port, d.protocol\n)\nSELECT\n  source,\n  destination,\n  port,\n  protocol,\n  count() AS count\nFROM resolved\nGROUP BY source, destination, port, protocol\nORDER BY count DESC\nLIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-vulns-header": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "4 \u00b7 Vulnerabilities: what is exploitable?",
+                  "description": "Section introduction and normal operational baseline"
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "CVEs and secrets in running images. **Normal:** critical count trends down; no image has both runtime alerts and critical CVEs.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-vulns-cves-by-day": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "CVEs in running images, by day",
+                  "description": "Deduplicated by image digest"
+                },
+                "plugin": {
+                  "kind": "signoz/BarChartPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time",
+                      "stackedBarChart": true
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "axes": {
+                      "isLogScale": false
+                    },
+                    "legend": {
+                      "position": "bottom",
+                      "mode": "list",
+                      "customColors": {
+                        "Critical": "#d03b3b",
+                        "High": "#ec835a",
+                        "Medium": "#fab219",
+                        "Low": "#3987e5",
+                        "Unknown": "#5c5b57"
+                      }
+                    }
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "time_series",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "legend": "{{severity}}",
+                          "query": "SELECT toDateTime(toStartOfDay(toDateTime(day))) AS ts, sev AS severity, sum(v) AS value\nFROM (\n  SELECT s.day AS day, JSONExtractString(ts.lbl, 'severity') AS sev, coalesce(nullIf(JSONExtractString(ts.lbl, 'image_digest'), ''), JSONExtractString(ts.lbl, 'image_repository')) AS img, max(s.v) AS v\n  FROM (\n    SELECT fingerprint, toDate(toDateTime(unix_milli / 1000)) AS day, argMax(value, unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4\n    WHERE metric_name = 'trivy_image_vulnerabilities'\n      AND unix_milli >= $start_timestamp * 1000\n      AND unix_milli <= $end_timestamp * 1000\n    GROUP BY fingerprint, day\n  ) s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('image_digest', JSONExtractString(labels, 'image_digest'), 'image_repository', JSONExtractString(labels, 'image_repository'), 'severity', JSONExtractString(labels, 'severity')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'trivy_image_vulnerabilities'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      AND JSONExtractString(labels, 'namespace') IN $namespace\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  GROUP BY day, sev, img\n)\nGROUP BY ts, severity\nORDER BY ts, severity"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-vulns-most-vulnerable-images": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Most vulnerable images",
+                  "description": "Images currently running across the fleet sorted by critical and high vulnerability counts"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "crit": "none",
+                        "high": "none",
+                        "workloads": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "crit",
+                        "value": 10,
+                        "operator": "above",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "crit",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#7a3d22",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "high",
+                        "value": 50,
+                        "operator": "above",
+                        "color": "#7a3d22",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "high",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH trivy_latest AS (\n  SELECT JSONExtractString(ts.lbl, 'image_repository') AS image, JSONExtractString(ts.lbl, 'severity') AS severity, JSONExtractString(ts.lbl, 'resource_name') AS resource_name, JSONExtractString(ts.lbl, 'namespace') AS namespace, argMax(s.value, s.unix_milli) AS v\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('image_repository', JSONExtractString(labels, 'image_repository'), 'namespace', JSONExtractString(labels, 'namespace'), 'resource_name', JSONExtractString(labels, 'resource_name'), 'severity', JSONExtractString(labels, 'severity')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'trivy_image_vulnerabilities'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      AND JSONExtractString(labels, 'namespace') IN $namespace\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'trivy_image_vulnerabilities'\n    AND s.unix_milli > ($end_timestamp - 7200) * 1000\n    AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY s.fingerprint, image, severity, resource_name, namespace\n)\nSELECT image, toUInt64(maxIf(v, severity = 'Critical')) AS crit, toUInt64(maxIf(v, severity = 'High')) AS high, uniqExact(resource_name) AS workloads, substring(arrayStringConcat(arraySort(groupUniqArray(namespace)), ', '), 1, 40) AS ns\nFROM trivy_latest\nWHERE image != ''\nGROUP BY image\nORDER BY crit DESC, high DESC\nLIMIT 10"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-vulns-runtime-alerts-on-vulnerable-images": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "\u2605 Runtime alerts on vulnerable images",
+                  "description": "Joins Falco's container image with Trivy results"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "alerts": "none",
+                        "critical_cves": "none",
+                        "high_cves": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "critical_cves",
+                        "value": 10,
+                        "operator": "above",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "critical_cves",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#7a3d22",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "high_cves",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH vulns AS (\n  SELECT replaceRegexpOne(replaceRegexpOne(image, '^(?:[^/]+\\\\.[^/]+/|docker/)+', ''), '^library/', '') AS img, toUInt64(maxIf(v, severity = 'Critical')) AS crit, toUInt64(maxIf(v, severity = 'High')) AS high\n  FROM (\n    SELECT JSONExtractString(ts.lbl, 'image_repository') AS image, JSONExtractString(ts.lbl, 'severity') AS severity, argMax(s.value, s.unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4 s\n    GLOBAL JOIN (\n      SELECT fingerprint, any(toJSONString(map('image_repository', JSONExtractString(labels, 'image_repository'), 'severity', JSONExtractString(labels, 'severity')))) AS lbl\n      FROM signoz_metrics.distributed_time_series_v4_1day\n      WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'trivy_image_vulnerabilities'\n        AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      GROUP BY fingerprint\n    ) ts ON s.fingerprint = ts.fingerprint\n    WHERE s.metric_name = 'trivy_image_vulnerabilities'\n      AND s.unix_milli > ($end_timestamp - 7200) * 1000\n      AND s.unix_milli <= $end_timestamp * 1000\n      GROUP BY s.fingerprint, image, severity\n  )\n  GROUP BY img\n  HAVING crit + high > 0\n)\nSELECT f.img AS image, f.rule AS rule, f.n AS alerts, vulns.crit AS critical_cves, vulns.high AS high_cves\nFROM (\n  SELECT replaceRegexpOne(replaceRegexpOne(coalesce(nullIf(JSONExtractString(attributes_string['output_fields'], 'container.image.repository'), ''), JSONExtractString(attributes_string['output_fields'], 'container.image')), '^(?:[^/]+\\\\.[^/]+/|docker/)+', ''), '^library/', '') AS img, attributes_string['rule'] AS rule, count() AS n\n  FROM signoz_logs.distributed_logs_v2\n  WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n    AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n    AND has(mapKeys(attributes_string), 'priority')\n    AND has(mapKeys(attributes_string), 'output_fields')\n    AND resources_string['k8s.container.name'] = 'falco'\n    AND resources_string['k8s.cluster.name'] IN $cluster\n    AND attributes_string['priority'] IN $priority\n  GROUP BY img, rule\n  HAVING img != ''\n) f\nGLOBAL INNER JOIN vulns ON vulns.img = f.img\nORDER BY critical_cves DESC, alerts DESC\nLIMIT 8"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-vulns-secrets-in-images": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Secrets found in images",
+                  "description": "Exposed secrets discovered in running container images"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "n": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "n",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#7a2020",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH sec_latest AS (\n  SELECT JSONExtractString(ts.lbl, 'image_repository') AS image, JSONExtractString(ts.lbl, 'namespace') AS namespace, toUInt64(argMax(s.value, s.unix_milli)) AS v\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('image_repository', JSONExtractString(labels, 'image_repository'), 'namespace', JSONExtractString(labels, 'namespace')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'trivy_image_exposedsecrets'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      AND JSONExtractString(labels, 'namespace') IN $namespace\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'trivy_image_exposedsecrets'\n    AND s.unix_milli > ($end_timestamp - 7200) * 1000\n    AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY s.fingerprint, image, namespace\n)\nSELECT image, max(v) AS n, substring(arrayStringConcat(arraySort(groupUniqArray(namespace)), ', '), 1, 60) AS ns\nFROM sec_latest\nWHERE image != ''\nGROUP BY image\nHAVING n > 0\nORDER BY n DESC"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-compliance-header": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "5 \u00b7 Compliance: are we configured right?",
+                  "description": "Section introduction and normal operational baseline"
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "AWS (Prowler CIS) and Kubernetes (Trivy CIS, NSA, PSS, CIS EKS) benchmarks. **Normal:** pass rates hold or rise.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-compliance-aws-cis-by-service": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "AWS CIS by service",
+                  "description": "Prowler CIS benchmark pass rates and failures grouped by AWS service"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "pass": "none",
+                        "fail": "none",
+                        "rate": "%"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "fail",
+                        "value": 10,
+                        "operator": "above",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "fail",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "rate",
+                        "value": 50,
+                        "operator": "below",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "rate",
+                        "value": 90,
+                        "operator": "below",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "rate",
+                        "value": 90,
+                        "operator": "above_or_equal",
+                        "color": "#1c5a2f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "SELECT service, fail, rate FROM (\nWITH run AS (\n  SELECT argMax(resources_string['k8s.pod.name'], timestamp) AS pod\n  FROM signoz_logs.distributed_logs_v2\n  WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n    AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n    AND has(mapKeys(attributes_string), 'status_code')\n    AND resources_string['k8s.namespace.name'] = 'prowler'\n    AND attributes_string['status_code'] != ''\n)\nSELECT JSONExtractString(attributes_string['resources'], 1, 'group', 'name') AS service, countIf(attributes_string['status_code'] = 'FAIL') AS fail, countIf(attributes_string['status_code'] = 'PASS') AS pass_count, toInt64(round(100.0 * pass_count / greatest(1, pass_count + fail))) AS rate\nFROM signoz_logs.distributed_logs_v2\nWHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n  AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n  AND has(mapKeys(attributes_string), 'status_code')\n  AND resources_string['k8s.namespace.name'] = 'prowler'\n  AND resources_string['k8s.pod.name'] = (SELECT pod FROM run)\n  AND attributes_string['status_code'] IN ('PASS', 'FAIL')\n  AND service != ''\nGROUP BY service\nORDER BY fail DESC\n)\nORDER BY fail DESC"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-compliance-top-failed-aws-checks": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Top failed AWS checks",
+                  "description": "Most common failing CIS findings from the latest Prowler execution"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "resources": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "resources",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#7a3d22",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH run AS (\n  SELECT argMax(resources_string['k8s.pod.name'], timestamp) AS pod\n  FROM signoz_logs.distributed_logs_v2\n  WHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n    AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n    AND has(mapKeys(attributes_string), 'status_code')\n    AND resources_string['k8s.namespace.name'] = 'prowler'\n    AND attributes_string['status_code'] != ''\n)\nSELECT attributes_string['severity'] AS sev, JSONExtractString(attributes_string['finding_info'], 'title') AS check, count() AS resources\nFROM signoz_logs.distributed_logs_v2\nWHERE ts_bucket_start BETWEEN $start_timestamp - 1800 AND $end_timestamp\n  AND timestamp BETWEEN $start_timestamp_nano AND $end_timestamp_nano\n  AND has(mapKeys(attributes_string), 'status_code')\n  AND resources_string['k8s.namespace.name'] = 'prowler'\n  AND resources_string['k8s.pod.name'] = (SELECT pod FROM run)\n  AND attributes_string['status_code'] = 'FAIL'\n  AND check != ''\nGROUP BY sev, check\nORDER BY indexOf(['Critical','High','Medium','Low','Informational'], sev), resources DESC\nLIMIT 8"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-compliance-kyverno-results-by-policy": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Kyverno results by policy (24h)",
+                  "description": "Admission policy audit and enforcement outcome counts"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "pass": "none",
+                        "fail": "none",
+                        "skip": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "fail",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#7a2020",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH kyv AS (\n  SELECT JSONExtractString(ts.lbl, 'policy_name') AS policy, JSONExtractString(ts.lbl, 'rule_result') AS result, max(s.value) - min(s.value) AS d\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('policy_name', JSONExtractString(labels, 'policy_name'), 'rule_result', JSONExtractString(labels, 'rule_result')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'kyverno_policy_results_total'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      AND JSONExtractString(labels, 'resource_namespace') IN $namespace\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'kyverno_policy_results_total'\n    AND s.unix_milli >= $start_timestamp * 1000\n    AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY s.fingerprint, policy, result\n)\nSELECT policy, toUInt64(sumIf(d, result = 'pass')) AS pass, toUInt64(sumIf(d, result = 'fail')) AS fail, toUInt64(sumIf(d, result = 'skip')) AS skip\nFROM kyv\nWHERE policy != ''\nGROUP BY policy\nORDER BY fail DESC, pass DESC\nLIMIT 10"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-compliance-certificates-by-expiry": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Certificates by expiry",
+                  "description": "TLS certificates monitored by cert-manager sorted by days until expiry"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "days": "none"
+                      },
+                      "decimalPrecision": "1"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "days",
+                        "value": 7,
+                        "operator": "below",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "days",
+                        "value": 14,
+                        "operator": "below",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "days",
+                        "value": 14,
+                        "operator": "above_or_equal",
+                        "color": "#1c5a2f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH certs AS (\n  SELECT JSONExtractString(ts.lbl, 'name') AS cert, JSONExtractString(ts.lbl, 'exported_namespace') AS ns, JSONExtractString(ts.lbl, 'k8s.cluster.name') AS cluster, argMax(s.value, s.unix_milli) AS v\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('exported_namespace', JSONExtractString(labels, 'exported_namespace'), 'k8s.cluster.name', JSONExtractString(labels, 'k8s.cluster.name'), 'name', JSONExtractString(labels, 'name')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'certmanager_certificate_expiration_timestamp_seconds'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'certmanager_certificate_expiration_timestamp_seconds'\n    AND s.unix_milli > ($end_timestamp - 7200) * 1000\n    AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY s.fingerprint, cert, ns, cluster\n)\nSELECT cert, ns, cluster, round((v - $end_timestamp) / 86400.0, 1) AS days\nFROM certs\nWHERE v > 0 AND cert != ''\nORDER BY days ASC\nLIMIT 20"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-coverage-header": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "6 \u00b7 Coverage: can we trust the panels above?",
+                  "description": ""
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "When each source last reported. A **red** row means a section above may be blind, not safe.",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-coverage-telemetry-sources": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Telemetry sources",
+                  "description": "Current state of every security telemetry source, measured over the 36 hours before the end of the selected range. STALE: configured but silent longer than allowed (pct_of_allowed_delay > 100). NOT COLLECTED: sources we have not wired up yet."
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "formatting": {
+                      "columnUnits": {
+                        "volume": "none",
+                        "minutes_since_data": "none",
+                        "pct_of_allowed_delay": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "pct_of_allowed_delay",
+                        "value": 100,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "pct_of_allowed_delay",
+                        "value": 75,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "pct_of_allowed_delay",
+                        "value": 75,
+                        "operator": "below_or_equal",
+                        "unit": "",
+                        "color": "#1c5a2f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH \n  clusters AS (\n    SELECT DISTINCT resources_string['k8s.cluster.name'] AS cluster\n    FROM signoz_logs.distributed_logs_v2\n    WHERE ts_bucket_start >= $end_timestamp - 172800\n      AND resources_string['k8s.cluster.name'] != ''\n      AND resources_string['k8s.cluster.name'] IN $cluster\n  ),\n  cluster_limits AS (\n    SELECT tupleElement(e, 1) AS source, tupleElement(e, 2) AS limit_min, c.cluster AS cluster\n    FROM (SELECT arrayJoin([\n      ('Falco runtime', 120),\n      ('Envoy access logs', 120),\n      ('kubernetes-audit', 120),\n      ('NetworkPolicy denials', 1000000000),\n      ('OBI flows', 120),\n      ('Trivy CVE metrics', 120),\n      ('Trivy config audit', 120),\n      ('Kyverno', 120),\n      ('cert-manager', 120)\n    ]) AS e) AS src\n    CROSS JOIN clusters AS c\n  ),\n  global_limits AS (\n    SELECT tupleElement(e, 1) AS source, tupleElement(e, 2) AS limit_min, 'aws' AS cluster\n    FROM (SELECT arrayJoin([\n      ('cloud-audit', 120),\n      ('network-flow', 120),\n      ('DNS logs', 120),\n      ('Prowler AWS CIS', 2160)\n    ]) AS e)\n  ),\n  expected AS (\n    SELECT * FROM cluster_limits\n    UNION ALL\n    SELECT * FROM global_limits\n  ),\n  seen AS (\n    SELECT multiIf(resources_string['k8s.container.name'] = 'falco', 'Falco runtime',\n                   resources_string['k8s.container.name'] = 'envoy', 'Envoy access logs', 'Prowler AWS CIS') AS source,\n      if(resources_string['k8s.namespace.name'] = 'prowler', 'aws', resources_string['k8s.cluster.name']) AS cluster, count() AS volume, max(timestamp) AS last_ns\n    FROM signoz_logs.distributed_logs_v2\n    WHERE ts_bucket_start BETWEEN $end_timestamp - 129600 - 1800 AND $end_timestamp\n      AND timestamp BETWEEN ($end_timestamp - 129600) * 1000000000 AND $end_timestamp * 1000000000\n      AND (resources_string['k8s.container.name'] IN ('falco', 'envoy') OR resources_string['k8s.namespace.name'] = 'prowler')\n      AND (resources_string['k8s.namespace.name'] = 'prowler' OR resources_string['k8s.cluster.name'] IN $cluster)\n    GROUP BY source, cluster\n    UNION ALL\n    SELECT multiIf(attributes_string['log.source'] = 'network-policy', 'NetworkPolicy denials',\n                   attributes_string['log.source'] = 'dns-query', 'DNS logs',\n                   attributes_string['log.source']) AS source,\n      if(attributes_string['log.source'] IN ('cloud-audit', 'network-flow', 'dns-query'), 'aws', resources_string['k8s.cluster.name']) AS cluster,\n      count(), max(timestamp)\n    FROM signoz_logs.distributed_logs_v2\n    WHERE ts_bucket_start BETWEEN $end_timestamp - 129600 - 1800 AND $end_timestamp\n      AND timestamp BETWEEN ($end_timestamp - 129600) * 1000000000 AND $end_timestamp * 1000000000\n      AND attributes_string['log.source'] IN ('kubernetes-audit', 'cloud-audit', 'network-flow', 'dns-query', 'network-policy')\n      AND (attributes_string['log.source'] IN ('cloud-audit', 'network-flow', 'dns-query') OR resources_string['k8s.cluster.name'] IN $cluster)\n    GROUP BY 1, 2\n    UNION ALL\n    SELECT multiIf(metric_name = 'trivy_image_vulnerabilities', 'Trivy CVE metrics',\n                   metric_name = 'trivy_resource_configaudits', 'Trivy config audit',\n                   metric_name = 'obi.network.flow.bytes', 'OBI flows',\n                   metric_name LIKE 'kyverno%', 'Kyverno', 'cert-manager'),\n      JSONExtractString(labels, 'k8s.cluster.name'), uniqExact(fingerprint), max(unix_milli) * 1000000\n    FROM signoz_metrics.distributed_time_series_v4\n    WHERE metric_name IN ('trivy_image_vulnerabilities', 'trivy_resource_configaudits', 'obi.network.flow.bytes',\n                          'kyverno_policy_results_total', 'certmanager_certificate_expiration_timestamp_seconds')\n      AND unix_milli BETWEEN ($end_timestamp - 129600) * 1000 AND $end_timestamp * 1000\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n    GROUP BY 1, 2\n  ),\n  rows AS (\n    SELECT e.source AS source, e.cluster AS cluster, coalesce(s.volume, 0) AS volume,\n      if(isNull(s.last_ns) OR s.last_ns = 0, NULL, dateDiff('minute', toDateTime(intDiv(s.last_ns, 1000000000)), toDateTime($end_timestamp))) AS minutes_since_data,\n      if(isNull(s.last_ns) OR s.last_ns = 0 OR e.limit_min > 100000, NULL, round(100 * minutes_since_data / e.limit_min)) AS pct_of_allowed_delay,\n      if(e.source = 'NetworkPolicy denials', 'OK', if(isNull(s.last_ns) OR s.last_ns = 0 OR minutes_since_data > e.limit_min, 'STALE', 'OK')) AS status\n    FROM expected AS e\n    LEFT JOIN seen AS s ON s.source = e.source AND s.cluster = e.cluster\n  )\nSELECT * FROM (\n  SELECT source, cluster, volume, minutes_since_data, pct_of_allowed_delay, status FROM rows\n  UNION ALL\n  SELECT arrayJoin(['GuardDuty', 'GitHub audit log', 'Kubernetes audit (k3s/GKE)', 'Node journald (SSH, sudo)']), '-', 0, NULL, NULL, 'NOT COLLECTED'\n)\nORDER BY multiIf(status = 'STALE', 1, status = 'OK', 2, 3), source, cluster"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-posture-misconfigurations": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Misconfigurations (high+)",
+                  "description": "Critical and high Trivy findings on workload configuration and RBAC (roles and cluster roles), latest scan."
+                },
+                "plugin": {
+                  "kind": "signoz/NumberPanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "unit": "none",
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "value": 0,
+                        "operator": "above",
+                        "unit": "",
+                        "color": "#4a3608",
+                        "format": "background"
+                      },
+                      {
+                        "value": 0,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#123b1f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH m AS (\n    SELECT ts.metric_name AS metric, JSONExtractString(ts.lbl, 'severity') AS severity, JSONExtractString(ts.lbl, 'namespace') AS namespace, argMax(s.value, s.unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4 s\n    GLOBAL JOIN (\n      SELECT fingerprint, metric_name, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'severity', JSONExtractString(labels, 'severity')))) AS lbl\n      FROM signoz_metrics.distributed_time_series_v4_1day\n      WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name IN ('trivy_resource_configaudits', 'trivy_role_rbacassessments', 'trivy_clusterrole_clusterrbacassessments')\n        AND unix_milli >= ($end_timestamp - 86400 * 2) * 1000\n        AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster AND JSONExtractString(labels, 'severity') IN ('Critical', 'High')\n      GROUP BY fingerprint, metric_name\n    ) ts ON s.fingerprint = ts.fingerprint\n    WHERE s.metric_name IN ('trivy_resource_configaudits', 'trivy_role_rbacassessments', 'trivy_clusterrole_clusterrbacassessments')\n      AND s.unix_milli > ($end_timestamp - 7200) * 1000\n      AND s.unix_milli <= $end_timestamp * 1000\n    GROUP BY s.fingerprint, metric, severity, namespace\n)\nSELECT toUInt64(sum(v)) AS value FROM m WHERE namespace IN $namespace OR metric = 'trivy_clusterrole_clusterrbacassessments'"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-compliance-misconfigurations-by-namespace": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Misconfigurations by namespace",
+                  "description": "Failed Trivy configuration and RBAC checks per namespace by severity, latest scan; resources = workloads and roles with at least one failure."
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "critical": "none",
+                        "high": "none",
+                        "medium": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "critical",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "high",
+                        "value": 50,
+                        "operator": "above",
+                        "color": "#7a3d22",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "high",
+                        "value": 0,
+                        "operator": "above",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH m AS (\n    SELECT ts.metric_name AS metric, JSONExtractString(ts.lbl, 'severity') AS severity, JSONExtractString(ts.lbl, 'namespace') AS namespace, JSONExtractString(ts.lbl, 'resource_kind') AS resource_kind, JSONExtractString(ts.lbl, 'resource_name') AS resource_name, argMax(s.value, s.unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4 s\n    GLOBAL JOIN (\n      SELECT fingerprint, metric_name, any(toJSONString(map('namespace', JSONExtractString(labels, 'namespace'), 'resource_kind', JSONExtractString(labels, 'resource_kind'), 'resource_name', JSONExtractString(labels, 'resource_name'), 'severity', JSONExtractString(labels, 'severity')))) AS lbl\n      FROM signoz_metrics.distributed_time_series_v4_1day\n      WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name IN ('trivy_resource_configaudits', 'trivy_role_rbacassessments')\n        AND unix_milli >= ($end_timestamp - 86400 * 2) * 1000\n        AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      GROUP BY fingerprint, metric_name\n    ) ts ON s.fingerprint = ts.fingerprint\n    WHERE s.metric_name IN ('trivy_resource_configaudits', 'trivy_role_rbacassessments')\n      AND s.unix_milli > ($end_timestamp - 7200) * 1000\n      AND s.unix_milli <= $end_timestamp * 1000\n    GROUP BY s.fingerprint, metric, severity, namespace, resource_kind, resource_name\n)\nSELECT namespace,\n  toUInt64(sumIf(v, severity = 'Critical')) AS critical,\n  toUInt64(sumIf(v, severity = 'High')) AS high,\n  toUInt64(sumIf(v, severity = 'Medium')) AS medium\nFROM m\nWHERE namespace IN $namespace\nGROUP BY namespace\nHAVING critical + high + medium > 0\nORDER BY critical DESC, high DESC, medium DESC\nLIMIT 15"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-compliance-kubernetes-frameworks": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Kubernetes compliance frameworks",
+                  "description": "Pass rate per framework and cluster from Trivy compliance reports (refreshed every 6 h): CIS Kubernetes, NSA hardening, Pod Security Standards, and CIS EKS on EKS clusters."
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "pass": "none",
+                        "fail": "none",
+                        "pass_pct": "none"
+                      },
+                      "decimalPrecision": "0"
+                    },
+                    "thresholds": [
+                      {
+                        "columnName": "pass_pct",
+                        "value": 50,
+                        "operator": "below",
+                        "unit": "",
+                        "color": "#7a2020",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "pass_pct",
+                        "value": 90,
+                        "operator": "below",
+                        "unit": "",
+                        "color": "#6b4d0c",
+                        "format": "background"
+                      },
+                      {
+                        "columnName": "pass_pct",
+                        "value": 90,
+                        "operator": "above_or_equal",
+                        "unit": "",
+                        "color": "#1c5a2f",
+                        "format": "background"
+                      }
+                    ]
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH c AS (\n    SELECT ts.metric_name AS metric, JSONExtractString(ts.lbl, 'title') AS title, JSONExtractString(ts.lbl, 'status') AS status, JSONExtractString(ts.lbl, 'k8s.cluster.name') AS k8s_cluster_name, argMax(s.value, s.unix_milli) AS v\n    FROM signoz_metrics.distributed_samples_v4 s\n    GLOBAL JOIN (\n      SELECT fingerprint, metric_name, any(toJSONString(map('k8s.cluster.name', JSONExtractString(labels, 'k8s.cluster.name'), 'status', JSONExtractString(labels, 'status'), 'title', JSONExtractString(labels, 'title')))) AS lbl\n      FROM signoz_metrics.distributed_time_series_v4_1day\n      WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name IN ('trivy_cluster_compliance')\n        AND unix_milli >= ($end_timestamp - 86400 * 2) * 1000\n        AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      GROUP BY fingerprint, metric_name\n    ) ts ON s.fingerprint = ts.fingerprint\n    WHERE s.metric_name IN ('trivy_cluster_compliance')\n      AND s.unix_milli > ($end_timestamp - 7200) * 1000\n      AND s.unix_milli <= $end_timestamp * 1000\n    GROUP BY s.fingerprint, metric, title, status, k8s_cluster_name\n)\nSELECT title AS framework, k8s_cluster_name AS cluster,\n  toUInt64(sumIf(v, status = 'Fail')) AS failed,\n  if(failed + sumIf(v, status = 'Pass') = 0, NULL, round(100 * sumIf(v, status = 'Pass') / (failed + sumIf(v, status = 'Pass')))) AS pass_pct\nFROM c\nGROUP BY framework, cluster\nORDER BY pass_pct ASC, framework, cluster"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-flows-header": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Workload network flows overview",
+                  "description": ""
+                },
+                "plugin": {
+                  "kind": "signoz/TextPanel",
+                  "spec": {
+                    "mode": "markdown",
+                    "text": "Workload-to-workload network flow maps captured directly from the Linux kernel using OpenTelemetry eBPF Instrumentation (OBI).",
+                    "presentation": {
+                      "textAlign": "left",
+                      "verticalAlign": "top"
+                    },
+                    "headerOptions": {
+                      "hide": true
+                    }
+                  }
+                },
+                "queries": []
+              }
+            },
+            "dash-flows-top-workloads": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Top workload network flows",
+                  "description": "Network traffic volume between Kubernetes workloads grouped by source and destination owner"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "bytes": "By"
+                      },
+                      "decimalPrecision": "0"
+                    }
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH flows AS (\n  SELECT JSONExtractString(ts.lbl, 'src_ns') AS src_namespace, JSONExtractString(ts.lbl, 'src_owner') AS src_owner, JSONExtractString(ts.lbl, 'dst_ns') AS dst_namespace, JSONExtractString(ts.lbl, 'dst_owner') AS dst_owner, JSONExtractString(ts.lbl, 'dst_cidr') AS dst_cidr, greatest(0, max(s.value) - min(s.value)) AS bytes\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('src_ns', JSONExtractString(labels, 'k8s.src.namespace'), 'src_owner', JSONExtractString(labels, 'k8s.src.owner.name'), 'dst_ns', JSONExtractString(labels, 'k8s.dst.namespace'), 'dst_owner', JSONExtractString(labels, 'k8s.dst.owner.name'), 'dst_cidr', JSONExtractString(labels, 'dst.cidr')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'obi.network.flow.bytes'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      AND (JSONExtractString(labels, 'k8s.src.namespace') IN $namespace OR JSONExtractString(labels, 'k8s.dst.namespace') IN $namespace)\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'obi.network.flow.bytes'\n    AND s.unix_milli >= $start_timestamp * 1000\n    AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY s.fingerprint, src_namespace, src_owner, dst_namespace, dst_owner, dst_cidr\n)\nSELECT concat(src_namespace, '/', src_owner, ' -> ', if(dst_owner != '', concat(dst_namespace, '/', dst_owner), if(dst_cidr != '', dst_cidr, 'unlabelled'))) AS flow, toUInt64(sum(bytes)) AS bytes\nFROM flows\nWHERE src_owner != '' OR dst_owner != '' OR dst_cidr != ''\nGROUP BY flow\nORDER BY bytes DESC\nLIMIT 50"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-flows-egress-over-time": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Cluster egress network flows over time",
+                  "description": "External and non-VPC egress traffic volume over time grouped by source namespace"
                 },
                 "plugin": {
                   "kind": "signoz/TimeSeriesPanel",
@@ -294,8 +2466,8 @@ spec:
                       "fillSpans": false
                     },
                     "formatting": {
-                      "unit": "none",
-                      "decimalPrecision": "0"
+                      "unit": "By",
+                      "decimalPrecision": "1"
                     },
                     "chartAppearance": {
                       "lineInterpolation": "linear",
@@ -326,47 +2498,10 @@ spec:
                     "spec": {
                       "name": "A",
                       "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "sum by (severity) (trivy_image_vulnerabilities{severity=~\"Critical|High|Medium\"})",
-                          "legend": "{{severity}}"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "prowler-cloud-posture": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Cloud CSPM audit findings",
-                  "description": "Prowler compliance audit status breakdown"
-                },
-                "plugin": {
-                  "kind": "signoz/TablePanel",
-                  "spec": {
-                    "formatting": {
-                      "columnUnits": {
-                        "finding_count": "none"
-                      },
-                      "decimalPrecision": "0"
-                    },
-                    "thresholds": []
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "scalar",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
                         "kind": "signoz/ClickHouseSQL",
                         "spec": {
                           "name": "A",
-                          "query": "SELECT multiIf(body LIKE '%\"Status\":\"FAIL\"%' OR body LIKE '%\"Status\": \"FAIL\"%', 'FAIL', body LIKE '%\"Status\":\"PASS\"%' OR body LIKE '%\"Status\": \"PASS\"%', 'PASS', 'OTHER') AS status, count() AS finding_count FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'prowler' AND resources_string['k8s.namespace.name'] = 'prowler' AND resources_string['k8s.pod.name'] LIKE 'prowler-%' GROUP BY status ORDER BY finding_count DESC"
+                          "query": "WITH flows AS (\n  SELECT toStartOfHour(toDateTime(intDiv(s.unix_milli, 1000))) AS ts, JSONExtractString(ts.lbl, 'src_ns') AS namespace, greatest(0, max(s.value) - min(s.value)) AS bytes\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('src_ns', JSONExtractString(labels, 'k8s.src.namespace'), 'dst_cidr', JSONExtractString(labels, 'dst.cidr')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'obi.network.flow.bytes'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      AND JSONExtractString(labels, 'k8s.src.namespace') IN $namespace\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'obi.network.flow.bytes'\n    AND s.unix_milli >= $start_timestamp * 1000\n    AND s.unix_milli <= $end_timestamp * 1000\n    AND JSONExtractString(ts.lbl, 'dst_cidr') != '' AND JSONExtractString(ts.lbl, 'dst_cidr') NOT LIKE 'vpc-%'\n    AND JSONExtractString(ts.lbl, 'dst_cidr') NOT LIKE 'services-%'\n  GROUP BY ts, s.fingerprint, namespace\n)\nSELECT ts, namespace, toUInt64(sum(bytes)) AS value\nFROM flows\nWHERE namespace != ''\nGROUP BY ts, namespace\nORDER BY ts, namespace"
                         }
                       }
                     }
@@ -374,69 +2509,24 @@ spec:
                 ]
               }
             },
-            "top-vulnerable-workloads": {
+            "dash-flows-egress-by-namespace": {
               "kind": "Panel",
               "spec": {
                 "display": {
-                  "name": "Top vulnerable images & workloads",
-                  "description": "Active container image vulnerabilities by workload and image repository"
+                  "name": "Cluster egress split by source namespace",
+                  "description": "External and non-VPC egress traffic volume split by source namespace, top 6 and Other"
                 },
                 "plugin": {
-                  "kind": "signoz/TablePanel",
-                  "spec": {
-                    "formatting": {
-                      "columnUnits": {
-                        "vulnerability_count": "none"
-                      },
-                      "decimalPrecision": "0"
-                    },
-                    "thresholds": []
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "scalar",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT JSONExtractString(ts.labels, 'namespace') AS namespace, JSONExtractString(ts.labels, 'resource_name') AS resource_name, JSONExtractString(ts.labels, 'image_repository') AS image_repository, JSONExtractString(ts.labels, 'severity') AS severity, toUInt64(argMax(s.value, s.unix_milli)) AS vulnerability_count FROM signoz_metrics.distributed_samples_v4 s GLOBAL JOIN (SELECT fingerprint, any(labels) AS labels FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name = 'trivy_image_vulnerabilities' GROUP BY fingerprint) ts ON s.fingerprint = ts.fingerprint WHERE s.metric_name = 'trivy_image_vulnerabilities' AND s.unix_milli >= toUnixTimestamp64Milli(now64() - INTERVAL 1 HOUR) GROUP BY namespace, resource_name, image_repository, severity ORDER BY vulnerability_count DESC LIMIT 50"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "kubescape-cis-benchmark-posture": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Kubescape CIS benchmark posture",
-                  "description": "Failed cluster compliance controls by severity"
-                },
-                "plugin": {
-                  "kind": "signoz/TimeSeriesPanel",
+                  "kind": "signoz/BarChartPanel",
                   "spec": {
                     "visualization": {
                       "timePreference": "global_time",
-                      "fillSpans": false
+                      "fillSpans": false,
+                      "stackedBarChart": false
                     },
                     "formatting": {
-                      "unit": "none",
-                      "decimalPrecision": "0"
-                    },
-                    "chartAppearance": {
-                      "lineInterpolation": "linear",
-                      "showPoints": false,
-                      "lineStyle": "solid",
-                      "fillMode": "none",
-                      "spanGaps": {
-                        "fillOnlyBelow": false,
-                        "fillLessThan": ""
-                      }
+                      "unit": "By",
+                      "decimalPrecision": "1"
                     },
                     "axes": {
                       "softMin": 0,
@@ -446,250 +2536,9 @@ spec:
                     "legend": {
                       "position": "bottom",
                       "mode": "list",
-                      "customColors": null
-                    },
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "time_series",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/PromQLQuery",
-                        "spec": {
-                          "name": "A",
-                          "query": "sum by (__name__) ({__name__=~\"kubescape_controls_total_cluster_critical|kubescape_controls_total_cluster_high|kubescape_controls_total_cluster_medium\"})",
-                          "legend": "{{__name__}}"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "kubescape-failed-controls-by-namespace": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Kubescape failed controls by namespace",
-                  "description": "Failed compliance controls per namespace"
-                },
-                "plugin": {
-                  "kind": "signoz/TablePanel",
-                  "spec": {
-                    "formatting": {
-                      "columnUnits": {
-                        "high_controls": "none",
-                        "medium_controls": "none"
-                      },
-                      "decimalPrecision": "0"
+                      "customColors": {}
                     },
                     "thresholds": []
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "scalar",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT JSONExtractString(ts.labels, 'namespace') AS namespace, toUInt64(maxIf(s.value, s.metric_name = 'kubescape_controls_total_namespace_high')) AS high_controls, toUInt64(maxIf(s.value, s.metric_name = 'kubescape_controls_total_namespace_medium')) AS medium_controls FROM signoz_metrics.distributed_samples_v4 s GLOBAL JOIN (SELECT fingerprint, any(labels) AS labels FROM signoz_metrics.distributed_time_series_v4 WHERE metric_name IN ('kubescape_controls_total_namespace_high', 'kubescape_controls_total_namespace_medium') GROUP BY fingerprint) ts ON s.fingerprint = ts.fingerprint WHERE s.metric_name IN ('kubescape_controls_total_namespace_high', 'kubescape_controls_total_namespace_medium') AND s.unix_milli >= toUnixTimestamp64Milli(now64() - INTERVAL 1 HOUR) GROUP BY namespace ORDER BY high_controls DESC, medium_controls DESC LIMIT 50"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "recent-security-events": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Recent security incident logs",
-                  "description": "Filtered high-signal security events across runtime, admission, ingress, CSPM, and vulnerabilities"
-                },
-                "plugin": {
-                  "kind": "signoz/TablePanel",
-                  "spec": {
-                    "formatting": {
-                      "columnUnits": {},
-                      "decimalPrecision": "0"
-                    },
-                    "thresholds": []
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "scalar",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT toDateTime(timestamp / 1000000000) AS event_time, multiIf(resources_string['k8s.container.name'] = 'falco', 'Falco Runtime', resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno', 'Kyverno Admission', resources_string['k8s.container.name'] = 'prowler' OR resources_string['k8s.namespace.name'] = 'prowler', 'Prowler CSPM', resources_string['k8s.container.name'] = 'envoy', 'Envoy Gateway', resources_string['k8s.namespace.name'] = 'trivy-system' OR resources_string['k8s.container.name'] LIKE 'trivy%', 'Trivy Vulnerability', resources_string['k8s.namespace.name'] = 'kubescape-operator' OR resources_string['k8s.container.name'] LIKE 'kubescape%', 'Kubescape Posture', 'Other Security') AS source, coalesce(attributes_string['priority'], 'Alert') AS priority, resources_string['k8s.pod.name'] AS pod, body AS message FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND ((resources_string['k8s.container.name'] = 'falco' AND attributes_string['priority'] IN $priority) OR (((resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%fail (blocked)%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%')) OR body LIKE '%Warning PolicyViolation%') OR (resources_string['k8s.container.name'] = 'prowler' AND resources_string['k8s.namespace.name'] = 'prowler' AND resources_string['k8s.pod.name'] LIKE 'prowler-%' AND (body LIKE '%\"Status\":\"FAIL\"%' OR body LIKE '%\"Status\": \"FAIL\"%')) OR (resources_string['k8s.container.name'] = 'envoy' AND (attributes_string['response_code'] IN ('401', '403', '429') OR body LIKE '%\"response_code\":\"401\"%' OR body LIKE '%\"response_code\":\"403\"%' OR body LIKE '%\"response_code\":\"429\"%')) OR (resources_string['k8s.namespace.name'] = 'trivy-system' AND NOT (body LIKE '%Detecting vulnerabilities%' OR body LIKE '%Scanning%' OR body LIKE '%Number of language-specific files%') AND (body LIKE '%CRITICAL%' OR body LIKE '%HIGH%' OR body LIKE '%Secret detected%' OR severity_text IN ('WARN', 'ERROR', 'FATAL'))) OR (resources_string['k8s.namespace.name'] = 'kubescape-operator' AND NOT (body LIKE '%probe failed%' OR body LIKE '%context deadline exceeded%') AND (body LIKE '%Actionable%' OR body LIKE '%Compliance failed%' OR body LIKE '%Control failed%' OR severity_text IN ('WARN', 'ERROR', 'FATAL')))) ORDER BY event_time DESC LIMIT 100"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "runtime-threats-count": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Active runtime threats (24h)",
-                  "description": "Total Falco runtime security events detected in the last 24 hours"
-                },
-                "plugin": {
-                  "kind": "signoz/NumberPanel",
-                  "spec": {
-                    "visualization": {
-                      "timePreference": "global_time"
-                    },
-                    "formatting": {
-                      "unit": "none",
-                      "decimalPrecision": "0"
-                    },
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "scalar",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'falco' AND attributes_string['priority'] IN $priority"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "admission-blocks-count": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Admission policy blocks (24h)",
-                  "description": "Total Kyverno admission policy violations blocked in the last 24 hours"
-                },
-                "plugin": {
-                  "kind": "signoz/NumberPanel",
-                  "spec": {
-                    "visualization": {
-                      "timePreference": "global_time"
-                    },
-                    "formatting": {
-                      "unit": "none",
-                      "decimalPrecision": "0"
-                    },
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "scalar",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND (((resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%fail (blocked)%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%')) OR body LIKE '%Warning PolicyViolation%')"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "ingress-denials-count": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Ingress security denials (24h)",
-                  "description": "Total Envoy Gateway 401, 403, and 429 rejections in the last 24 hours"
-                },
-                "plugin": {
-                  "kind": "signoz/NumberPanel",
-                  "spec": {
-                    "visualization": {
-                      "timePreference": "global_time"
-                    },
-                    "formatting": {
-                      "unit": "none",
-                      "decimalPrecision": "0"
-                    },
-                    "thresholds": null
-                  }
-                },
-                "queries": [
-                  {
-                    "kind": "scalar",
-                    "spec": {
-                      "name": "A",
-                      "plugin": {
-                        "kind": "signoz/ClickHouseSQL",
-                        "spec": {
-                          "name": "A",
-                          "query": "SELECT count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND resources_string['k8s.container.name'] = 'envoy' AND (attributes_string['response_code'] IN ('401', '403', '429') OR body LIKE '%\"response_code\":\"401\"%' OR body LIKE '%\"response_code\":\"403\"%' OR body LIKE '%\"response_code\":\"429\"%')"
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "kyverno-rejections-over-time": {
-              "kind": "Panel",
-              "spec": {
-                "display": {
-                  "name": "Admission rejections over time",
-                  "description": "Kyverno rejected workload submissions over time"
-                },
-                "plugin": {
-                  "kind": "signoz/TimeSeriesPanel",
-                  "spec": {
-                    "visualization": {
-                      "timePreference": "global_time",
-                      "fillSpans": false
-                    },
-                    "formatting": {
-                      "unit": "none",
-                      "decimalPrecision": "0"
-                    },
-                    "chartAppearance": {
-                      "lineInterpolation": "linear",
-                      "showPoints": false,
-                      "lineStyle": "solid",
-                      "fillMode": "none",
-                      "spanGaps": {
-                        "fillOnlyBelow": false,
-                        "fillLessThan": ""
-                      }
-                    },
-                    "axes": {
-                      "softMin": 0,
-                      "softMax": null,
-                      "isLogScale": false
-                    },
-                    "legend": {
-                      "position": "bottom",
-                      "mode": "list",
-                      "customColors": null
-                    },
-                    "thresholds": null
                   }
                 },
                 "queries": [
@@ -701,7 +2550,45 @@ spec:
                         "kind": "signoz/ClickHouseSQL",
                         "spec": {
                           "name": "A",
-                          "query": "SELECT toStartOfMinute(toDateTime(timestamp / 1000000000)) AS ts, count() AS value FROM signoz_logs.distributed_logs_v2 WHERE toDateTime(timestamp / 1000000000) >= now() - INTERVAL 24 HOUR AND (((resources_string['k8s.container.name'] = 'kyverno' OR resources_string['k8s.namespace.name'] = 'kyverno') AND (body LIKE '%denied%' OR body LIKE '%blocked%' OR body LIKE '%validation error%' OR body LIKE '%fail (blocked)%' OR body LIKE '%resource blocked%' OR body LIKE '%admission request denied%')) OR body LIKE '%Warning PolicyViolation%') GROUP BY ts ORDER BY ts"
+                          "query": "WITH flows AS (\n  SELECT JSONExtractString(ts.lbl, 'src_ns') AS src_namespace, greatest(0, max(s.value) - min(s.value)) AS bytes\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('src_ns', JSONExtractString(labels, 'k8s.src.namespace'), 'dst_cidr', JSONExtractString(labels, 'dst.cidr')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'obi.network.flow.bytes'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      AND JSONExtractString(labels, 'k8s.src.namespace') IN $namespace\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'obi.network.flow.bytes'\n    AND s.unix_milli >= $start_timestamp * 1000\n    AND s.unix_milli <= $end_timestamp * 1000\n    AND JSONExtractString(ts.lbl, 'dst_cidr') != '' AND JSONExtractString(ts.lbl, 'dst_cidr') NOT LIKE 'vpc-%'\n    AND JSONExtractString(ts.lbl, 'dst_cidr') NOT LIKE 'services-%'\n  GROUP BY s.fingerprint, src_namespace\n),\nns_totals AS (\n  SELECT src_namespace, sum(bytes) AS total_bytes\n  FROM flows\n  WHERE src_namespace != ''\n  GROUP BY src_namespace\n),\ntop_ns AS (\n  SELECT src_namespace\n  FROM ns_totals\n  ORDER BY total_bytes DESC\n  LIMIT 6\n)\nSELECT toDateTime($end_timestamp) AS ts, if(src_namespace IN (SELECT src_namespace FROM top_ns), src_namespace, 'Other') AS namespace, toUInt64(sum(total_bytes)) AS value\nFROM ns_totals\nGROUP BY namespace\nORDER BY if(namespace = 'Other', 1, 0) ASC, value DESC"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "dash-flows-destination-range": {
+              "kind": "Panel",
+              "spec": {
+                "display": {
+                  "name": "Traffic by destination range",
+                  "description": "Network traffic grouped by source workload and destination range, highlighting external and metadata destinations"
+                },
+                "plugin": {
+                  "kind": "signoz/TablePanel",
+                  "spec": {
+                    "visualization": {
+                      "timePreference": "global_time"
+                    },
+                    "formatting": {
+                      "columnUnits": {
+                        "bytes": "By"
+                      },
+                      "decimalPrecision": "0"
+                    }
+                  }
+                },
+                "queries": [
+                  {
+                    "kind": "scalar",
+                    "spec": {
+                      "name": "A",
+                      "plugin": {
+                        "kind": "signoz/ClickHouseSQL",
+                        "spec": {
+                          "name": "A",
+                          "query": "WITH flows AS (\n  SELECT JSONExtractString(ts.lbl, 'src_ns') AS src_namespace, JSONExtractString(ts.lbl, 'src_owner') AS src_owner, if(JSONExtractString(ts.lbl, 'dst_cidr') = '', 'unlabelled', JSONExtractString(ts.lbl, 'dst_cidr')) AS destination_range, greatest(0, max(s.value) - min(s.value)) AS bytes\n  FROM signoz_metrics.distributed_samples_v4 s\n  GLOBAL JOIN (\n    SELECT fingerprint, any(toJSONString(map('src_ns', JSONExtractString(labels, 'k8s.src.namespace'), 'src_owner', JSONExtractString(labels, 'k8s.src.owner.name'), 'dst_cidr', JSONExtractString(labels, 'dst.cidr')))) AS lbl\n    FROM signoz_metrics.distributed_time_series_v4_1day\n    WHERE unix_milli >= (least($start_timestamp, $end_timestamp - 7200) - 172800) * 1000 AND metric_name = 'obi.network.flow.bytes'\n      AND JSONExtractString(labels, 'k8s.cluster.name') IN $cluster\n      AND JSONExtractString(labels, 'k8s.src.namespace') IN $namespace\n    GROUP BY fingerprint\n  ) ts ON s.fingerprint = ts.fingerprint\n  WHERE s.metric_name = 'obi.network.flow.bytes'\n    AND s.unix_milli >= $start_timestamp * 1000\n    AND s.unix_milli <= $end_timestamp * 1000\n  GROUP BY s.fingerprint, src_namespace, src_owner, destination_range\n)\nSELECT src_namespace, src_owner, destination_range, toUInt64(sum(bytes)) AS bytes\nFROM flows\nWHERE destination_range != 'unlabelled' AND destination_range NOT LIKE 'vpc-%' AND destination_range NOT LIKE 'services-%'\nGROUP BY src_namespace, src_owner, destination_range\nORDER BY if(destination_range = 'instance-metadata', 0, 1) ASC, bytes DESC\nLIMIT 50"
                         }
                       }
                     }
@@ -714,140 +2601,552 @@ spec:
             {
               "kind": "Grid",
               "spec": {
+                "display": {
+                  "title": "Security posture",
+                  "collapse": {
+                    "open": true
+                  }
+                },
                 "items": [
                   {
                     "x": 0,
                     "y": 0,
-                    "width": 3,
-                    "height": 3,
+                    "width": 12,
+                    "height": 1,
                     "content": {
-                      "$ref": "#/spec/panels/runtime-threats-count"
-                    }
-                  },
-                  {
-                    "x": 3,
-                    "y": 0,
-                    "width": 3,
-                    "height": 3,
-                    "content": {
-                      "$ref": "#/spec/panels/admission-blocks-count"
-                    }
-                  },
-                  {
-                    "x": 6,
-                    "y": 0,
-                    "width": 3,
-                    "height": 3,
-                    "content": {
-                      "$ref": "#/spec/panels/ingress-denials-count"
-                    }
-                  },
-                  {
-                    "x": 9,
-                    "y": 0,
-                    "width": 3,
-                    "height": 3,
-                    "content": {
-                      "$ref": "#/spec/panels/exposed-secrets-detected"
+                      "$ref": "#/spec/panels/dash-posture-intro"
                     }
                   },
                   {
                     "x": 0,
-                    "y": 3,
-                    "width": 4,
-                    "height": 6,
+                    "y": 1,
+                    "width": 2,
+                    "height": 4,
                     "content": {
-                      "$ref": "#/spec/panels/threats-over-time"
+                      "$ref": "#/spec/panels/dash-posture-runtime-alerts"
+                    }
+                  },
+                  {
+                    "x": 2,
+                    "y": 1,
+                    "width": 2,
+                    "height": 4,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-posture-critical-cves"
                     }
                   },
                   {
                     "x": 4,
-                    "y": 3,
-                    "width": 4,
-                    "height": 6,
+                    "y": 1,
+                    "width": 2,
+                    "height": 4,
                     "content": {
-                      "$ref": "#/spec/panels/kyverno-rejections-over-time"
+                      "$ref": "#/spec/panels/dash-posture-secrets-in-images"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 1,
+                    "width": 2,
+                    "height": 4,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-posture-internet-facing-hosts"
                     }
                   },
                   {
                     "x": 8,
-                    "y": 3,
-                    "width": 4,
-                    "height": 6,
+                    "y": 1,
+                    "width": 2,
+                    "height": 4,
                     "content": {
-                      "$ref": "#/spec/panels/ingress-denials-over-time"
+                      "$ref": "#/spec/panels/dash-posture-aws-cis-pass-rate"
+                    }
+                  },
+                  {
+                    "x": 10,
+                    "y": 1,
+                    "width": 2,
+                    "height": 4,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-posture-telemetry-gaps"
                     }
                   },
                   {
                     "x": 0,
-                    "y": 9,
-                    "width": 6,
-                    "height": 6,
+                    "y": 5,
+                    "width": 2,
+                    "height": 4,
                     "content": {
-                      "$ref": "#/spec/panels/top-threat-rules"
+                      "$ref": "#/spec/panels/dash-posture-human-privileged-actions"
+                    }
+                  },
+                  {
+                    "x": 2,
+                    "y": 5,
+                    "width": 2,
+                    "height": 4,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-posture-aws-access-denied"
+                    }
+                  },
+                  {
+                    "x": 4,
+                    "y": 5,
+                    "width": 2,
+                    "height": 4,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-posture-admission-blocks"
                     }
                   },
                   {
                     "x": 6,
-                    "y": 9,
-                    "width": 6,
-                    "height": 6,
+                    "y": 5,
+                    "width": 2,
+                    "height": 4,
                     "content": {
-                      "$ref": "#/spec/panels/kyverno-admission-denials"
+                      "$ref": "#/spec/panels/dash-posture-misconfigurations"
                     }
                   },
+                  {
+                    "x": 8,
+                    "y": 5,
+                    "width": 2,
+                    "height": 4,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-posture-admin-policies-attached"
+                    }
+                  },
+                  {
+                    "x": 10,
+                    "y": 5,
+                    "width": 2,
+                    "height": 4,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-posture-certificates-expiring"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "1 \u00b7 Exposure: what can an attacker reach?",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
                   {
                     "x": 0,
-                    "y": 15,
-                    "width": 6,
-                    "height": 6,
-                    "content": {
-                      "$ref": "#/spec/panels/trivy-vulnerabilities-by-severity"
-                    }
-                  },
-                  {
-                    "x": 6,
-                    "y": 15,
-                    "width": 6,
-                    "height": 6,
-                    "content": {
-                      "$ref": "#/spec/panels/kubescape-cis-benchmark-posture"
-                    }
-                  },
-                  {
-                    "x": 0,
-                    "y": 21,
-                    "width": 6,
-                    "height": 6,
-                    "content": {
-                      "$ref": "#/spec/panels/top-vulnerable-workloads"
-                    }
-                  },
-                  {
-                    "x": 6,
-                    "y": 21,
-                    "width": 6,
-                    "height": 6,
-                    "content": {
-                      "$ref": "#/spec/panels/kubescape-failed-controls-by-namespace"
-                    }
-                  },
-                  {
-                    "x": 0,
-                    "y": 27,
+                    "y": 0,
                     "width": 12,
-                    "height": 5,
+                    "height": 1,
                     "content": {
-                      "$ref": "#/spec/panels/prowler-cloud-posture"
+                      "$ref": "#/spec/panels/dash-exposure-header"
                     }
                   },
                   {
                     "x": 0,
-                    "y": 32,
+                    "y": 1,
+                    "width": 6,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-exposure-internet-facing-hosts"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 1,
+                    "width": 6,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-exposure-edge-rejections-by-status"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 9,
+                    "width": 4,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-exposure-top-public-ips"
+                    }
+                  },
+                  {
+                    "x": 4,
+                    "y": 9,
+                    "width": 4,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-exposure-rejected-vpc-flows-by-port"
+                    }
+                  },
+                  {
+                    "x": 8,
+                    "y": 9,
+                    "width": 4,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-exposure-first-seen-domains"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "2 \u00b7 Threats: is something happening right now?",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-threats-header"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 8,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-threats-runtime-alerts-by-priority"
+                    }
+                  },
+                  {
+                    "x": 8,
+                    "y": 1,
+                    "width": 4,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-threats-noisiest-rules"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 9,
                     "width": 12,
                     "height": 8,
                     "content": {
-                      "$ref": "#/spec/panels/recent-security-events"
+                      "$ref": "#/spec/panels/dash-threats-latest-runtime-alerts"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 17,
+                    "width": 12,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-threats-humans-in-clusters"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 25,
+                    "width": 12,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-threats-risky-aws-changes"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 33,
+                    "width": 12,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-threats-aws-access-denied"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "3 \u00b7 Guardrails: what did our policies stop?",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-guardrails-header"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 6,
+                    "height": 7,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-guardrails-admissions-over-time"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 1,
+                    "width": 6,
+                    "height": 7,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-guardrails-netpol-denials-over-time"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 8,
+                    "width": 12,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-guardrails-blocked-resources"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 16,
+                    "width": 12,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-guardrails-netpol-denials-table"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "4 \u00b7 Vulnerabilities: what is exploitable?",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-vulns-header"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 4,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-vulns-cves-by-day"
+                    }
+                  },
+                  {
+                    "x": 4,
+                    "y": 1,
+                    "width": 8,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-vulns-most-vulnerable-images"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 9,
+                    "width": 7,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-vulns-runtime-alerts-on-vulnerable-images"
+                    }
+                  },
+                  {
+                    "x": 7,
+                    "y": 9,
+                    "width": 5,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-vulns-secrets-in-images"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "5 \u00b7 Compliance: are we configured right?",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-compliance-header"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 5,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-compliance-aws-cis-by-service"
+                    }
+                  },
+                  {
+                    "x": 5,
+                    "y": 1,
+                    "width": 7,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-compliance-top-failed-aws-checks"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 9,
+                    "width": 6,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-compliance-kubernetes-frameworks"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 9,
+                    "width": 6,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-compliance-misconfigurations-by-namespace"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 17,
+                    "width": 12,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-compliance-kyverno-results-by-policy"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 25,
+                    "width": 12,
+                    "height": 6,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-compliance-certificates-by-expiry"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "6 \u00b7 Coverage: can we trust the panels above?",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-coverage-header"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 12,
+                    "height": 10,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-coverage-telemetry-sources"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "Grid",
+              "spec": {
+                "display": {
+                  "title": "7 \u00b7 Workload network flows: who is talking to whom?",
+                  "collapse": {
+                    "open": true
+                  }
+                },
+                "items": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 12,
+                    "height": 1,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-flows-header"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 1,
+                    "width": 6,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-flows-top-workloads"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 1,
+                    "width": 6,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-flows-destination-range"
+                    }
+                  },
+                  {
+                    "x": 0,
+                    "y": 9,
+                    "width": 6,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-flows-egress-over-time"
+                    }
+                  },
+                  {
+                    "x": 6,
+                    "y": 9,
+                    "width": 6,
+                    "height": 8,
+                    "content": {
+                      "$ref": "#/spec/panels/dash-flows-egress-by-namespace"
                     }
                   }
                 ]
