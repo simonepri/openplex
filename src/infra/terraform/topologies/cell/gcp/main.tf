@@ -6,6 +6,12 @@ data "google_project" "current" {}
 locals {
   project  = coalesce(data.google_client_config.current.project, "default")
   location = coalesce(data.google_client_config.current.region, data.google_client_config.current.zone, "us-central1")
+
+  team_definition_files = fileset("${path.module}/../../../../definitions/teams", "*.yaml")
+  teams = toset([
+    for f in local.team_definition_files :
+    yamldecode(file("${path.module}/../../../../definitions/teams/${f}")).slug
+  ])
 }
 
 module "interface" {
@@ -69,9 +75,12 @@ module "cluster" {
 module "storage" {
   source = "../../../components/storage/gcp"
 
-  installation_name = var.resource_prefix != null && var.resource_prefix != "" ? var.resource_prefix : "cloud"
-  cell_name         = var.cluster_name
-  location          = local.location
+  cluster_name = var.cluster_name
+  location     = local.location
+  teams        = local.teams
+  team_service_accounts = var.enable_identity ? {
+    for team in local.teams : team => try(module.identity[0].record.role_arns["s3-gateway-${team}"], "")
+  } : {}
 }
 
 module "identity" {
@@ -82,34 +91,42 @@ module "identity" {
   cluster_oidc_issuer_url = module.cluster.record.oidc_issuer_url
   project_id              = local.project
 
-  roles = {
-    # keep-sorted start block=yes
-    barman = {
-      namespace       = "database"
-      service_account = "barman"
+  roles = merge(
+    {
+      # keep-sorted start block=yes
+      db-backups = {
+        namespace       = "database"
+        service_account = "barman"
+      }
+      external-dns = {
+        namespace       = "external-dns-system"
+        service_account = "external-dns"
+      }
+      karpenter = {
+        namespace       = "karpenter-system"
+        service_account = "karpenter"
+      }
+      kopia = {
+        namespace       = "coder"
+        service_account = "kopia"
+      }
+      prowler = {
+        namespace       = "prowler"
+        service_account = "prowler"
+      }
+      velero = {
+        namespace       = "velero-system"
+        service_account = "velero-server"
+      }
+      # keep-sorted end
+    },
+    {
+      for team in local.teams : "s3-gateway-${team}" => {
+        namespace       = "s3-system"
+        service_account = "s3-gateway-${team}"
+      }
     }
-    external_dns = {
-      namespace       = "external-dns-system"
-      service_account = "external-dns"
-    }
-    karpenter = {
-      namespace       = "karpenter-system"
-      service_account = "karpenter"
-    }
-    kopia = {
-      namespace       = "coder"
-      service_account = "kopia"
-    }
-    prowler = {
-      namespace       = "prowler"
-      service_account = "prowler"
-    }
-    velero = {
-      namespace       = "velero-system"
-      service_account = "velero-server"
-    }
-    # keep-sorted end
-  }
+  )
 }
 
 module "dns" {
@@ -118,15 +135,6 @@ module "dns" {
 
   domain_name = var.domain_name
   is_cell     = true
-}
-
-module "secret_manager" {
-  source = "../../../components/secret_manager/gcp"
-
-  secret_name = "${var.cluster_name}-platform-secrets"
-  secret_values = {
-    placeholder = "initialized"
-  }
 }
 
 module "network_mesh" {

@@ -108,8 +108,9 @@ variables {
     public  = ["10.0.10.0/24", "10.0.11.0/24"]
     pod     = []
   }
-  public_domain_name            = "openplex.org"
-  git_repo_url                  = "git@github.com:simonepri/openplex.git"
+  cell_service_cidrs            = ["172.20.0.0/20"]
+  public_domain_name            = "example.com"
+  git_repo_url                  = "git@github.com:openplex/openplex.git"
   registered_cells              = []
   disabled_components           = ["karpenter"]
   enable_identity               = false
@@ -129,8 +130,8 @@ run "verifies_publisher_oidc_trust_policy_exact_and_pinned" {
   }
 
   assert {
-    condition     = jsondecode(aws_iam_role.workspace_publisher.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:simonepri/openplex:ref:refs/heads/main"
-    error_message = "Workspace publisher trust policy sub must exactly equal repo:simonepri/openplex:ref:refs/heads/main."
+    condition     = jsondecode(aws_iam_role.workspace_publisher.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:openplex/openplex:ref:refs/heads/main"
+    error_message = "Workspace publisher trust policy sub must exactly equal repo:openplex/openplex:ref:refs/heads/main."
   }
 
   assert {
@@ -152,12 +153,49 @@ run "verifies_publisher_oidc_trust_policy_custom_target_revision" {
   }
 
   assert {
-    condition     = jsondecode(aws_iam_role.workspace_publisher.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:simonepri/openplex:ref:refs/heads/release-v1"
+    condition     = jsondecode(aws_iam_role.workspace_publisher.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:openplex/openplex:ref:refs/heads/release-v1"
     error_message = "Workspace publisher trust policy sub must track custom target_revision."
   }
 
   assert {
     condition     = !strcontains(jsondecode(aws_iam_role.workspace_publisher.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"], "*")
     error_message = "Workspace publisher trust policy sub must not contain wildcards with custom target_revision."
+  }
+}
+
+run "verifies_publisher_oidc_trust_policy_custom_oidc_repository" {
+  command = plan
+
+  variables {
+    publisher_oidc_repository = "openplex@181960150/openplex@1347160090"
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role.workspace_publisher.assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:openplex@181960150/openplex@1347160090:ref:refs/heads/main"
+    error_message = "Workspace publisher trust policy sub must track custom publisher_oidc_repository."
+  }
+}
+
+run "verifies_publisher_role_name_and_permissions_boundary" {
+  command = plan
+
+  variables {
+    iam_name_prefix          = "compliance-"
+    iam_permissions_boundary = "arn:aws:iam::123456789012:policy/boundary"
+  }
+
+  assert {
+    condition     = aws_iam_role.workspace_publisher.name == "compliance-ctrl-aws-usw2-workspace-publisher"
+    error_message = "Workspace publisher IAM role name must include iam_name_prefix."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy.workspace_publisher.name == "compliance-ctrl-aws-usw2-workspace-publisher-policy"
+    error_message = "Workspace publisher IAM role policy name must include iam_name_prefix."
+  }
+
+  assert {
+    condition     = aws_iam_role.workspace_publisher.permissions_boundary == "arn:aws:iam::123456789012:policy/boundary"
+    error_message = "Workspace publisher IAM role must attach permissions_boundary."
   }
 }

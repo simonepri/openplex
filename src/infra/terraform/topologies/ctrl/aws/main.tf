@@ -1,9 +1,15 @@
 # Composes AWS control plane infrastructure assembling VPC, EKS, ECR registry, and Route 53 DNS.
 
 locals {
-  enable_karpenter = !contains(var.disabled_components, "karpenter")
-  github_repo_slug = try(regex("(?:github\\.com[:/])([^/]+/[^/.]+?)(?:\\.git)?$", var.git_repo_url)[0], "simonepri/openplex")
-  publisher_branch = var.target_revision == "HEAD" ? "main" : var.target_revision
+  cluster_name            = var.cluster_name
+  tags                    = var.tags
+  enable_karpenter        = !contains(var.disabled_components, "karpenter")
+  enable_secret_mgr       = !contains(var.disabled_components, "secret_manager")
+  github_repo_slug        = try(regex("(?:github\\.com[:/])([^/]+/[^/.]+?)(?:\\.git)?$", var.git_repo_url)[0], "openplex/openplex")
+  publisher_branch        = var.target_revision == "HEAD" ? "main" : var.target_revision
+  account_id              = coalesce(var.account_id, data.aws_caller_identity.current.account_id)
+  atlantis_plan_role_arn  = length(var.atlantis_plan_role_arn) > 0 ? var.atlantis_plan_role_arn : (var.enable_identity && length(module.identity) > 0 ? module.identity[0].atlantis_plan_role_arn : "")
+  atlantis_apply_role_arn = length(var.atlantis_apply_role_arn) > 0 ? var.atlantis_apply_role_arn : (var.enable_identity && length(module.identity) > 0 ? module.identity[0].atlantis_apply_role_arn : "")
 }
 
 module "interface" {
@@ -36,6 +42,13 @@ module "interface" {
   oidc_tls_insecure_skip_verify = var.oidc_tls_insecure_skip_verify
   annotations                   = var.annotations
   profiles_retention_days       = var.profiles_retention_days
+  iam_name_prefix               = var.iam_name_prefix
+  kms_alias_prefix              = var.kms_alias_prefix
+  iam_permissions_boundary      = var.iam_permissions_boundary
+  tags                          = var.tags
+  account_id                    = local.account_id
+  atlantis_plan_role_arn        = var.atlantis_plan_role_arn
+  atlantis_apply_role_arn       = var.atlantis_apply_role_arn
 
   realized = {
     cluster_name           = module.cluster.record.cluster_name
@@ -55,12 +68,15 @@ module "interface" {
 module "vpc" {
   source = "../../../components/vpc/aws"
 
-  name               = "${var.cluster_name}-vpc"
-  cidr_block         = var.vpc_cidr
-  availability_zones = var.availability_zones
-  tier_subnets       = var.tier_subnets
-  enable_flow_logs   = var.enable_flow_logs
-  cluster_name       = var.cluster_name
+  name                     = "${var.cluster_name}-vpc"
+  cidr_block               = var.vpc_cidr
+  availability_zones       = var.availability_zones
+  tier_subnets             = var.tier_subnets
+  enable_flow_logs         = var.enable_flow_logs
+  cluster_name             = var.cluster_name
+  iam_name_prefix          = var.iam_name_prefix
+  kms_alias_prefix         = var.kms_alias_prefix
+  iam_permissions_boundary = var.iam_permissions_boundary
 }
 
 module "cluster" {
@@ -83,13 +99,20 @@ module "cluster" {
   system_max_size               = var.system_max_size
   system_node_taints            = var.system_node_taints
   node_repair_enabled           = var.node_repair_enabled
+  iam_name_prefix               = var.iam_name_prefix
+  kms_alias_prefix              = var.kms_alias_prefix
+  iam_permissions_boundary      = var.iam_permissions_boundary
+  tags                          = var.tags
+  atlantis_plan_role_arn        = local.atlantis_plan_role_arn
+  atlantis_apply_role_arn       = local.atlantis_apply_role_arn
 }
 
 module "storage" {
   source = "../../../components/storage/aws"
 
-  installation_name       = var.resource_prefix != null && var.resource_prefix != "" ? var.resource_prefix : "cloud"
-  cell_name               = var.cluster_name
+  cluster_name            = var.cluster_name
+  account_id              = local.account_id
+  kms_alias_prefix        = var.kms_alias_prefix
   storage_tiers           = ["home", "scratch", "archive", "backups", "meta", "logs", "profiles"]
   profiles_retention_days = var.profiles_retention_days
 }
@@ -100,72 +123,94 @@ data "aws_region" "current" {}
 module "registry" {
   source = "../../../components/registry/aws"
 
-  installation_name = var.cluster_name
-  repositories      = ["infrastructure"]
+  cluster_name     = var.cluster_name
+  kms_alias_prefix = var.kms_alias_prefix
+  repositories     = ["infrastructure"]
 }
 
 module "identity" {
   count  = var.enable_identity ? 1 : 0
   source = "../../../components/identity/aws"
 
-  cluster_name            = var.cluster_name
-  cluster_oidc_issuer_url = module.cluster.record.oidc_issuer_url
-  cluster_oidc_arn        = module.cluster.record.oidc_provider_arn
-  shared_secret_names     = var.shared_secret_names
-  storage_kms_key_arn     = module.storage.kms_key_arn
+  cluster_name                    = var.cluster_name
+  cluster_oidc_issuer_url         = module.cluster.record.oidc_issuer_url
+  cluster_oidc_arn                = module.cluster.record.oidc_provider_arn
+  shared_secret_names             = var.shared_secret_names
+  storage_kms_key_arn             = module.storage.kms_key_arn
+  storage_meta_bucket_arn         = module.storage.record.buckets.meta.arn
+  storage_stats_inventory_reports = var.storage_stats_inventory_reports
+  iam_name_prefix                 = var.iam_name_prefix
+  iam_permissions_boundary        = var.iam_permissions_boundary
+  opentofu_state_bucket           = var.opentofu_state_bucket
 
   roles = merge(
     {
       # keep-sorted start block=yes
-      atlantis = {
+      "atlantis" = {
         namespace       = "atlantis"
-        service_account = "atlantis"
+        service_account = "atlantis-apply"
       }
-      aws_load_balancer_controller = {
-        namespace       = "kube-system"
-        service_account = "aws-load-balancer-controller"
-      }
-      barman = {
-        namespace       = "coder"
-        service_account = "coder-postgres"
-      }
-      buildbuddy_barman = {
+      "buildbuddy-backups" = {
         namespace       = "buildbuddy"
         service_account = "buildbuddy-postgres"
       }
-      cert_manager = {
+      "cert-manager" = {
         namespace       = "cert-manager-system"
         service_account = "cert-manager"
       }
-      cloud_telemetry = {
-        namespace       = "otel-system"
-        service_account = "otel-collector"
+      "clickhouse" = {
+        namespace       = "signoz"
+        service_account = "signoz-clickhouse"
       }
-      dragonfly_barman = {
+      "cloud-telemetry" = {
+        namespace       = "otel-system"
+        service_account = "cloud-telemetry"
+      }
+      "coder-backups" = {
+        namespace       = "coder"
+        service_account = "coder-postgres"
+      }
+      "dragonfly-backups" = {
         namespace       = "dragonfly-system"
         service_account = "dragonfly-postgres"
       }
-      external_dns = {
+      "external-dns" = {
         namespace       = "external-dns-system"
         service_account = "external-dns"
       }
-      external_secrets = {
+      "external-secrets" = {
         namespace       = "external-secrets-system"
         service_account = "external-secrets"
       }
-      parca = {
+      "kargo" = {
+        namespace       = "kargo"
+        service_account = "kargo-controller"
+      }
+      "load-balancer" = {
+        namespace       = "kube-system"
+        service_account = "aws-load-balancer-controller"
+      }
+      "parca" = {
         namespace       = "parca"
         service_account = "parca"
       }
-      prowler = {
+      "prowler" = {
         namespace       = "prowler"
         service_account = "prowler"
       }
-      signoz_barman = {
+      "signoz-backups" = {
         namespace       = "signoz"
         service_account = "signoz-postgres"
       }
-      velero = {
+      "snapshot-portal" = {
+        namespace       = "coder-workspace-backup-system"
+        service_account = "coder-snapshot-portal"
+      }
+      "trivy" = {
+        namespace       = "trivy-system"
+        service_account = "trivy-operator"
+      }
+      "velero" = {
         namespace       = "velero-system"
         service_account = "velero-server"
       }
@@ -184,11 +229,22 @@ module "cloud_cost" {
   count  = var.enable_cloud_cost ? 1 : 0
   source = "../../../components/cloud_cost/aws"
 
-  cluster_name            = var.cluster_name
-  cluster_oidc_issuer_url = module.cluster.record.oidc_issuer_url
-  cluster_oidc_arn        = module.cluster.record.oidc_provider_arn
+  cluster_name             = var.cluster_name
+  account_id               = local.account_id
+  iam_name_prefix          = var.iam_name_prefix
+  kms_alias_prefix         = var.kms_alias_prefix
+  iam_permissions_boundary = var.iam_permissions_boundary
+  cluster_oidc_issuer_url  = module.cluster.record.oidc_issuer_url
+  cluster_oidc_arn         = module.cluster.record.oidc_provider_arn
 }
 
+module "cloud_trail" {
+  source = "../../../components/cloud_trail/aws"
+
+  cluster_name              = local.cluster_name
+  s3_data_event_bucket_arns = var.s3_data_event_bucket_arns
+  tags                      = local.tags
+}
 
 module "dns" {
   count  = var.enable_dns ? 1 : 0
@@ -202,12 +258,61 @@ module "network_mesh" {
   count  = var.enable_network_mesh ? 1 : 0
   source = "../../../components/network_mesh/aws"
 
-  name                = var.cluster_name
-  vpc_id              = module.vpc.record.vpc_id
-  subnet_id           = module.vpc.record.private_subnet_ids[0]
-  tailnet_auth_key    = var.tailnet_auth_key
-  advertised_routes   = [var.vpc_cidr]
-  enable_k8s_operator = var.enable_tailscale_operator
+  name                     = var.cluster_name
+  cluster_name             = var.cluster_name
+  vpc_id                   = module.vpc.record.vpc_id
+  subnet_id                = module.vpc.record.private_subnet_ids[0]
+  tailnet_auth_key         = var.tailnet_auth_key
+  advertised_routes        = [var.vpc_cidr]
+  clamp_tunnel_mss         = true
+  masquerade_tunnel_egress = true
+  enable_k8s_operator      = var.enable_tailscale_operator
+  iam_name_prefix          = var.iam_name_prefix
+  kms_alias_prefix         = var.kms_alias_prefix
+  iam_permissions_boundary = var.iam_permissions_boundary
+}
+
+resource "random_password" "workspace_snapshot_root_key" {
+  length  = 64
+  special = false
+}
+
+module "workspace_snapshot_root_secret" {
+  count  = local.enable_secret_mgr ? 1 : 0
+  source = "../../../components/secret_manager/aws"
+
+  kms_alias_prefix = var.kms_alias_prefix
+  secret_name      = "${var.cluster_name}-workspace-snapshot-root"
+  secret_values = {
+    root_key = random_password.workspace_snapshot_root_key.result
+  }
+}
+
+locals {
+  mesh_peer_routes = merge(
+    {
+      for pair in setproduct(var.mesh_peer_cidrs, range(length(try(module.vpc.record.private_route_table_ids, [])))) :
+      "${pair[0]}-private-${pair[1]}" => {
+        cidr           = pair[0]
+        route_table_id = module.vpc.record.private_route_table_ids[pair[1]]
+      } if var.enable_network_mesh && length(module.network_mesh) > 0
+    },
+    {
+      for pair in setproduct(var.mesh_peer_cidrs, range(length(try(module.vpc.record.pod_route_table_ids, [])))) :
+      "${pair[0]}-pod-${pair[1]}" => {
+        cidr           = pair[0]
+        route_table_id = module.vpc.record.pod_route_table_ids[pair[1]]
+      } if var.enable_network_mesh && length(module.network_mesh) > 0
+    },
+  )
+}
+
+resource "aws_route" "mesh_peer" {
+  for_each = local.mesh_peer_routes
+
+  route_table_id         = each.value.route_table_id
+  destination_cidr_block = each.value.cidr
+  network_interface_id   = module.network_mesh[0].record.primary_network_interface_id
 }
 
 module "argo_bootstrap" {
@@ -215,6 +320,7 @@ module "argo_bootstrap" {
 
   depends_on = [
     # keep-sorted start
+    aws_route.mesh_peer,
     module.dns,
     module.identity,
     module.network_mesh,
@@ -240,17 +346,35 @@ module "argo_bootstrap" {
   access_domain_name            = var.access_domain_name
   oidc_tls_insecure_skip_verify = var.oidc_tls_insecure_skip_verify
   cluster_labels                = var.cluster_labels
-  annotations = merge(var.annotations, {
-    "installation"     = try(var.annotations["installation"], var.resource_prefix != null && var.resource_prefix != "" ? var.resource_prefix : "corp")
-    "aws-account-id"   = data.aws_caller_identity.current.account_id
-    "backups-bucket"   = module.storage.record.buckets.backups.name
-    "ecr-registry"     = module.registry.record.registry_url
-    "profiles-bucket"  = module.storage.record.buckets.profiles.name
-    "storage-endpoint" = "s3.${data.aws_region.current.region}.amazonaws.com"
-    "athena-bucket"    = try(module.cloud_cost[0].record.bucket_name, "")
-    "athena-database"  = try(module.cloud_cost[0].record.athena_database, "")
-    "athena-workgroup" = try(module.cloud_cost[0].record.athena_workgroup, "")
-  })
+  annotations                   = local.ctrl_cluster_annotations
+  atlantis_plan_role_arn        = local.atlantis_plan_role_arn
+  atlantis_apply_role_arn       = local.atlantis_apply_role_arn
+}
+
+locals {
+  ctrl_cluster_annotations = merge(
+    var.annotations,
+    {
+      "aws-account-id"   = local.account_id
+      "resource-tags"    = jsonencode(var.tags)
+      "backups-bucket"   = module.storage.record.buckets.backups.name
+      "ecr-registry"     = module.registry.record.registry_url
+      "profiles-bucket"  = module.storage.record.buckets.profiles.name
+      "storage-endpoint" = "s3.${data.aws_region.current.region}.amazonaws.com"
+      "athena-bucket"    = try(module.cloud_cost[0].record.bucket_name, "")
+      "athena-database"  = try(module.cloud_cost[0].record.athena_database, "")
+      "athena-table"     = try(module.cloud_cost[0].table_name, "")
+      "athena-workgroup" = try(module.cloud_cost[0].record.athena_workgroup, "")
+
+      "opencost-cloud-cost-reader" = var.enable_cloud_cost ? "true" : "false"
+    },
+    length(local.atlantis_plan_role_arn) > 0 ? {
+      "atlantis-plan-role-arn" = local.atlantis_plan_role_arn
+    } : {},
+    length(local.atlantis_apply_role_arn) > 0 ? {
+      "atlantis-apply-role-arn" = local.atlantis_apply_role_arn
+    } : {},
+  )
 }
 
 resource "tailscale_acl" "this" {
@@ -260,6 +384,7 @@ resource "tailscale_acl" "this" {
     kubernetes_api_router_tags = {}
     resolver_route_cidrs       = []
     private_gateway_ipv4s      = []
+    cell_service_cidrs         = var.cell_service_cidrs
   }) : "{}"
 }
 
@@ -273,7 +398,8 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 resource "aws_iam_role" "workspace_publisher" {
-  name = "${var.cluster_name}-workspace-publisher"
+  name                 = "${var.iam_name_prefix}${var.cluster_name}-workspace-publisher"
+  permissions_boundary = var.iam_permissions_boundary
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -296,7 +422,7 @@ resource "aws_iam_role" "workspace_publisher" {
 }
 
 resource "aws_iam_role_policy" "workspace_publisher" {
-  name = "${var.cluster_name}-workspace-publisher-policy"
+  name = "${var.iam_name_prefix}${var.cluster_name}-workspace-publisher-policy"
   role = aws_iam_role.workspace_publisher.id
 
   policy = jsonencode({
@@ -322,6 +448,8 @@ resource "aws_iam_role_policy" "workspace_publisher" {
           "ecr:InitiateLayerUpload",
           "ecr:ListImages",
           "ecr:PutImage",
+          "ecr:PutImageTagMutability",
+          "ecr:PutLifecyclePolicy",
           "ecr:TagResource",
           "ecr:UploadLayerPart",
           # keep-sorted end
@@ -335,11 +463,11 @@ resource "aws_iam_role_policy" "workspace_publisher" {
 }
 
 resource "aws_iam_user" "renovate_ecr_read" {
-  name = "${var.cluster_name}-renovate-ecr-read"
+  name = "${var.iam_name_prefix}${var.cluster_name}-renovate-ecr-read"
 }
 
 resource "aws_iam_user_policy" "renovate_ecr_read" {
-  name = "${var.cluster_name}-renovate-ecr-read-policy"
+  name = "${var.iam_name_prefix}${var.cluster_name}-renovate-ecr-read-policy"
   user = aws_iam_user.renovate_ecr_read.name
 
   policy = jsonencode({
@@ -366,6 +494,53 @@ resource "aws_iam_user_policy" "renovate_ecr_read" {
       }
     ]
   })
+}
+
+resource "aws_s3_account_public_access_block" "account" {
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_ebs_encryption_by_default" "this" {
+  enabled = true
+}
+
+resource "aws_iam_account_password_policy" "strict" {
+  minimum_password_length        = 14
+  require_lowercase_characters   = true
+  require_numbers                = true
+  require_uppercase_characters   = true
+  require_symbols                = true
+  allow_users_to_change_password = true
+  password_reuse_prevention      = 24
+  max_password_age               = 90
+}
+
+resource "aws_iam_role" "support" {
+  name = "${var.iam_name_prefix}${var.cluster_name}-incident-support-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AssumeRoleForSupport"
+        Effect = "Allow"
+        Action = "sts:AssumeRole"
+        Principal = {
+          AWS = "arn:aws:iam::${local.account_id}:root"
+        }
+      }
+    ]
+  })
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy_attachment" "support" {
+  role       = aws_iam_role.support.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSSupportAccess"
 }
 
 

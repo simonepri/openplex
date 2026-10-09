@@ -5,6 +5,12 @@ variable "cluster_name" {
   type        = string
 }
 
+variable "name" {
+  description = "Name prefix for telemetry and GCP resources (defaults to var.cluster_name if null)."
+  type        = string
+  default     = null
+}
+
 variable "vpc_cidr" {
   description = "CIDR block for the control plane VPC."
   type        = string
@@ -53,6 +59,11 @@ variable "enable_network_mesh" {
   description = "Whether to provision the Tailscale network mesh router."
   type        = bool
   default     = true
+}
+
+variable "cell_service_cidrs" {
+  description = "List of cell Kubernetes service CIDR blocks for internal SSH mesh routing."
+  type        = list(string)
 }
 
 variable "enable_cloud_cost" {
@@ -125,12 +136,6 @@ variable "target_revision" {
   description = "Git revision for Argo CD fleet tracking."
   type        = string
   default     = "HEAD"
-}
-
-variable "resource_prefix" {
-  description = "Global unbranded resource prefix for cloud resources."
-  type        = string
-  default     = ""
 }
 
 variable "registered_cells" {

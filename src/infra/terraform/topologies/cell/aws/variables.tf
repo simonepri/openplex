@@ -139,10 +139,38 @@ variable "system_instance_types" {
   default     = ["m5.2xlarge"]
 }
 
-variable "resource_prefix" {
-  description = "Global unbranded resource prefix for cloud resources."
+variable "iam_name_prefix" {
+  description = "Prefix applied to IAM role, policy, and instance profile names."
   type        = string
   default     = ""
+
+  validation {
+    condition     = length(var.iam_name_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.iam_name_prefix))
+    error_message = "iam_name_prefix must be at most 16 characters and contain only lowercase letters, digits, and hyphens."
+  }
+}
+
+variable "kms_alias_prefix" {
+  description = "Prefix applied to KMS key alias names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.kms_alias_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.kms_alias_prefix))
+    error_message = "kms_alias_prefix must be at most 16 characters and contain only lowercase letters, digits, and hyphens."
+  }
+}
+
+variable "iam_permissions_boundary" {
+  description = "ARN of the permissions boundary policy to attach to IAM roles."
+  type        = string
+  default     = null
+}
+
+variable "tags" {
+  description = "Custom resource tags applied across cloud resources."
+  type        = map(string)
+  default     = {}
 }
 
 variable "disabled_components" {
@@ -161,4 +189,48 @@ variable "shared_secret_names" {
   description = "Account-wide secret store entries, outside this cluster's name prefix, that its external-secrets controller may read."
   type        = list(string)
   default     = []
+}
+
+variable "mesh_peer_cidrs" {
+  description = "List of peer CIDRs routed through the Tailscale network mesh router."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for cidr in var.mesh_peer_cidrs : can(cidrnetmask(cidr))
+    ])
+    error_message = "All mesh_peer_cidrs entries must be valid IPv4 CIDR blocks."
+  }
+}
+
+variable "global_storage" {
+  description = "Global storage configuration containing endpoint and per-team credentials."
+  type = object({
+    endpoint = string
+    teams = map(object({
+      bucket            = string
+      access_key_id     = string
+      secret_access_key = string
+    }))
+    readers = map(object({
+      bucket            = string
+      access_key_id     = string
+      secret_access_key = string
+    }))
+  })
+  sensitive = true
+  default   = null
+}
+
+variable "atlantis_plan_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during plan operations for EKS access."
+  type        = string
+  default     = ""
+}
+
+variable "atlantis_apply_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during apply operations for EKS access."
+  type        = string
+  default     = ""
 }

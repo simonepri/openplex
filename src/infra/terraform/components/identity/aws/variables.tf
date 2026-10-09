@@ -65,3 +65,41 @@ variable "storage_kms_key_arn" {
   type        = string
   default     = ""
 }
+
+variable "storage_meta_bucket_arn" {
+  description = "ARN of the meta storage bucket holding S3 inventory reports."
+  type        = string
+  default     = ""
+}
+
+variable "storage_stats_inventory_reports" {
+  description = "Inventory report buckets and prefixes readable by the ClickHouse rollup role."
+  type = list(object({
+    bucket_arn = string
+    prefixes   = list(string)
+  }))
+  default = []
+}
+
+variable "opentofu_state_bucket" {
+  description = "Name of the S3 bucket hosting OpenTofu remote state accessed by Atlantis."
+  type        = string
+  default     = ""
+}
+
+variable "iam_name_prefix" {
+  description = "Prefix applied to IAM role names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.iam_name_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.iam_name_prefix))
+    error_message = "iam_name_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "iam_permissions_boundary" {
+  description = "ARN of the permissions boundary policy to attach to IAM roles."
+  type        = string
+  default     = null
+}

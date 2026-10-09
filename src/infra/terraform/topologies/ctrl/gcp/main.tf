@@ -6,6 +6,7 @@ data "google_project" "current" {}
 locals {
   project  = coalesce(data.google_client_config.current.project, "default")
   location = coalesce(data.google_client_config.current.region, data.google_client_config.current.zone, "us-central1")
+  name     = coalesce(var.name, var.cluster_name)
 }
 
 module "interface" {
@@ -74,22 +75,21 @@ module "cluster" {
 module "storage" {
   source = "../../../components/storage/gcp"
 
-  installation_name = var.resource_prefix != null && var.resource_prefix != "" ? var.resource_prefix : "cloud"
-  cell_name         = var.cluster_name
-  storage_tiers     = ["home", "scratch", "archive", "backups", "meta", "logs", "profiles"]
+  cluster_name  = var.cluster_name
+  storage_tiers = ["home", "scratch", "archive", "backups", "meta", "logs", "profiles"]
 }
 
 module "registry" {
   source = "../../../components/registry/gcp"
 
-  installation_name = var.cluster_name
+  cluster_name = var.cluster_name
 }
 
 module "workload_registry" {
   count  = 0
   source = "../../../components/registry/gcp"
 
-  installation_name = var.cluster_name
+  cluster_name = var.cluster_name
 }
 
 module "identity" {
@@ -106,19 +106,19 @@ module "identity" {
       namespace       = "atlantis"
       service_account = "atlantis"
     }
-    barman = {
-      namespace       = "coder"
-      service_account = "coder-postgres"
-    }
-    cert_manager = {
+    cert-manager = {
       namespace       = "cert-manager-system"
       service_account = "cert-manager"
     }
-    cloud_telemetry = {
+    cloud-telemetry = {
       namespace       = "otel-system"
-      service_account = "otel-collector"
+      service_account = "cloud-telemetry"
     }
-    external_dns = {
+    coder-backups = {
+      namespace       = "coder"
+      service_account = "coder-postgres"
+    }
+    external-dns = {
       namespace       = "external-dns-system"
       service_account = "external-dns"
     }
@@ -149,15 +149,6 @@ module "dns" {
 
   domain_name = var.domain_name
   is_cell     = false
-}
-
-module "secret_manager" {
-  source = "../../../components/secret_manager/gcp"
-
-  secret_name = "${var.cluster_name}-platform-secrets"
-  secret_values = {
-    placeholder = "initialized"
-  }
 }
 
 module "network_mesh" {
@@ -199,14 +190,15 @@ module "argo_bootstrap" {
   oidc_tls_insecure_skip_verify = var.oidc_tls_insecure_skip_verify
   cluster_labels                = var.cluster_labels
   annotations = merge(var.annotations, {
-    "artifact-registry"   = try(module.workload_registry[0].record.registry_host, "")
-    "backups-bucket"      = module.storage.record.buckets.backups.name
-    "gcp-billing-dataset" = try(module.cloud_cost[0].record.billing_dataset, "")
-    "gcp-location"        = local.location
-    "gcp-project-id"      = local.project
-    "gcp-project-number"  = tostring(data.google_project.current.number)
-    "profiles-bucket"     = module.storage.record.buckets.profiles.name
-    "storage-endpoint"    = "storage.googleapis.com"
+    "artifact-registry"             = try(module.workload_registry[0].record.registry_host, "")
+    "backups-bucket"                = module.storage.record.buckets.backups.name
+    "gcp-billing-dataset"           = try(module.cloud_cost[0].record.billing_dataset, "")
+    "gcp-location"                  = local.location
+    "gcp-project-id"                = local.project
+    "gcp-project-number"            = tostring(data.google_project.current.number)
+    "profiles-bucket"               = module.storage.record.buckets.profiles.name
+    "storage-endpoint"              = "storage.googleapis.com"
+    "telemetry-pubsub-subscription" = google_pubsub_subscription.telemetry.name
   })
 }
 
@@ -217,5 +209,30 @@ resource "tailscale_acl" "this" {
     kubernetes_api_router_tags = {}
     resolver_route_cidrs       = []
     private_gateway_ipv4s      = []
+    cell_service_cidrs         = var.cell_service_cidrs
   }) : "{}"
+}
+
+resource "google_pubsub_topic" "telemetry" {
+  name = "${local.name}-cloud-telemetry"
+}
+
+resource "google_pubsub_subscription" "telemetry" {
+  name                       = "${local.name}-cloud-telemetry-pull"
+  topic                      = google_pubsub_topic.telemetry.id
+  ack_deadline_seconds       = 60
+  message_retention_duration = "604800s"
+}
+
+resource "google_logging_project_sink" "telemetry" {
+  name                   = "${local.name}-telemetry-sink"
+  destination            = "pubsub.googleapis.com/${google_pubsub_topic.telemetry.id}"
+  filter                 = "logName:\"logs/cloudaudit.googleapis.com%2Factivity\" OR logName:\"logs/cloudaudit.googleapis.com%2Fdata_access\" OR logName:\"logs/compute.googleapis.com%2Fvpc_flows\" OR logName:\"logs/dns.googleapis.com%2Fdns_queries\""
+  unique_writer_identity = true
+}
+
+resource "google_pubsub_topic_iam_member" "telemetry_sink" {
+  topic  = google_pubsub_topic.telemetry.id
+  role   = "roles/pubsub.publisher"
+  member = google_logging_project_sink.telemetry.writer_identity
 }

@@ -2,6 +2,6 @@
 
 locals {
   names = {
-    for k, v in var.roles : k => "${var.cluster_name}-${k}"
+    for k, v in var.roles : k => "${var.iam_name_prefix}${var.cluster_name}-${k}"
   }
 }

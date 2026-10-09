@@ -3,12 +3,14 @@
 module "interface" {
   source = "../_interface"
 
-  cluster_name            = var.cluster_name
-  cluster_oidc_issuer_url = var.cluster_oidc_issuer_url
-  cluster_oidc_arn        = var.cluster_oidc_arn
-  project_id              = var.project_id
-  roles                   = var.roles
-  trust_mode              = var.trust_mode
+  cluster_name             = var.cluster_name
+  cluster_oidc_issuer_url  = var.cluster_oidc_issuer_url
+  cluster_oidc_arn         = var.cluster_oidc_arn
+  iam_name_prefix          = var.iam_name_prefix
+  iam_permissions_boundary = var.iam_permissions_boundary
+  project_id               = var.project_id
+  roles                    = var.roles
+  trust_mode               = var.trust_mode
   realized = {
     role_arns = {
       for k, v in google_service_account.this : k => v.email
@@ -19,7 +21,11 @@ module "interface" {
 resource "google_service_account" "this" {
   for_each = var.roles
 
-  account_id   = module.interface.names[each.key]
+  account_id = (
+    length(replace(module.interface.names[each.key], "_", "-")) <= 30
+    ? trimsuffix(replace(module.interface.names[each.key], "_", "-"), "-")
+    : "${substr(replace(module.interface.names[each.key], "_", "-"), 0, 21)}-${substr(sha1(module.interface.names[each.key]), 0, 8)}"
+  )
   display_name = "${var.cluster_name} ${each.key} service account"
   project      = var.project_id != "" ? var.project_id : null
 }
@@ -40,6 +46,7 @@ locals {
   project = coalesce(var.project_id != "" ? var.project_id : null, data.google_client_config.current.project, "default")
 
   gcp_role_permissions = {
+    # keep-sorted start block=yes
     atlantis = [
       { role = "roles/container.admin", condition = null },
       { role = "roles/compute.networkAdmin", condition = null },
@@ -57,28 +64,6 @@ locals {
       },
       { role = "roles/iam.roleAdmin", condition = null }
     ]
-    cloud_telemetry = [
-      { role = "roles/monitoring.metricWriter", condition = null },
-      { role = "roles/cloudtrace.agent", condition = null },
-      { role = "roles/logging.logWriter", condition = null },
-    ]
-    karpenter = [
-      { role = "roles/compute.instanceAdmin.v1", condition = null },
-      {
-        role = "roles/iam.serviceAccountUser"
-        condition = {
-          title       = "ScopedNodeServiceAccountOnly"
-          description = "Limit service account user to cluster node pool accounts"
-          expression  = "resource.type == 'iam.googleapis.com/ServiceAccount' && resource.name.extract('serviceAccounts/{name}').startsWith('${var.cluster_name}')"
-        }
-      }
-    ]
-    external_dns = [
-      { role = "roles/dns.admin", condition = null }
-    ]
-    cert_manager = [
-      { role = "roles/dns.admin", condition = null }
-    ]
     barman = [
       {
         role = "roles/storage.objectAdmin"
@@ -94,6 +79,77 @@ locals {
           title       = "ScopedStorageKMSOnly"
           description = "Limit KMS access to cell storage keys"
           expression  = "resource.name.contains('/keyRings/${var.cluster_name}-storage/cryptoKeys/')"
+        }
+      }
+    ]
+    cert-manager = [
+      { role = "roles/dns.admin", condition = null }
+    ]
+    cert_manager = [
+      { role = "roles/dns.admin", condition = null }
+    ]
+    cloud-telemetry = [
+      { role = "roles/monitoring.metricWriter", condition = null },
+      { role = "roles/cloudtrace.agent", condition = null },
+      { role = "roles/logging.logWriter", condition = null },
+      { role = "roles/pubsub.subscriber", condition = null },
+    ]
+    cloud_telemetry = [
+      { role = "roles/monitoring.metricWriter", condition = null },
+      { role = "roles/cloudtrace.agent", condition = null },
+      { role = "roles/logging.logWriter", condition = null },
+      { role = "roles/pubsub.subscriber", condition = null },
+    ]
+    coder-backups = [
+      {
+        role = "roles/storage.objectAdmin"
+        condition = {
+          title       = "ScopedBackupBucketsOnly"
+          description = "Limit storage access to cell backups bucket"
+          expression  = "resource.name.startsWith('projects/_/buckets/') && resource.name.contains('${var.cluster_name}-backups')"
+        }
+      },
+      {
+        role = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+        condition = {
+          title       = "ScopedStorageKMSOnly"
+          description = "Limit KMS access to cell storage keys"
+          expression  = "resource.name.contains('/keyRings/${var.cluster_name}-storage/cryptoKeys/')"
+        }
+      }
+    ]
+    db-backups = [
+      {
+        role = "roles/storage.objectAdmin"
+        condition = {
+          title       = "ScopedBackupBucketsOnly"
+          description = "Limit storage access to cell backups bucket"
+          expression  = "resource.name.startsWith('projects/_/buckets/') && resource.name.contains('${var.cluster_name}-backups')"
+        }
+      },
+      {
+        role = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+        condition = {
+          title       = "ScopedStorageKMSOnly"
+          description = "Limit KMS access to cell storage keys"
+          expression  = "resource.name.contains('/keyRings/${var.cluster_name}-storage/cryptoKeys/')"
+        }
+      }
+    ]
+    external-dns = [
+      { role = "roles/dns.admin", condition = null }
+    ]
+    external_dns = [
+      { role = "roles/dns.admin", condition = null }
+    ]
+    karpenter = [
+      { role = "roles/compute.instanceAdmin.v1", condition = null },
+      {
+        role = "roles/iam.serviceAccountUser"
+        condition = {
+          title       = "ScopedNodeServiceAccountOnly"
+          description = "Limit service account user to cluster node pool accounts"
+          expression  = "resource.type == 'iam.googleapis.com/ServiceAccount' && resource.name.extract('serviceAccounts/{name}').startsWith('${var.cluster_name}')"
         }
       }
     ]
@@ -143,6 +199,7 @@ locals {
         }
       }
     ]
+    # keep-sorted end
   }
 
   gcp_role_bindings = flatten([

@@ -36,5 +36,12 @@ output "config" {
     annotations                   = var.annotations
     disabled_components           = var.disabled_components
     profiles_retention_days       = var.profiles_retention_days
+    iam_name_prefix               = var.iam_name_prefix
+    kms_alias_prefix              = var.kms_alias_prefix
+    iam_permissions_boundary      = var.iam_permissions_boundary
+    tags                          = var.tags
+    account_id                    = var.account_id
+    atlantis_plan_role_arn        = var.atlantis_plan_role_arn
+    atlantis_apply_role_arn       = var.atlantis_apply_role_arn
   }
 }

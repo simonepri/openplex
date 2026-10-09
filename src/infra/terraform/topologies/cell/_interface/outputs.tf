@@ -26,5 +26,11 @@ output "config" {
     tailnet_auth_key_configured   = length(var.tailnet_auth_key) > 0
     fleet_availability            = var.fleet_availability
     disabled_components           = var.disabled_components
+    iam_name_prefix               = var.iam_name_prefix
+    kms_alias_prefix              = var.kms_alias_prefix
+    iam_permissions_boundary      = var.iam_permissions_boundary
+    tags                          = var.tags
+    atlantis_plan_role_arn        = var.atlantis_plan_role_arn
+    atlantis_apply_role_arn       = var.atlantis_apply_role_arn
   }
 }

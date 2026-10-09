@@ -2,7 +2,8 @@
 
 installation:
   enable_cloudflare: true
-  zone_name: openplex.org
+  zone_name: openplex.xyz
+  hooks_nlb_hostname: k8s-envoygat-publicho-60df92d1f1-04dfafba54d5e34b.elb.us-west-2.amazonaws.com
   delegations:
     corp:
       - ns-223.awsdns-27.com

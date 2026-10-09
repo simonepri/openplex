@@ -85,6 +85,33 @@ variable "enable_network_mesh" {
   default     = true
 }
 
+variable "mesh_peer_cidrs" {
+  description = "List of peer VPC CIDRs routed through the Tailscale network mesh router."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for cidr in var.mesh_peer_cidrs : can(cidrnetmask(cidr))
+    ])
+    error_message = "All mesh_peer_cidrs entries must be valid IPv4 CIDR blocks."
+  }
+}
+
+variable "cell_service_cidrs" {
+  description = "List of cell Kubernetes service CIDR blocks for internal SSH mesh routing."
+  type        = list(string)
+}
+
+variable "storage_stats_inventory_reports" {
+  description = "Inventory report buckets and prefixes readable by the ClickHouse rollup role."
+  type = list(object({
+    bucket_arn = string
+    prefixes   = list(string)
+  }))
+  default = []
+}
+
 variable "enable_tailscale_operator" {
   description = "Whether to provision Tailscale Kubernetes operator OAuth credentials."
   type        = bool
@@ -124,12 +151,6 @@ variable "system_instance_types" {
   description = "Instance types for the control plane system managed node group."
   type        = list(string)
   default     = ["m5.2xlarge"]
-}
-
-variable "resource_prefix" {
-  description = "Global unbranded resource prefix for cloud resources."
-  type        = string
-  default     = ""
 }
 
 variable "cluster_environment" {
@@ -329,4 +350,68 @@ variable "publisher_oidc_repository" {
   description = "Repository part of the GitHub Actions OIDC subject the image publisher trusts, when it differs from the owner/name slug (for example owner@id/name@id)."
   type        = string
   default     = null
+}
+
+variable "iam_name_prefix" {
+  description = "Prefix applied to IAM role, policy, and user names for compliance partitioning."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.iam_name_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.iam_name_prefix))
+    error_message = "iam_name_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "kms_alias_prefix" {
+  description = "Prefix applied to KMS key alias names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.kms_alias_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.kms_alias_prefix))
+    error_message = "kms_alias_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "iam_permissions_boundary" {
+  description = "ARN of the permissions boundary to attach to created IAM roles."
+  type        = string
+  default     = null
+}
+
+variable "tags" {
+  description = "Resource tags applied to all provisioned cloud resources."
+  type        = map(string)
+  default     = {}
+}
+
+variable "account_id" {
+  description = "AWS account ID for cloud resources and storage bucket naming."
+  type        = string
+  default     = null
+}
+
+variable "s3_data_event_bucket_arns" {
+  type        = list(string)
+  description = "List of S3 bucket ARNs to record S3 data events for in CloudTrail."
+  default     = []
+}
+
+variable "opentofu_state_bucket" {
+  description = "Name of the S3 bucket hosting OpenTofu remote state accessed by Atlantis."
+  type        = string
+  default     = ""
+}
+
+variable "atlantis_plan_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during plan operations for EKS access."
+  type        = string
+  default     = ""
+}
+
+variable "atlantis_apply_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during apply operations for EKS access."
+  type        = string
+  default     = ""
 }

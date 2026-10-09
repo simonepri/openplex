@@ -41,3 +41,20 @@ variable "trust_mode" {
   }
 }
 
+variable "iam_name_prefix" {
+  description = "Prefix applied to IAM role names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.iam_name_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.iam_name_prefix))
+    error_message = "iam_name_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "iam_permissions_boundary" {
+  description = "ARN of the permissions boundary policy to attach to IAM roles."
+  type        = string
+  default     = null
+}
+

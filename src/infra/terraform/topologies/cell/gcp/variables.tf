@@ -109,12 +109,6 @@ variable "fleet_availability" {
   }
 }
 
-variable "resource_prefix" {
-  description = "Global unbranded resource prefix for cloud resources."
-  type        = string
-  default     = ""
-}
-
 variable "disabled_components" {
   description = "Set of standard component names to disable in this topology."
   type        = set(string)

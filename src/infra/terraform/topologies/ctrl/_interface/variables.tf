@@ -202,3 +202,55 @@ variable "profiles_retention_days" {
   type        = number
   default     = 30
 }
+
+variable "iam_name_prefix" {
+  description = "Prefix applied to IAM role, policy, and user names for compliance partitioning."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.iam_name_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.iam_name_prefix))
+    error_message = "iam_name_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "kms_alias_prefix" {
+  description = "Prefix applied to KMS key alias names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.kms_alias_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.kms_alias_prefix))
+    error_message = "kms_alias_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "iam_permissions_boundary" {
+  description = "ARN of the permissions boundary to attach to created IAM roles."
+  type        = string
+  default     = null
+}
+
+variable "tags" {
+  description = "Resource tags applied to all provisioned cloud resources."
+  type        = map(string)
+  default     = {}
+}
+
+variable "account_id" {
+  description = "Cloud account identifier owning control plane resources."
+  type        = string
+  default     = null
+}
+
+variable "atlantis_plan_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during plan operations for EKS access."
+  type        = string
+  default     = ""
+}
+
+variable "atlantis_apply_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during apply operations for EKS access."
+  type        = string
+  default     = ""
+}

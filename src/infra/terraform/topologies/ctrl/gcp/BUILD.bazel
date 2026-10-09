@@ -19,7 +19,6 @@ tf_module(
         "//src/infra/terraform/components/identity/gcp",
         "//src/infra/terraform/components/network_mesh/gcp",
         "//src/infra/terraform/components/registry/gcp",
-        "//src/infra/terraform/components/secret_manager/gcp",
         "//src/infra/terraform/components/storage/gcp",
         "//src/infra/terraform/components/vpc/gcp",
         "//src/infra/terraform/topologies/ctrl/_interface",

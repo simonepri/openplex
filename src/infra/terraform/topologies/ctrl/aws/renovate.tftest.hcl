@@ -121,8 +121,9 @@ variables {
     public  = ["10.0.10.0/24", "10.0.11.0/24"]
     pod     = []
   }
-  public_domain_name            = "openplex.org"
-  git_repo_url                  = "git@github.com:simonepri/openplex.git"
+  cell_service_cidrs            = ["172.20.0.0/20"]
+  public_domain_name            = "example.com"
+  git_repo_url                  = "git@github.com:openplex/openplex.git"
   registered_cells              = []
   disabled_components           = ["karpenter"]
   enable_identity               = false
@@ -179,5 +180,23 @@ run "verifies_renovate_ecr_read_user_policy_least_privilege" {
   assert {
     condition     = length(setsubtract(flatten([for s in jsondecode(aws_iam_user_policy.renovate_ecr_read.policy).Statement : s.Action]), ["ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:ListImages"])) == 0
     error_message = "Renovate ECR read policy must not contain any actions other than ecr:GetAuthorizationToken, ecr:BatchGetImage, and ecr:ListImages."
+  }
+}
+
+run "verifies_renovate_ecr_read_user_with_iam_name_prefix" {
+  command = plan
+
+  variables {
+    iam_name_prefix = "compliance-"
+  }
+
+  assert {
+    condition     = aws_iam_user.renovate_ecr_read.name == "compliance-ctrl-aws-usw2-renovate-ecr-read"
+    error_message = "Renovate ECR read IAM user name must include iam_name_prefix."
+  }
+
+  assert {
+    condition     = aws_iam_user_policy.renovate_ecr_read.name == "compliance-ctrl-aws-usw2-renovate-ecr-read-policy"
+    error_message = "Renovate ECR read IAM user policy name must include iam_name_prefix."
   }
 }

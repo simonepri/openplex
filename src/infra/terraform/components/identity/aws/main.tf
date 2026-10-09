@@ -1,6 +1,7 @@
 # Provisions AWS IAM roles, OIDC federated trust policies, and EKS Pod Identity associations.
 
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
 
 resource "aws_iam_openid_connect_provider" "federated" {
   count = var.trust_mode == "federated" && var.cluster_oidc_arn == "" && var.cluster_oidc_issuer_url != "" ? 1 : 0
@@ -11,19 +12,21 @@ resource "aws_iam_openid_connect_provider" "federated" {
 }
 
 locals {
-  oidc_provider_arn = coalesce(var.cluster_oidc_arn, try(aws_iam_openid_connect_provider.federated[0].arn, ""))
+  oidc_provider_arn = try(coalesce(var.cluster_oidc_arn, try(aws_iam_openid_connect_provider.federated[0].arn, null)), "")
   clean_oidc_issuer = replace(var.cluster_oidc_issuer_url, "https://", "")
 }
 
 module "interface" {
   source = "../_interface"
 
-  cluster_name            = var.cluster_name
-  cluster_oidc_issuer_url = var.cluster_oidc_issuer_url
-  cluster_oidc_arn        = local.oidc_provider_arn
-  project_id              = var.project_id
-  roles                   = var.roles
-  trust_mode              = var.trust_mode
+  cluster_name             = var.cluster_name
+  cluster_oidc_issuer_url  = var.cluster_oidc_issuer_url
+  cluster_oidc_arn         = local.oidc_provider_arn
+  iam_name_prefix          = var.iam_name_prefix
+  iam_permissions_boundary = var.iam_permissions_boundary
+  project_id               = var.project_id
+  roles                    = var.roles
+  trust_mode               = var.trust_mode
   realized = {
     role_arns = {
       for k, v in aws_iam_role.this : k => v.arn
@@ -34,7 +37,8 @@ module "interface" {
 resource "aws_iam_role" "this" {
   for_each = var.roles
 
-  name = module.interface.names[each.key]
+  name                 = module.interface.names[each.key]
+  permissions_boundary = var.iam_permissions_boundary
 
   assume_role_policy = var.trust_mode == "federated" ? jsonencode({
     Version = "2012-10-17"
@@ -75,6 +79,59 @@ resource "aws_iam_role" "this" {
   })
 }
 
+locals {
+  # Built from known values, not role attributes, so consumers can use them in count during the first plan.
+  atlantis_enabled        = contains(keys(var.roles), "atlantis")
+  atlantis_plan_role_arn  = local.atlantis_enabled ? "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.iam_name_prefix}${var.cluster_name}-atlantis-plan" : ""
+  atlantis_apply_role_arn = local.atlantis_enabled ? "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.iam_name_prefix}${var.cluster_name}-atlantis-apply" : ""
+}
+
+resource "aws_iam_role" "atlantis_plan" {
+  count = contains(keys(var.roles), "atlantis") ? 1 : 0
+
+  name                 = "${var.iam_name_prefix}${var.cluster_name}-atlantis-plan"
+  permissions_boundary = var.iam_permissions_boundary
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.this["atlantis"].arn
+        }
+        Action = [
+          "sts:AssumeRole",
+          "sts:TagSession",
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role" "atlantis_apply" {
+  count = contains(keys(var.roles), "atlantis") ? 1 : 0
+
+  name                 = "${var.iam_name_prefix}${var.cluster_name}-atlantis-apply"
+  permissions_boundary = var.iam_permissions_boundary
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.this["atlantis"].arn
+        }
+        Action = [
+          "sts:AssumeRole",
+          "sts:TagSession",
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_eks_pod_identity_association" "this" {
   for_each = var.trust_mode == "pod_identity" ? var.roles : {}
 
@@ -86,11 +143,26 @@ resource "aws_eks_pod_identity_association" "this" {
   depends_on = [aws_iam_role.this]
 }
 
-
 resource "aws_iam_role_policy" "scoped" {
   for_each = local.active_policies
 
   name   = "${aws_iam_role.this[each.key].name}-policy"
   role   = aws_iam_role.this[each.key].id
   policy = each.value
+}
+
+resource "aws_iam_role_policy" "atlantis_plan" {
+  count = contains(keys(var.roles), "atlantis") ? 1 : 0
+
+  name   = "${aws_iam_role.atlantis_plan[0].name}-policy"
+  role   = aws_iam_role.atlantis_plan[0].id
+  policy = local.atlantis_plan_policy
+}
+
+resource "aws_iam_role_policy" "atlantis_apply" {
+  count = contains(keys(var.roles), "atlantis") ? 1 : 0
+
+  name   = "${aws_iam_role.atlantis_apply[0].name}-policy"
+  role   = aws_iam_role.atlantis_apply[0].id
+  policy = local.atlantis_apply_policy
 }
