@@ -4,9 +4,9 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: rclone-csi-probe
-  namespace: team-examples-workspaces
+  namespace: team-examples-workloads
   labels:
-    app.kubernetes.io/name: coder-workspace
+    app.kubernetes.io/name: ray-runner
     app.kubernetes.io/part-of: chainsaw
     availability-class: be
     cost-center: examples
@@ -16,7 +16,7 @@ metadata:
 spec:
   automountServiceAccountToken: false
   restartPolicy: Never
-  serviceAccountName: coder-workspace
+  serviceAccountName: ray-runner
   securityContext:
     fsGroup: 1000
     runAsGroup: 1000
@@ -48,15 +48,15 @@ spec:
       csi:
         driver: rclone.csi.veloxpack.io
         nodePublishSecretRef: {name: team-s3}
-        volumeAttributes: {gid: "1000", remote: home, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
+        volumeAttributes: {gid: "1000", no-checksum: "true", remote: home, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
     - name: scratch
       csi:
         driver: rclone.csi.veloxpack.io
         nodePublishSecretRef: {name: team-s3}
-        volumeAttributes: {gid: "1000", remote: scratch, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
+        volumeAttributes: {gid: "1000", no-checksum: "true", remote: scratch, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
     - name: global
       csi:
         driver: rclone.csi.veloxpack.io
         nodePublishSecretRef: {name: team-s3}
-        volumeAttributes: {gid: "1000", remote: global, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
+        volumeAttributes: {gid: "1000", no-checksum: "true", remote: global, remotePath: "", uid: "1000", umask: "0022", vfs-cache-mode: "off"}
     - {name: temporary, emptyDir: {sizeLimit: 16Mi}}

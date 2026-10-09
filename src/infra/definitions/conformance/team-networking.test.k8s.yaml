@@ -26,7 +26,7 @@ spec:
               - pod/team-networking-server
               - pod/team-networking-client
               - service/team-networking-server
-              - --namespace=team-examples-workspaces
+              - --namespace=team-examples-workloads
               - --ignore-not-found=true
               - --grace-period=1
               - --wait=true
@@ -58,7 +58,7 @@ spec:
               - wait
               - pod/team-networking-server
               - pod/team-networking-client
-              - --namespace=team-examples-workspaces
+              - --namespace=team-examples-workloads
               - --for=condition=Ready
               - --timeout=60s
         - command:
@@ -142,7 +142,7 @@ spec:
               - -ceu
               - >-
                 set +e;
-                timeout 2 valkey-cli -h team-networking-server.team-examples-workspaces.svc -p 8080 ping;
+                timeout 2 valkey-cli -h team-networking-external-server.team-networking-e2e.svc -p 8080 ping;
                 status=$?;
                 test "$status" -eq 124
         - command:
@@ -171,11 +171,11 @@ spec:
                   if ! kubectl exec --namespace=team-networking-e2e \
                     team-networking-external-client -- wget --quiet \
                     --output-document=- --timeout=1 \
-                    http://team-networking-server.team-examples-workspaces.svc:8080 \
+                    http://team-networking-server.team-examples-workloads.svc:8080 \
                     >/dev/null 2>&1; then
                     ingress_blocked=true
                   fi
-                  if ! kubectl exec --namespace=team-examples-workspaces \
+                  if ! kubectl exec --namespace=team-examples-workloads \
                     team-networking-client -- wget --quiet \
                     --output-document=- --timeout=1 \
                     http://team-networking-external-server.team-networking-e2e.svc:8080 \
@@ -198,12 +198,12 @@ spec:
               - sh
               - -ceu
               - >-
-                ! wget --quiet --output-document=- --timeout=2 http://team-networking-server.team-examples-workspaces.svc:8080
+                ! wget --quiet --output-document=- --timeout=2 http://team-networking-server.team-examples-workloads.svc:8080
         - command:
             entrypoint: kubectl
             args:
               - exec
-              - --namespace=team-examples-workspaces
+              - --namespace=team-examples-workloads
               - team-networking-client
               - --
               - sh
@@ -214,22 +214,7 @@ spec:
             entrypoint: kubectl
             args:
               - exec
-              - --namespace=team-examples-workspaces
-              - team-networking-client
-              - --
-              - sh
-              - -ceu
-              - |-
-                wget --quiet --no-check-certificate \
-                  --header="Authorization: Bearer $(cat /var/run/workspace/kubernetes/token)" \
-                  --output-document=- --timeout=5 \
-                  'https://kubernetes.default.svc/apis/batch/v1/namespaces/team-examples-workloads/jobs?limit=1' |
-                  grep -q '"kind"[[:space:]]*:[[:space:]]*"JobList"'
-        - command:
-            entrypoint: kubectl
-            args:
-              - exec
-              - --namespace=team-examples-workspaces
+              - --namespace=team-examples-workloads
               - team-networking-client
               - --
               - wget
@@ -243,7 +228,7 @@ spec:
             entrypoint: kubectl
             args:
               - exec
-              - --namespace=team-examples-workspaces
+              - --namespace=team-examples-workloads
               - team-networking-client
               - --
               - nslookup
@@ -252,7 +237,7 @@ spec:
             entrypoint: kubectl
             args:
               - exec
-              - --namespace=team-examples-workspaces
+              - --namespace=team-examples-workloads
               - team-networking-client
               - --
               - sh
@@ -276,7 +261,7 @@ spec:
               - --quiet
               - --output-document=-
               - --timeout=5
-              - http://team-networking-server.team-examples-workspaces.svc:8080
+              - http://team-networking-server.team-examples-workloads.svc:8080
             check:
               (trim_space($stdout)): team-networking-ok
       finally:

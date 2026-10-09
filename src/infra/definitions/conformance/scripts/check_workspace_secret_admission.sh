@@ -5,13 +5,8 @@
 set -eu
 
 busybox_image="${BUSYBOX_IMAGE:?busybox image is required}"
-script_directory="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
-repository_root="$(git -C "${script_directory}" rev-parse --show-toplevel)"
-backup_proxy_image="$(
-  yq --exit-status --unwrapScalar \
-    '.spec.template.spec.containers[].env[] | select(.name == "CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE") | .value' \
-    "${repository_root}/src/infra/argocd/components/coder/kustomize/template-reconciler.k8s.yaml"
-)"
+backup_proxy_image="$(kubectl --namespace coder get cronjob coder-template-reconciler --output 'jsonpath={.spec.jobTemplate.spec.template.spec.containers[?(@.name=="reconcile")].env[?(@.name=="CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE")].value}')"
+backup_proxy_image="${backup_proxy_image:?CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE is required}"
 namespace=workspace-secret-admission-e2e
 provisioner=cluster:test:coder-provisioner
 team_user=conformance-user

@@ -37,6 +37,7 @@ dev_secrets:
   - temporal_cloud_api_key
   # keep-sorted end
 promotion: automatic
+submitters: all
 workspaces: true
 archive: true
 key_epoch: 1

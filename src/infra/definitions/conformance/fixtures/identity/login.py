@@ -87,10 +87,12 @@ def make_ssl_context() -> ssl.SSLContext:
 
 
 def make_opener(*handlers: urllib.request.BaseHandler) -> urllib.request.OpenerDirector:
-    return urllib.request.build_opener(
+    opener = urllib.request.build_opener(
         urllib.request.HTTPSHandler(context=make_ssl_context()),
         *handlers,
     )
+    opener.addheaders = [("User-Agent", "openplex-conformance-probe/1")]
+    return opener
 
 
 dex_http = make_opener()

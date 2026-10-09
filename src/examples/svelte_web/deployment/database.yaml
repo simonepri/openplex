@@ -24,7 +24,7 @@ spec:
     labels:
       availability-class: ha
       latency-class: ls
-  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-standard-bookworm@sha256:9446e83aa490df3f14ebf5bf2f6002a1347728690ff38f35dd7a85b925a62468
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-standard-bookworm@sha256:94aa172fc7ce295d482f5fe8bcf8d1e3423f30c15ba40c7d34114b68dc152b0a
   imagePullPolicy: IfNotPresent
   postgresUID: 26
   postgresGID: 26

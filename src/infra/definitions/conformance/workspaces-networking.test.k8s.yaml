@@ -1,0 +1,221 @@
+# Proves workspaces NetworkPolicies isolate workspace pods from each other and team workloads while permitting DNS and Coder egress to defend dev network boundaries.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workspaces-network-policy-paths
+  labels:
+    cadence: commit
+    capability: networking
+    mutates: scratch
+spec:
+  namespace: workspaces-networking-e2e
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    apply: 30s
+    cleanup: 1m
+    delete: 1m
+    exec: 2m
+  steps:
+    - try:
+        - command: &cleanup-workspaces-probes
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod/workspace-server
+              - pod/workspace-client
+              - pod/workspace-unlabeled-client
+              - service/workspace-server
+              - --namespace=workspaces
+              - --ignore-not-found=true
+              - --grace-period=1
+              - --wait=true
+              - --timeout=15s
+        - command: &cleanup-workload-probes
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod/workspaces-workload-server
+              - pod/workspaces-workload-client
+              - service/workspaces-workload-server
+              - --namespace=team-examples-workloads
+              - --ignore-not-found=true
+              - --grace-period=1
+              - --wait=true
+              - --timeout=15s
+        - command: &cleanup-external-probes
+            entrypoint: kubectl
+            args:
+              - delete
+              - pod/workspaces-external-client
+              - --namespace=workspaces-networking-e2e
+              - --ignore-not-found=true
+              - --grace-period=1
+              - --wait=true
+              - --timeout=15s
+        - apply:
+            file: fixtures/networking/workspaces-access-paths.test.k8s.yaml
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - pod/workspace-server
+              - pod/workspace-client
+              - pod/workspace-unlabeled-client
+              - --namespace=workspaces
+              - --for=condition=Ready
+              - --timeout=60s
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - pod/workspaces-workload-server
+              - pod/workspaces-workload-client
+              - --namespace=team-examples-workloads
+              - --for=condition=Ready
+              - --timeout=60s
+        - command:
+            entrypoint: kubectl
+            args:
+              - wait
+              - pod/workspaces-external-client
+              - --namespace=workspaces-networking-e2e
+              - --for=condition=Ready
+              - --timeout=60s
+        - command:
+            entrypoint: sh
+            args:
+              - -ceu
+              - |-
+                deadline="$(( $(date +%s) + 30 ))"
+                while :; do
+                  inter_workspace_blocked=false
+                  workload_blocked=false
+                  external_blocked=false
+                  if ! kubectl exec --namespace=workspaces \
+                    workspace-client -- wget --quiet \
+                    --output-document=- --timeout=1 \
+                    http://workspace-server.workspaces.svc:8080 \
+                    >/dev/null 2>&1; then
+                    inter_workspace_blocked=true
+                  fi
+                  if ! kubectl exec --namespace=workspaces \
+                    workspace-client -- wget --quiet \
+                    --output-document=- --timeout=1 \
+                    http://workspaces-workload-server.team-examples-workloads.svc:8080 \
+                    >/dev/null 2>&1; then
+                    workload_blocked=true
+                  fi
+                  if ! kubectl exec --namespace=workspaces-networking-e2e \
+                    workspaces-external-client -- wget --quiet \
+                    --output-document=- --timeout=1 \
+                    http://workspace-server.workspaces.svc:8080 \
+                    >/dev/null 2>&1; then
+                    external_blocked=true
+                  fi
+                  if "$inter_workspace_blocked" && "$workload_blocked" && "$external_blocked"; then
+                    break
+                  fi
+                  test "$(date +%s)" -lt "${deadline}" || exit 1
+                  sleep 1
+                done
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=workspaces
+              - workspace-client
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! wget --quiet --output-document=- --timeout=2 http://workspace-server.workspaces.svc:8080
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=workspaces
+              - workspace-client
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! nc -z -w 2 workspace-server 8080
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=workspaces
+              - workspace-client
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! wget --quiet --output-document=- --timeout=2 http://workspaces-workload-server.team-examples-workloads.svc:8080
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=team-examples-workloads
+              - workspaces-workload-client
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! wget --quiet --output-document=- --timeout=2 http://workspace-server.workspaces.svc:8080
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=workspaces
+              - workspace-unlabeled-client
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! nslookup kube-dns.kube-system.svc.cluster.local 2>/dev/null
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=workspaces-networking-e2e
+              - workspaces-external-client
+              - --
+              - sh
+              - -ceu
+              - >-
+                ! wget --quiet --output-document=- --timeout=2 http://workspace-server.workspaces.svc:8080
+        - command:
+            entrypoint: kubectl
+            args:
+              - exec
+              - --namespace=workspaces
+              - workspace-client
+              - --
+              - nslookup
+              - kube-dns.kube-system.svc.cluster.local
+        - command:
+            entrypoint: sh
+            env:
+              - {name: INSTALLATION_PUBLIC_DOMAIN, value: ($values.publicDomain)}
+            args:
+              - -ceu
+              - |-
+                kubectl exec --namespace=workspaces workspace-client -- \
+                  nslookup "coder.${INSTALLATION_PUBLIC_DOMAIN}"
+        - command:
+            entrypoint: sh
+            env:
+              - {name: INSTALLATION_PUBLIC_DOMAIN, value: ($values.publicDomain)}
+            args:
+              - -ceu
+              - |-
+                kubectl exec --namespace=workspaces workspace-client -- \
+                  nc -z -w 5 "coder.${INSTALLATION_PUBLIC_DOMAIN}" 443
+      finally:
+        - command: *cleanup-workspaces-probes
+        - command: *cleanup-workload-probes
+        - command: *cleanup-external-probes
+        - delete:
+            file: fixtures/networking/workspaces-access-paths.test.k8s.yaml

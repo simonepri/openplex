@@ -70,18 +70,14 @@ spec:
                     --namespace=team-examples-workloads "$@")" = yes
                 done
 
-                set -- --as=system:serviceaccount:team-examples-workspaces:coder-workspace
-                for verb in create delete get list patch update watch; do
+                # TODO(simonepri): grant workspace job submission through the
+                # workspace owner's OIDC identity and restore a positive check here.
+                set -- --as=system:serviceaccount:workspaces:coder-workspace
+                for verb in create delete patch update; do
                   test "$(kubectl auth can-i "${verb}" rayjobs.ray.io \
-                    --namespace=team-examples-workloads "$@")" = yes
+                    --namespace=team-examples-workloads "$@" || true)" = no
                   test "$(kubectl auth can-i "${verb}" jobs.batch \
-                    --namespace=team-examples-workloads "$@")" = yes
-                done
-                for verb in delete get list patch watch; do
-                  test "$(kubectl auth can-i "${verb}" workloads.kueue.x-k8s.io \
-                    --namespace=team-examples-workloads "$@")" = yes
-                done
-                for verb in create deletecollection; do
+                    --namespace=team-examples-workloads "$@" || true)" = no
                   test "$(kubectl auth can-i "${verb}" workloads.kueue.x-k8s.io \
                     --namespace=team-examples-workloads "$@" || true)" = no
                 done
@@ -90,7 +86,7 @@ spec:
                 test "$(kubectl auth can-i get secrets \
                   --namespace=team-examples-workloads "$@" || true)" = no
                 test "$(kubectl auth can-i get secrets \
-                  --namespace=team-examples-workspaces "$@" || true)" = no
+                  --namespace=workspaces "$@" || true)" = no
 
                 kubectl delete namespace/team-chainsaw-other \
                   --ignore-not-found=true --wait=true
@@ -274,7 +270,7 @@ metadata:
     capability: team-isolation
     mutates: scratch
 spec:
-  namespace: team-examples-workspaces
+  namespace: team-examples-workloads
   cluster: cell-eaws-lh1
   concurrent: false
   timeouts:
@@ -308,8 +304,8 @@ spec:
                   sleep 1
                 done
 
-                kubectl get externalsecret/team-dev-secrets \
-                  --namespace=team-examples-workspaces --output=json |
+                kubectl get externalsecret/team-s3 \
+                  --namespace=team-examples-workloads --output=json |
                   jq --compact-output '
                     del(
                       .metadata.creationTimestamp,
@@ -328,7 +324,7 @@ spec:
                   --request PUT --header 'Content-Type: application/json' \
                   --data-binary "@${request}" --output "${response}" \
                   --write-out '%{http_code}' \
-                  'http://127.0.0.1:18087/apis/external-secrets.io/v1/namespaces/team-examples-workspaces/externalsecrets/team-dev-secrets?dryRun=All')"
+                  'http://127.0.0.1:18087/apis/external-secrets.io/v1/namespaces/team-examples-workloads/externalsecrets/team-s3?dryRun=All')"
                 test "${code}" = 422
                 jq --exit-status '
                   .apiVersion == "v1" and
@@ -336,19 +332,19 @@ spec:
                   .status == "Failure" and
                   .reason == "Invalid" and
                   .code == 422 and
-                  .details.name == "team-dev-secrets" and
+                  .details.name == "team-s3" and
                   (.details.group // "") == "external-secrets.io" and
                   .details.kind == "externalsecrets" and
                   (.details.causes | length) >= 1
                 ' "${response}" >/dev/null
 
-                store_name=org-workspace-backups-team-examples-workspaces
+                store_name=org-workspace-backups-workspaces
                 kubectl get clustersecretstore "${store_name}" --output=json |
-                  jq --exit-status --arg namespace team-examples-workspaces '
+                  jq --exit-status --arg namespace workspaces '
                     .spec.conditions == [{namespaces: [$namespace]}]
                   ' >/dev/null
                 kubectl get externalsecret/workspace-backups \
-                  --namespace=team-examples-workspaces --output=json |
+                  --namespace=workspaces --output=json |
                   jq --exit-status --arg store "${store_name}" '
                     .spec.secretStoreRef == {
                       kind: "ClusterSecretStore",
@@ -357,7 +353,7 @@ spec:
                   ' >/dev/null
 
                 kubectl get externalsecret/workspace-backups \
-                  --namespace=team-examples-workspaces --output=json |
+                  --namespace=workspaces --output=json |
                   jq --compact-output '
                     del(
                       .metadata.creationTimestamp,
@@ -369,13 +365,13 @@ spec:
                   ' >"${request}"
 
                 kubectl create role org-workspace-backups-policy-probe \
-                  --namespace=team-examples-workspaces \
+                  --namespace=workspaces \
                   --verb=update \
                   --resource=externalsecrets.external-secrets.io \
                   --resource-name=workspace-backups \
                   --dry-run=client --output=yaml | kubectl apply --filename=-
                 kubectl create rolebinding org-workspace-backups-policy-probe \
-                  --namespace=team-examples-workspaces \
+                  --namespace=workspaces \
                   --role=org-workspace-backups-policy-probe \
                   --user=conformance-user \
                   --dry-run=client --output=yaml | kubectl apply --filename=-
@@ -384,13 +380,13 @@ spec:
                   --request PUT --header 'Content-Type: application/json' \
                   --data-binary "@${request}" --output "${response}" \
                   --write-out '%{http_code}' \
-                  'http://127.0.0.1:18087/apis/external-secrets.io/v1/namespaces/team-examples-workspaces/externalsecrets/workspace-backups?dryRun=All')"
+                  'http://127.0.0.1:18087/apis/external-secrets.io/v1/namespaces/workspaces/externalsecrets/workspace-backups?dryRun=All')"
                 test "${code}" = 200
                 jq --exit-status --arg store "${store_name}" '
                   .apiVersion == "external-secrets.io/v1" and
                   .kind == "ExternalSecret" and
                   .metadata.name == "workspace-backups" and
-                  .metadata.namespace == "team-examples-workspaces" and
+                  .metadata.namespace == "workspaces" and
                   .spec.secretStoreRef == {
                     kind: "ClusterSecretStore",
                     name: $store
@@ -419,7 +415,7 @@ spec:
                   --request PUT --header 'Content-Type: application/json' \
                   --data-binary "@${request}" --output "${response}" \
                   --write-out '%{http_code}' \
-                  'http://127.0.0.1:18087/apis/external-secrets.io/v1/namespaces/team-examples-workspaces/externalsecrets/workspace-backups?dryRun=All')"
+                  'http://127.0.0.1:18087/apis/external-secrets.io/v1/namespaces/workspaces/externalsecrets/workspace-backups?dryRun=All')"
                 test "${code}" = 422
                 jq --exit-status '
                   .apiVersion == "v1" and
@@ -437,7 +433,7 @@ spec:
             entrypoint: kubectl
             args:
               - delete
-              - --namespace=team-examples-workspaces
+              - --namespace=workspaces
               - rolebinding/org-workspace-backups-policy-probe
               - role/org-workspace-backups-policy-probe
               - --ignore-not-found=true
@@ -563,72 +559,13 @@ spec:
                 forged_request="$(mktemp)"
                 response="$(mktemp)"
                 proxy_log="$(mktemp)"
-                submitter=chainsaw-coder-workload-submitter
                 cleanup() {
                   kill "${proxy_pid:-}" 2>/dev/null || true
-                  kubectl delete pod "${submitter}" --namespace=team-examples-workspaces \
-                    --ignore-not-found=true --wait=false >/dev/null
                   rm -f "${request}" "${forged_request}" "${response}" "${proxy_log}"
                 }
                 trap cleanup EXIT
 
                 run_name="ray-data-conformanceuser-${RAY_RUN_ID}"
-
-                jq --null-input --arg image "${RAY_IMAGE}" --arg name "${submitter}" '{
-                  apiVersion: "v1",
-                  kind: "Pod",
-                  metadata: {
-                    name: $name,
-                    namespace: "team-examples-workspaces",
-                    labels: {
-                      "app.kubernetes.io/name": "coder-workspace",
-                      "com.coder.user.username": "conformanceuser"
-                    }
-                  },
-                  spec: {
-                    automountServiceAccountToken: false,
-                    restartPolicy: "Never",
-                    serviceAccountName: "coder-workspace",
-                    securityContext: {
-                      runAsGroup: 100,
-                      runAsNonRoot: true,
-                      runAsUser: 1000,
-                      seccompProfile: {type: "RuntimeDefault"}
-                    },
-                    containers: [{
-                      name: "submitter",
-                      image: $image,
-                      command: ["/bin/sh", "-c", "sleep 1200"],
-                      resources: {
-                        requests: {cpu: "10m", memory: "64Mi"},
-                        limits: {cpu: "100m", memory: "256Mi"}
-                      },
-                      securityContext: {
-                        allowPrivilegeEscalation: false,
-                        capabilities: {drop: ["ALL"]},
-                        readOnlyRootFilesystem: true
-                      },
-                      volumeMounts: [{
-                        name: "identity",
-                        mountPath: "/var/run/workspace/kubernetes",
-                        readOnly: true
-                      }]
-                    }],
-                    volumes: [{
-                      name: "identity",
-                      projected: {
-                        defaultMode: 288,
-                        sources: [{serviceAccountToken: {expirationSeconds: 3600, path: "token"}}]
-                      }
-                    }]
-                  }
-                }' | kubectl apply --filename=- >/dev/null
-                kubectl wait --for=condition=Ready "pod/${submitter}" \
-                  --namespace=team-examples-workspaces --timeout=300s
-                token="$(kubectl exec "pod/${submitter}" \
-                  --namespace=team-examples-workspaces --container=submitter -- \
-                  cat /var/run/workspace/kubernetes/token)"
-                test -n "${token}"
 
                 kubectl create --dry-run=client --output=json \
                   --filename=../../../examples/ray_data/deployment/ray-data.k8s.yaml |
@@ -644,7 +581,7 @@ spec:
                         "pipeline": "ray-data",
                         "run-id": $run_id,
                         "team": "forged-team",
-                        "user": "forged"
+                        "user": "conformanceuser"
                       }) |
                       .metadata.annotations = ((.metadata.annotations // {}) + {
                         "dashboard-url": "https://attacker.invalid/"
@@ -660,11 +597,9 @@ spec:
                       )
                     ' >"${request}"
 
-                jq '.metadata.name = "ray-data-forged-" + .metadata.labels["run-id"]' \
-                  "${request}" >"${forged_request}"
-
                 kubectl proxy --port=18085 \
-                  --token="${token}" >"${proxy_log}" 2>&1 &
+                  --as=conformance-user \
+                  --as-group=cluster:group:team:examples >"${proxy_log}" 2>&1 &
                 proxy_pid=$!
                 for attempt in $(seq 1 60); do
                   if curl --silent --output /dev/null \
@@ -677,6 +612,11 @@ spec:
                   fi
                   sleep 1
                 done
+
+                jq '
+                  .metadata.name = ("ray-data-forged-" + .metadata.labels["run-id"]) |
+                  .metadata.labels.user = "forged"
+                ' "${request}" >"${forged_request}"
 
                 code="$(curl --silent --show-error --noproxy '*' \
                   --request POST \

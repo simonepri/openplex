@@ -1,0 +1,23 @@
+# Proves admission rules govern workspace S3 credentials, grant integrity, and volume bindings.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workspace-s3-grants
+  labels:
+    cadence: commit
+    capability: workspaces
+    mutates: scratch
+spec:
+  namespace: workspace-s3-grants-e2e
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    cleanup: 1m
+    exec: 10m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            args:
+              - scripts/check_workspace_s3_grants.sh

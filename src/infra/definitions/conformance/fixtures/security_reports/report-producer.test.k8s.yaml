@@ -1,4 +1,4 @@
-# Deploys first-party application workloads to defend Trivy and Kubescape in-cluster vulnerability and posture report generation contracts.
+# Deploys first-party application workloads to defend Trivy in-cluster vulnerability and posture report generation contracts.
 
 apiVersion: apps/v1
 kind: Deployment

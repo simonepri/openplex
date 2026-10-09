@@ -6,7 +6,6 @@ set -eu
 
 busybox_image="${BUSYBOX_IMAGE:?busybox image is required}"
 namespace=team-examples-workloads
-gpu_namespace=team-examples-workspaces
 team_user=conformance-user
 team_group=cluster:group:team:examples
 profile_message='Team namespaces must retain native restricted audit and warning while Kyverno owns enforcement.'
@@ -193,17 +192,8 @@ jq '
 expect_pod_denied 'team non-default procMount Pod' "${pod_security_policy}" \
   "${temp_dir}/procmount.json"
 
-if [ "$(kubectl auth can-i create pods --namespace="${gpu_namespace}" \
-  --as="${team_user}" --as-group="${team_group}")" != yes ]; then
-  printf 'the examples team identity cannot create Pods in %s\n' \
-    "${gpu_namespace}" >&2
-  exit 1
-fi
-
-jq --arg namespace "${gpu_namespace}" '
-  .metadata.name = "team-coder-gpu-admitted" |
-  .metadata.namespace = $namespace |
-  .spec.serviceAccountName = "coder-workspace" |
+jq '
+  .metadata.name = "team-gpu-admitted" |
   .spec.tolerations = [{
     key:"nvidia.com/gpu",
     operator:"Equal",
@@ -211,16 +201,15 @@ jq --arg namespace "${gpu_namespace}" '
     effect:"NoSchedule"
   }] |
   .spec.containers += [(.spec.containers[0] | .name = "cpu-sidecar")] |
-  .spec.containers[0].name = "gpu-workspace" |
+  .spec.containers[0].name = "gpu-worker" |
   .spec.containers[0].resources.requests["nvidia.com/gpu"] = "1" |
   .spec.containers[0].resources.limits["nvidia.com/gpu"] = "1"
 ' "${safe_pod}" >"${temp_dir}/gpu.json"
 
-admit_pod_json 'Coder Pod with a positive GPU request' \
+admit_pod_json 'team Pod with a positive GPU request' \
   "${temp_dir}/gpu.json" "${temp_dir}/gpu-admitted.json"
 
 jq --exit-status '
-  .spec.serviceAccountName == "coder-workspace" and
   ([.spec.initContainers[]? | select(
     .name == "parcagpu-library" and
     .image == "ghcr.io/parca-dev/parcagpu:0.3.2@sha256:23ac8c02dcf974b290b48daa274a033db5e9e710b655605e50e90fbd89f37561"
@@ -228,7 +217,7 @@ jq --exit-status '
   ([.spec.volumes[]? | select(
     .name == "parcagpu-library" and .emptyDir.sizeLimit == "8Mi"
   )] | length) == 1 and
-  (.spec.containers[] | select(.name == "gpu-workspace") |
+  (.spec.containers[] | select(.name == "gpu-worker") |
     .resources.requests["nvidia.com/gpu"] == "1" and
     .resources.limits["nvidia.com/gpu"] == "1" and
     .securityContext.capabilities.drop == ["ALL"] and
@@ -253,14 +242,14 @@ jq --exit-status '
 ' "${temp_dir}/gpu-admitted.json" >/dev/null
 
 jq '
-  .metadata.name = "team-coder-perfmon-without-gpu-denied" |
+  .metadata.name = "team-perfmon-without-gpu-denied" |
   del(
     .spec.containers[0].resources.requests["nvidia.com/gpu"],
     .spec.containers[0].resources.limits["nvidia.com/gpu"]
   ) |
   .spec.containers[0].securityContext.capabilities.add = ["PERFMON"]
 ' "${temp_dir}/gpu.json" >"${temp_dir}/perfmon-without-gpu.json"
-expect_pod_denied 'Coder Pod with PERFMON but no positive GPU request' \
+expect_pod_denied 'team Pod with PERFMON but no positive GPU request' \
   "${parcagpu_message}" "${temp_dir}/perfmon-without-gpu.json"
 
 trap - EXIT HUP INT TERM

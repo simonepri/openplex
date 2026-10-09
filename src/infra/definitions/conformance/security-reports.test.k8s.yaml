@@ -1,4 +1,4 @@
-# Proves Trivy and Kubescape generate non-empty vulnerability and compliance reports for deployed workloads to defend automated vulnerability auditing.
+# Proves Trivy generates non-empty vulnerability and compliance reports for deployed workloads to defend automated vulnerability auditing.
 
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
@@ -78,29 +78,6 @@ spec:
                   if test "$(date +%s)" -ge "${deadline}"; then
                     printf '%s\n' 'Timed out waiting for a completed Trivy VulnerabilityReport.' >&2
                     printf '%s\n' "${reports}" >&2
-                    exit 1
-                  fi
-                  sleep 10
-                done
-        - command:
-            entrypoint: sh
-            args:
-              - -ceu
-              - |-
-                report_url='/apis/spdx.softwarecomposition.kubescape.io/v1beta1/namespaces/security-reports-e2e/workloadconfigurationscans/deployment-security-report-producer?resourceVersion=fullSpec'
-                deadline="$(( $(date +%s) + 900 ))"
-                report=''
-                while :; do
-                  report="$(kubectl get --request-timeout=10s --raw "${report_url}" 2>/dev/null || true)"
-                  if printf '%s' "${report}" | jq -e '
-                    (.spec.controls | type) == "object" and
-                    (.spec.controls | length) > 0
-                  ' >/dev/null 2>&1; then
-                    exit 0
-                  fi
-                  if test "$(date +%s)" -ge "${deadline}"; then
-                    printf '%s\n' 'Timed out waiting for a completed Kubescape WorkloadConfigurationScan.' >&2
-                    printf '%s\n' "${report}" >&2
                     exit 1
                   fi
                   sleep 10

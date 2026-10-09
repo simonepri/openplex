@@ -30,7 +30,7 @@ spec:
       args:
         - |-
           local_key="home/examples/chainsaw/${OBJECT_SUFFIX}/local"
-          global_key="home/examples/${CELL_NAME}/chainsaw/${OBJECT_SUFFIX}/global"
+          global_key="home/examples/chainsaw/${OBJECT_SUFFIX}/global"
           gateway_aws() {
             AWS_PROFILE=team-s3 \
               AWS_SHARED_CREDENTIALS_FILE=/var/run/cluster/s3/credentials \

@@ -1,15 +1,15 @@
-# Proves Rclone CSI volumes support POSIX filesystem actions, survive driver restarts, and reject unauthorized aliases to defend workspace storage integrity.
+# Proves Rclone CSI volumes support POSIX filesystem actions and survive driver restarts, and that team lanes reject unauthorized aliases, to defend workload storage integrity.
 
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: rclone-csi-coder-data-contract
+  name: rclone-csi-workload-data-contract
   labels:
     cadence: commit
     capability: storage
     mutates: scratch
 spec:
-  namespace: team-examples-workspaces
+  namespace: team-examples-workloads
   cluster: cell-eaws-lh1
   concurrent: false
   timeouts:
@@ -24,11 +24,11 @@ spec:
             args: [scripts/check_rclone_csi_security_profile.sh]
         - command:
             entrypoint: kubectl
-            args: [delete, pod/rclone-csi-probe, --namespace=team-examples-workspaces, --ignore-not-found=true, --wait=true]
+            args: [delete, pod/rclone-csi-probe, --namespace=team-examples-workloads, --ignore-not-found=true, --wait=true]
         - apply: {file: fixtures/storage/rclone-csi-probe.test.k8s.yaml}
         - command:
             entrypoint: kubectl
-            args: [wait, --for=condition=Ready, pod/rclone-csi-probe, --namespace=team-examples-workspaces, --timeout=300s]
+            args: [wait, --for=condition=Ready, pod/rclone-csi-probe, --namespace=team-examples-workloads, --timeout=300s]
         - command:
             entrypoint: kubectl
             args: [apply, --dry-run=server, --filename=fixtures/storage/rclone-csi-foreign-alias-probe.test.k8s.yaml]
@@ -43,10 +43,10 @@ spec:
               (contains($stderr, 'team-rclone-csi-volume-contract')): true
         - command:
             entrypoint: kubectl
-            args: [cp, fixtures/storage/rclone-csi-filesystem-probe.sh, team-examples-workspaces/rclone-csi-probe:/tmp/rclone-csi-filesystem-probe.sh]
+            args: [cp, fixtures/storage/rclone-csi-filesystem-probe.sh, team-examples-workloads/rclone-csi-probe:/tmp/rclone-csi-filesystem-probe.sh]
         - command:
             entrypoint: kubectl
-            args: [exec, --namespace=team-examples-workspaces, pod/rclone-csi-probe, --, sh, /tmp/rclone-csi-filesystem-probe.sh]
+            args: [exec, --namespace=team-examples-workloads, pod/rclone-csi-probe, --, sh, /tmp/rclone-csi-filesystem-probe.sh]
         - command:
             entrypoint: kubectl
             args: [delete, pod, --namespace=csi-rclone, --selector=app=rclone-csi-node, --wait=true]
@@ -55,11 +55,14 @@ spec:
             args: [rollout, status, daemonset/rclone-csi-node, --namespace=csi-rclone, --timeout=300s]
         - command:
             entrypoint: kubectl
-            args: [exec, --namespace=team-examples-workspaces, pod/rclone-csi-probe, --, test, -f, /s3/eaws-lh1/home/chainsaw-restart]
+            args: [exec, --namespace=team-examples-workloads, pod/rclone-csi-probe, --, test, -f, /s3/eaws-lh1/home/chainsaw-restart]
+        - command:
+            entrypoint: kubectl
+            args: [exec, --namespace=team-examples-workloads, pod/rclone-csi-probe, --, test, -f, /s3/global/home/chainsaw-global]
       finally:
         - command:
             entrypoint: kubectl
-            args: [exec, --namespace=team-examples-workspaces, pod/rclone-csi-probe, --, rm, -f, /s3/eaws-lh1/home/chainsaw-restart, /s3/eaws-lh1/scratch/chainsaw-scratch, /s3/global/home/chainsaw-global]
+            args: [exec, --namespace=team-examples-workloads, pod/rclone-csi-probe, --, rm, -f, /s3/eaws-lh1/home/chainsaw-restart, /s3/eaws-lh1/scratch/chainsaw-scratch, /s3/global/home/chainsaw-global]
         - command:
             entrypoint: kubectl
-            args: [delete, pod/rclone-csi-probe, --namespace=team-examples-workspaces, --ignore-not-found=true, --wait=true]
+            args: [delete, pod/rclone-csi-probe, --namespace=team-examples-workloads, --ignore-not-found=true, --wait=true]

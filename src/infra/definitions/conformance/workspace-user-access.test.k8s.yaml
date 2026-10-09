@@ -1,0 +1,21 @@
+# Proves team RBAC allows team members to create jobs and rayjobs while denying non-members to defend workload isolation.
+
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workspace-user-access
+  labels:
+    cadence: commit
+    capability: access
+    mutates: none
+spec:
+  namespace: team-examples-workloads
+  cluster: cell-eaws-lh1
+  concurrent: false
+  timeouts:
+    exec: 5m
+  steps:
+    - try:
+        - command:
+            entrypoint: sh
+            args: [scripts/check_workspace_user_access.sh]
