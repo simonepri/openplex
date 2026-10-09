@@ -1,6 +1,9 @@
 """Check targets for the cluster_access Argo CD component."""
 
+# gazelle:resolve py yaml @dev_python_deps//pyyaml
+
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("@rules_python//python:defs.bzl", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
@@ -21,4 +24,15 @@ manifest_checks(
     rendered = ":base_render",
 )
 
-package_sources()
+py_test(
+    name = "team_open_submitter_test",
+    size = "small",
+    srcs = ["team_open_submitter_test.py"],
+    args = ["$(location :base_render)"],
+    data = [":base_render"],
+    deps = ["@dev_python_deps//pyyaml"],  # keep
+)
+
+package_sources(exclude = [
+    "**/*.py",
+])

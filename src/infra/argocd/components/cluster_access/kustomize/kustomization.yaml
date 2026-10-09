@@ -7,4 +7,5 @@ resources:
   - coder-provisioner-discovery.yaml
   - operator-access.yaml
   - team-access.yaml
+  - team-open-submitter.yaml
   # keep-sorted end

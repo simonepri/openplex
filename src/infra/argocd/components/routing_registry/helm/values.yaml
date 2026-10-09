@@ -11,6 +11,8 @@ gatewayOIDC: {}
 target: {name: "", provider: "", role: ""}
 gateway:
   aliasDomain: ""
+  # Access domain whose hosts also reach this gateway's alias routes, such as coder.<accessDomain>.
+  accessDomain: ""
   baseDomain: ""
   canonicalScheme: ""
   httpRedirect: false

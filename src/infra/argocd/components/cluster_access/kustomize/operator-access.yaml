@@ -152,25 +152,6 @@ rules:
       - sbomreports
       - vulnerabilityreports
     verbs: [get, list, watch]
-  - apiGroups: [spdx.softwarecomposition.kubescape.io]
-    resources:
-      - applicationprofiles
-      - configurationscansummaries
-      - generatednetworkpolicies
-      - knownservers
-      - networkneighborhoods
-      - openvulnerabilityexchangecontainers
-      - sbomsyftfiltereds
-      - sbomsyfts
-      - vulnerabilitymanifests
-      - vulnerabilitymanifestsummaries
-      - vulnerabilitysummaries
-      - workloadconfigurationscans
-      - workloadconfigurationscansummaries
-    verbs: [get, list, watch]
-  - apiGroups: [kubescape.io]
-    resources: [clustersecurityexceptions, rules, runtimerulealertbindings, securityexceptions]
-    verbs: [get, list, watch]
   - apiGroups: [""]
     resources: [services/proxy]
     resourceNames: ['opencost:http-ui']

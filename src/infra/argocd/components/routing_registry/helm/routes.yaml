@@ -229,7 +229,7 @@ routes:
     loadBalancing: single
     target: {roles: [ctrl]}
     backend: {namespace: opencost, service: opencost, port: 9090}
-    timeouts: {request: 120s, backendRequest: 120s}
+    timeouts: {request: 180s, backendRequest: 180s}
   - name: parca
     phase: application
     auth: oidc-gateway
@@ -257,6 +257,12 @@ routes:
       sanitize: true
       secretStore: runtime-secrets
     exposure: private
+    grpcServices:
+      # keep-sorted start
+      - parca.debuginfo.v1alpha1.DebuginfoService
+      - parca.profilestore.v1alpha1.ProfileStoreService
+      - parca.telemetry.v1alpha1.TelemetryService
+      # keep-sorted end
     hostnameLabel: observability
     loadBalancing: single
     target: {roles: [ctrl]}

@@ -11,6 +11,7 @@ target:
   role: ctrl
 gateway:
   aliasDomain: lint.invalid
+  accessDomain: c.lint.invalid
   baseDomain: ctrl-lint.c.lint.invalid
   canonicalScheme: https
   httpRedirect: true

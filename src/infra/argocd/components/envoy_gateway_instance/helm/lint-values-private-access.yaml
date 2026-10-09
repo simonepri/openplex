@@ -11,6 +11,7 @@ gateway:
   namespace: envoy-gateway-system
   className: envoy-gateway-private-access
   aliasDomain: corp.local.internal
+  accessDomain: c.corp.local.internal
   baseDomain: cell-eaws-lh1.c.corp.local.internal
   allowedNamespaces: [envoy-gateway-system, keda-system, s3-system]
   listeners:

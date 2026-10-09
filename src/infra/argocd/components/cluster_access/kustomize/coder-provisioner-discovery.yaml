@@ -23,6 +23,10 @@ subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
     name: cluster:coder-provisioners
+  # AWS cells authenticate the provisioner as this ServiceAccount instead of the group.
+  - kind: ServiceAccount
+    name: coder-provisioner
+    namespace: kube-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

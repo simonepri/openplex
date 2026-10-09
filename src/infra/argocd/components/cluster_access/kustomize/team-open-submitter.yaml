@@ -1,0 +1,37 @@
+# Enforces access control on RayJob creation and deletion in open-submission team namespaces.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-open-submitter
+  labels:
+    app.kubernetes.io/component: team-access
+    app.kubernetes.io/managed-by: argocd
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["ray.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "DELETE"]
+        resources: ["rayjobs"]
+  validations:
+    - expression: >-
+        request.userInfo.username.startsWith('cluster:user:') || request.userInfo.username.startsWith('system:serviceaccount:kube-system:') || authorizer.group('ray.io').resource('rayjobs').namespace(request.namespace).check('patch').allowed()
+      message: >-
+        RayJob creation and deletion in open-submission team namespaces is restricted to signed-in users, core controllers, and authorized team members.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-open-submitter
+  labels:
+    app.kubernetes.io/component: team-access
+    app.kubernetes.io/managed-by: argocd
+spec:
+  policyName: team-open-submitter
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        teams.openplex.io/submitters: "all"

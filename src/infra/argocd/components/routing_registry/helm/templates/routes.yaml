@@ -52,7 +52,11 @@ spec:
 {{- $routeBindings := list -}}
 {{- if $hasAlias -}}
 {{- $routeBindings = append $routeBindings (dict "canonicalRedirect" $canonicalHostOnly "name" $name "hostname" $hostname "section" $section) -}}
-{{- $routeBindings = append $routeBindings (dict "canonicalRedirect" false "name" $aliasName "hostname" $aliasHostname "section" (printf "%s-alias" $root.Values.gateway.canonicalScheme)) -}}
+{{- $aliasHostnames := list $aliasHostname -}}
+{{- with $root.Values.gateway.accessDomain -}}
+{{- $aliasHostnames = append $aliasHostnames (printf "%s.%s" $hostnameLabel .) -}}
+{{- end -}}
+{{- $routeBindings = append $routeBindings (dict "canonicalRedirect" false "name" $aliasName "hostname" $aliasHostname "hostnames" $aliasHostnames "section" (printf "%s-alias" $root.Values.gateway.canonicalScheme)) -}}
 {{- else -}}
 {{- $routeBindings = append $routeBindings (dict "canonicalRedirect" false "name" $name "hostname" $hostname "section" $section) -}}
 {{- end -}}
@@ -82,7 +86,7 @@ metadata:
 spec:
   parentRefs:
     - {group: gateway.networking.k8s.io, kind: Gateway, name: {{ $root.Values.gateway.name }}, sectionName: {{ $binding.section | replace "https" "http" }}}
-  hostnames: {{ list $binding.hostname | toJson }}
+  hostnames: {{ default (list $binding.hostname) $binding.hostnames | toJson }}
   rules:
     - matches: [{path: {type: PathPrefix, value: /}}]
       filters:
@@ -109,7 +113,7 @@ spec:
       kind: Gateway
       name: {{ $root.Values.gateway.name }}
       sectionName: {{ $binding.section }}
-  hostnames: {{ list $binding.hostname | toJson }}
+  hostnames: {{ default (list $binding.hostname) $binding.hostnames | toJson }}
   rules:
 {{- if $binding.canonicalRedirect }}
     - matches: [{path: {type: PathPrefix, value: /}}]
@@ -206,7 +210,7 @@ metadata:
 spec:
   parentRefs:
     - {group: gateway.networking.k8s.io, kind: Gateway, name: {{ $root.Values.gateway.name }}, sectionName: {{ $binding.section | replace "https" "http" }}}
-  hostnames: {{ list $binding.hostname | toJson }}
+  hostnames: {{ default (list $binding.hostname) $binding.hostnames | toJson }}
   rules:
     - matches: [{path: {type: PathPrefix, value: /}}]
       filters:
@@ -230,7 +234,7 @@ spec:
       kind: Gateway
       name: {{ $root.Values.gateway.name }}
       sectionName: {{ $binding.section }}
-  hostnames: {{ list $binding.hostname | toJson }}
+  hostnames: {{ default (list $binding.hostname) $binding.hostnames | toJson }}
   rules:
     - matches: [{path: {type: PathPrefix, value: /}}]
       backendRefs:

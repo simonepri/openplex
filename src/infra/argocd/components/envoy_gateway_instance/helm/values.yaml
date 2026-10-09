@@ -10,6 +10,8 @@ gateway:
   name: public
   namespace: envoy-gateway-system
   aliasDomain: ""
+  # Access domain whose first-level hosts the alias certificate also covers, such as coder.<accessDomain>.
+  accessDomain: ""
   className: envoy-gateway
   baseDomain: ""
   allowedNamespaces:

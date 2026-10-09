@@ -84,7 +84,6 @@ volumeMounts:
   - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/karpenter, subPath: karpenter, readOnly: true}
   - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/keda, subPath: keda, readOnly: true}
   - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/kueue, subPath: kueue, readOnly: true}
-  - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/kubescape, subPath: kubescape, readOnly: true}
   - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/kyverno, subPath: kyverno, readOnly: true}
   - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/opencost, subPath: opencost, readOnly: true}
   - {name: headlamp-catalog-plugins, mountPath: /headlamp/static-plugins/trivy, subPath: trivy, readOnly: true}

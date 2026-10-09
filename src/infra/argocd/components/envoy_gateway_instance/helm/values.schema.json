@@ -81,6 +81,10 @@
           "type": "string",
           "pattern": "^(|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
         },
+        "accessDomain": {
+          "type": "string",
+          "pattern": "^(|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*)$"
+        },
         "baseDomain": { "type": "string" },
         "listeners": {
           "type": "object",

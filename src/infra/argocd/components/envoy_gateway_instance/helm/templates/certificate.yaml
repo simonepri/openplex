@@ -14,6 +14,7 @@
   "name" (printf "%s-alias" .Values.gateway.name | trunc 63 | trimSuffix "-")
   "secretName" .Values.gateway.listeners.https.aliasCertificateSecret
   "dnsName" (printf "*.%s" .Values.gateway.aliasDomain)
+  "extraDnsNames" (ternary (list (printf "*.%s" .Values.gateway.accessDomain)) (list) (ne .Values.gateway.accessDomain ""))
 ) -}}
 {{- end -}}
 {{- if .Values.gateway.listeners.atlantisWebhookHttps.enabled -}}
@@ -54,7 +55,11 @@ metadata:
     {{- include "envoy-gateway-instance.labels" $ | nindent 4 }}
 spec:
   secretName: {{ $secretName }}
-  dnsNames: [{{ required "terminating TLS listeners require a hostname" $certificate.dnsName | quote }}]
+  dnsNames:
+    - {{ required "terminating TLS listeners require a hostname" $certificate.dnsName | quote }}
+    {{- range $certificate.extraDnsNames }}
+    - {{ . | quote }}
+    {{- end }}
   issuerRef:
     group: {{ $.Values.certificate.issuerRef.group }}
     kind: {{ $.Values.certificate.issuerRef.kind }}

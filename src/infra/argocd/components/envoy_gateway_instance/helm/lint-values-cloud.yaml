@@ -3,23 +3,23 @@
 gateway:
   enabled: true
   canonicalScheme: https
-  aliasDomain: corp.local.internal
-  baseDomain: ctrl-cloud.c.corp.local.internal
+  aliasDomain: corp.openplex.io
+  baseDomain: ctrl-cloud.c.corp.openplex.io
   listeners:
     atlantisWebhookHttps:
       enabled: true
-      hostname: hooks.corp.local.internal
+      hostname: hooks.openplex.io
       certificateSecret: cluster-tls-atlantis-webhook
     coderApps:
       enabled: true
-      hostname: "*.coder.ctrl-cloud.c.corp.local.internal"
+      hostname: "*.coder.ctrl-cloud.c.corp.openplex.io"
       certificateSecret: cluster-tls-coder-apps
     http:
       enabled: true
       redirectToHTTPS: true
     s3Https:
       enabled: true
-      hostname: s3-gateway.cell-cloud.cluster.c.corp.local.internal
+      hostname: s3-gateway.cell-cloud.cluster.c.corp.openplex.io
       certificateSecret: cluster-tls-s3
     https:
       enabled: true

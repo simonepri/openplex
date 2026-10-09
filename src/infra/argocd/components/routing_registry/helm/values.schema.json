@@ -160,6 +160,9 @@
         "aliasDomain": {
           "type": "string"
         },
+        "accessDomain": {
+          "type": "string"
+        },
         "baseDomain": {
           "type": "string"
         },

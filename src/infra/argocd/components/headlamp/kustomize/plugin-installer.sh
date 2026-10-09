@@ -69,10 +69,6 @@ extract_plugin \
   /embedded-plugins/headlamp-k8s-kueue-0.1.0-alpha.tar.gz \
   232bca3f18712d8f0113930adf230088f709c4ba08f9988acce8bb025fa790df
 install_remote_plugin \
-  /plugins/catalog/kubescape \
-  https://github.com/kubescape/headlamp-plugin/releases/download/v0.11.2/headlamp-plugin-v0.11.2.tar.gz \
-  ed9a6aab3a24ed6fcea788a93f5c14edf91a7013986ba8dfa8471a5b60a8dc40
-install_remote_plugin \
   /plugins/catalog/kyverno \
   https://github.com/headlamp-k8s/plugins/releases/download/kyverno-0.1.0/headlamp-k8s-kyverno-0.1.0.tar.gz \
   eb6d99eed8e2e4187e5d5e007c116b9e10224cd403d83f8aa87780fafcf6e059

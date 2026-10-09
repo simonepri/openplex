@@ -112,7 +112,7 @@ spec:
     caCertificateRefs:
       - group: ""
         kind: ConfigMap
-        name: cluster-local-ca
+        name: velero-ui-control-ca
 ---
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
