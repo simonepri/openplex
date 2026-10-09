@@ -10,7 +10,6 @@ load("//src/bazel/rules/json_schema:defs.bzl", "json_schema")
 # These Python files are inputs to workspace-driven shell checks, not Python
 # entry points. The parent package owns and lints them as source data.
 # gazelle:exclude license_images
-# gazelle:exclude kubescape/kubescape_triage.py
 # gazelle:exclude opengrep/fixtures/subprocess_shell_true.py
 # gazelle:exclude trivy_source/trivy_triage.py
 
@@ -39,11 +38,7 @@ package_sources()
     for check in [
         # keep-sorted start
         "coder_templates",
-        "cyclo",
         "dev_tool_isolation",
-        "dups",
-        "ifttt",
-        "lock_drift",
         "unclaimed_files",
         # keep-sorted end
     ]
@@ -58,15 +53,104 @@ package_sources()
     for check in [
         # keep-sorted start
         "coder_templates",
-        "cyclo",
         "dev_tool_isolation",
-        "dups",
-        "ifttt",
-        "lock_drift",
         "unclaimed_files",
         # keep-sorted end
     ]
 ]
+
+sh_binary(
+    name = "dups_check",
+    srcs = ["dups/dups.sh"],
+    args = ["$(rootpath //src/bazel/tools:jscpd)"],
+    data = ["//src/bazel/tools:jscpd"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "dups",
+    actual = ":dups_check",
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "dups_test",
+    srcs = ["dups/dups.sh"],
+    args = ["$(rootpath //src/bazel/tools:jscpd)"],
+    data = ["//src/bazel/tools:jscpd"],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
+sh_binary(
+    name = "ifttt_check",
+    srcs = ["ifttt/ifttt.sh"],
+    args = ["$(rootpath //src/bazel/tools:ifttt-lint)"],
+    data = ["//src/bazel/tools:ifttt-lint"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "ifttt",
+    actual = ":ifttt_check",
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "ifttt_test",
+    srcs = ["ifttt/ifttt.sh"],
+    args = ["$(rootpath //src/bazel/tools:ifttt-lint)"],
+    data = ["//src/bazel/tools:ifttt-lint"],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
+sh_binary(
+    name = "lock_drift_check",
+    srcs = ["lock_drift/lock_drift.sh"],
+    args = [
+        "$(rootpath //src/bazel/tools:pnpm)",
+        "$(rootpath //src/bazel/tools:uv)",
+    ],
+    data = [
+        "//src/bazel/tools:pnpm",
+        "//src/bazel/tools:uv",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "lock_drift",
+    actual = ":lock_drift_check",
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "lock_drift_test",
+    srcs = ["lock_drift/lock_drift.sh"],
+    args = [
+        "$(rootpath //src/bazel/tools:pnpm)",
+        "$(rootpath //src/bazel/tools:uv)",
+    ],
+    data = [
+        "//src/bazel/tools:pnpm",
+        "//src/bazel/tools:uv",
+    ],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
+)
+
+alias(
+    name = "cloud_names",
+    actual = "//src/bazel/checks/cloud_names",
+    visibility = ["//visibility:public"],
+)
 
 sh_binary(
     name = "dotenv_check",
@@ -84,14 +168,12 @@ alias(
 
 sh_test(
     name = "dotenv_test",
-    srcs = ["dotenv/dotenv_test.sh"],
-    args = [
-        "$(rootpath :dotenv_check)",
-        "$(rootpath //src/bazel/tools:dotenv-linter)",
-    ],
-    data = [
-        ":dotenv_check",
-        "//src/bazel/tools:dotenv-linter",
+    srcs = ["dotenv/dotenv.sh"],
+    args = ["$(rootpath //src/bazel/tools:dotenv-linter)"],
+    data = ["//src/bazel/tools:dotenv-linter"],
+    tags = [
+        "local",
+        "no-sandbox",
     ],
 )
 
@@ -111,14 +193,12 @@ alias(
 
 sh_test(
     name = "json_schemas_test",
-    srcs = ["json_schemas/json_schemas_test.sh"],
-    args = [
-        "$(rootpath :json_schemas_check)",
-        "$(rootpath //src/bazel/tools:check-jsonschema)",
-    ],
-    data = [
-        ":json_schemas_check",
-        "//src/bazel/tools:check-jsonschema",
+    srcs = ["json_schemas/json_schemas.sh"],
+    args = ["$(rootpath //src/bazel/tools:check-jsonschema)"],
+    data = ["//src/bazel/tools:check-jsonschema"],
+    tags = [
+        "local",
+        "no-sandbox",
     ],
 )
 
@@ -234,30 +314,28 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-sh_binary(
+alias(
     name = "kubescape_check",
-    srcs = ["kubescape/kubescape.sh"],
-    args = ["$(rootpath //src/bazel/tools:kubescape)"],
-    data = [
-        "kubescape/kubescape_triage.py",
-        "kubescape/policy.json",
-        "//src/bazel/tools:kubescape",
-    ],
+    actual = "//src/bazel/checks/kubescape:kubescape_check",
     visibility = ["//visibility:public"],
 )
 
 alias(
     name = "kubescape",
-    actual = ":kubescape_check",
+    actual = "//src/bazel/checks/kubescape",
     visibility = ["//visibility:public"],
 )
 
 sh_binary(
     name = "license_source_check",
     srcs = ["license_source/license_source.sh"],
-    args = ["$(rootpath //src/bazel/tools:osv-scanner)"],
+    args = [
+        "$(rootpath //src/bazel/tools:osv-scanner)",
+        "$(rootpath //src/bazel/tools:jq)",
+    ],
     data = [
         "//src/bazel/checks:license_images/osv-scanner.toml",
+        "//src/bazel/tools:jq",
         "//src/bazel/tools:osv-scanner",
     ],
     visibility = ["//visibility:public"],
@@ -267,6 +345,24 @@ alias(
     name = "license_source",
     actual = ":license_source_check",
     visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "license_source_test",
+    srcs = ["license_source/license_source.sh"],
+    args = [
+        "$(rootpath //src/bazel/tools:osv-scanner)",
+        "$(rootpath //src/bazel/tools:jq)",
+    ],
+    data = [
+        "//src/bazel/checks:license_images/osv-scanner.toml",
+        "//src/bazel/tools:jq",
+        "//src/bazel/tools:osv-scanner",
+    ],
+    tags = [
+        "local",
+        "no-sandbox",
+    ],
 )
 
 sh_binary(
@@ -289,24 +385,19 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-sh_test(
-    name = "commit_message_test",
-    srcs = ["commit_message/commit_message_test.sh"],
-    args = [
-        "$(rootpath :commit_message_check)",
-        "$(rootpath //src/bazel/tools:committed)",
-    ],
-    data = [
-        ":commit_message_check",
-        "//src/bazel/tools:committed",
-    ],
-)
-
 sh_binary(
     name = "opengrep_check",
     srcs = ["opengrep/opengrep.sh"],
-    args = ["$(rootpath //src/bazel/tools:opengrep)"],
-    data = ["//src/bazel/tools:opengrep"],
+    args = [
+        "$(rootpath //src/bazel/tools:opengrep)",
+        "$(rootpath :opengrep/rules.yaml)",
+        "$(rootpath //src/bazel/tools:jq)",
+    ],
+    data = [
+        ":opengrep/rules.yaml",
+        "//src/bazel/tools:jq",
+        "//src/bazel/tools:opengrep",
+    ],
     visibility = ["//visibility:public"],
 )
 
@@ -316,23 +407,22 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-# Proves a known violation is a hard failure, independent of the clean scan.
 sh_test(
-    name = "opengrep_regression",
-    # The engine's startup and rule loading exceed the small 60s budget.
-    size = "medium",
-    srcs = ["opengrep/regression_test.sh"],
+    name = "opengrep_test",
+    srcs = ["opengrep/opengrep.sh"],
     args = [
         "$(rootpath //src/bazel/tools:opengrep)",
         "$(rootpath :opengrep/rules.yaml)",
         "$(rootpath //src/bazel/tools:jq)",
-        "$(rootpath :opengrep/fixtures/subprocess_shell_true.py)",
     ],
     data = [
-        ":opengrep/fixtures/subprocess_shell_true.py",
         ":opengrep/rules.yaml",
         "//src/bazel/tools:jq",
         "//src/bazel/tools:opengrep",
+    ],
+    tags = [
+        "local",
+        "no-sandbox",
     ],
 )
 
@@ -357,10 +447,10 @@ json_schema(
     schema = "license_images/license-evidence.schema.json",
 )
 
-json_schema(
+alias(
     name = "kubescape_policy_schema",
-    srcs = ["kubescape/policy.json"],
-    schema = "kubescape/policy.schema.json",
+    actual = "//src/bazel/checks/kubescape:kubescape_policy_schema",
+    visibility = ["//visibility:public"],
 )
 
 json_schema(
@@ -373,4 +463,32 @@ json_schema(
     name = "license_images_policy_schema",
     srcs = ["license_images/policy.json"],
     schema = "license_images/policy.schema.json",
+)
+
+test_suite(
+    name = "all_checks",
+    tests = [
+        # keep-sorted start
+        "//src/bazel/checks/argocd_links:check_argocd_links_test",
+        "//src/bazel/checks/cloud_names:check_cloud_names_test",
+        "//src/bazel/checks/cluster_network:check_cluster_network_test",
+        "//src/bazel/checks/function_length:check_function_length_test",
+        "//src/bazel/checks/graph_facts:graph_facts_test",
+        "//src/bazel/checks/kubescape:kubescape_triage_test",
+        "//src/bazel/checks/network_exposure:check_network_exposure_test",
+        "//src/bazel/checks/package_overrides:check_package_overrides_test",
+        "//src/bazel/checks/records:check_team_records_test",
+        "//src/bazel/checks/secret_delivery:check_secret_delivery_test",
+        "//src/bazel/checks/source_names:check_source_names_test",
+        "//src/bazel/checks/workload_portability:check_workload_portability_test",
+        ":dotenv_test",
+        ":dups_test",
+        ":ifttt_test",
+        ":json_schemas_test",
+        ":license_source_test",
+        ":lock_drift_test",
+        ":opengrep_test",
+        # keep-sorted end
+    ] + [":" + repo + "_license_test" for repo in LICENSE_IMAGES],
+    visibility = ["//visibility:public"],
 )

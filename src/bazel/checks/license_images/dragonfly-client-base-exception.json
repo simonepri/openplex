@@ -4,8 +4,8 @@
   "exceptionId": "dragonfly-client-base-licenses",
   "artifactRepository": "index.docker.io/dragonflyoss/client",
   "artifacts": [
-    "index.docker.io/dragonflyoss/client@sha256:b545bc84116e9543a23bcf316558c67c1a6a108d43acfebe1014d08c209c898b",
-    "index.docker.io/dragonflyoss/client@sha256:b8d3462aebd425cd9b99d37894bca24613abf2e52a9be0574e40433e3f17b63b"
+    "index.docker.io/dragonflyoss/client@sha256:6f95f773f7d4029c8d60672dc23977b839007e619727b22b98cc97666d4b1e60",
+    "index.docker.io/dragonflyoss/client@sha256:cba45e5a7fb2ac834a1705f8d114d9152f4cadfe77248af12d827d6571a74350"
   ],
   "findingCount": 402,
   "findings": [

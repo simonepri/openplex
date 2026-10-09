@@ -8,6 +8,14 @@ if [[ ${tool#/} == "${tool}" ]] && [[ -f ${tool} ]]; then
   tool="${PWD}/${tool}"
 fi
 
+jq_bin="jq"
+if [[ $# -ge 2 ]] && [[ $2 == *jq* ]] && [[ -f $2 ]]; then
+  jq_bin="$2"
+  if [[ ${jq_bin#/} == "${jq_bin}" ]]; then
+    jq_bin="${PWD}/${jq_bin}"
+  fi
+fi
+
 root="${BUILD_WORKSPACE_DIRECTORY:-$(git rev-parse --show-toplevel)}"
 cd "${root}"
 
@@ -49,7 +57,7 @@ scan_tier() {
 
   local vulns=""
   if [[ -s ${report} ]]; then
-    vulns="$(jq -r '[.results[]?.packages[]? | select((.vulnerabilities // []) | length > 0) | "\(.package.name)@\(.package.version): \((.vulnerabilities // []) | length) advisory matches"] | unique | .[]' "${report}" 2>/dev/null)"
+    vulns="$("${jq_bin}" -r '[.results[]?.packages[]? | select((.vulnerabilities // []) | length > 0) | "\(.package.name)@\(.package.version): \((.vulnerabilities // []) | length) advisory matches"] | unique | .[]' "${report}" 2>/dev/null)"
   fi
   if [[ -n ${vulns} ]]; then
     echo "Advisories identified in ${tier_name} dependencies (logged for audit; vulnerability gating enforced by Trivy):" >&2
@@ -57,7 +65,7 @@ scan_tier() {
   fi
 
   local violations
-  violations="$(jq -r '[.results[]?.packages[]? | select((.license_violations // []) | length > 0) | "\(.package.name)@\(.package.version): \((.licenses // []) | join(","))"] | .[]' "${report}")"
+  violations="$("${jq_bin}" -r '[.results[]?.packages[]? | select((.license_violations // []) | length > 0) | "\(.package.name)@\(.package.version): \((.licenses // []) | join(","))"] | .[]' "${report}")"
   rm -f "${report}"
 
   if [[ -n ${violations} ]]; then

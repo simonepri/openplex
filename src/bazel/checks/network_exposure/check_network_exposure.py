@@ -20,8 +20,13 @@ IPV4_VERSION = 4
 GATEWAY_IP_OFFSET = 11
 DNS_IP_OFFSET = 10
 
-EXTERNAL_DNS_HOSTNAME = "external-dns.alpha.kubernetes.io/hostname"
-EXTERNAL_DNS_HOSTNAME_PATCH = "external-dns.alpha.kubernetes.io~1hostname"
+EXTERNAL_DNS_HOSTNAMES = (
+    "external-dns.kubernetes.io/hostname",
+    "external-dns.alpha.kubernetes.io/hostname",
+)
+EXTERNAL_DNS_HOSTNAME_PATCHES = tuple(
+    hostname.replace("/", "~1") for hostname in EXTERNAL_DNS_HOSTNAMES
+)
 EXTERNAL_DNS_SOURCE_LABEL = "app.kubernetes.io/component"
 EXTERNAL_DNS_SOURCE_VALUE = "external-dns-source"
 SOURCE_SUFFIXES = frozenset({".tpl", ".yaml", ".yml"})
@@ -115,6 +120,16 @@ APPROVED_SOURCE_SURFACES = Counter({
         EMPTY_RESOURCE,
     ): 1,
     SourceSurface(
+        "src/infra/argocd/components/kube_oidc_proxy/kustomize/tls-route.yaml",
+        EXTERNAL_DNS_SOURCE_SURFACE,
+        ResourceIdentity(
+            "gateway.networking.k8s.io/v1",
+            "TLSRoute",
+            "kube-oidc-proxy-system",
+            "kube-oidc-proxy",
+        ),
+    ): 1,
+    SourceSurface(
         "src/infra/argocd/components/routing_registry/helm/templates/_helpers.tpl",
         EXTERNAL_DNS_SOURCE_SURFACE,
         EMPTY_RESOURCE,
@@ -139,6 +154,17 @@ APPROVED_SOURCE_SURFACES = Counter({
             "s3-gateway-cross-region",
         ),
     ): 1,
+    # This route targets the private-access gateway and publishes only private DNS.
+    SourceSurface(
+        "src/infra/argocd/components/velero_ui/kustomize/route.yaml",
+        EXTERNAL_DNS_SOURCE_SURFACE,
+        ResourceIdentity(
+            "gateway.networking.k8s.io/v1",
+            "HTTPRoute",
+            "envoy-gateway-system",
+            "velero-ui",
+        ),
+    ): 1,
 })
 
 
@@ -156,6 +182,13 @@ def rendered_surface(
 # another component. Each surface is listed separately so an approved private
 # LoadBalancer cannot silently acquire public DNS.
 APPROVED_RENDERED_SURFACES = frozenset({
+    rendered_surface(
+        "//src/infra/argocd/components/kube_oidc_proxy:base_render",
+        EXTERNAL_DNS_SOURCE_SURFACE,
+        ResourceIdentity(
+            "gateway.networking.k8s.io/v1", "TLSRoute", "kube-oidc-proxy-system", "kube-oidc-proxy"
+        ),
+    ),
     rendered_surface(
         "//src/infra/argocd/components/routing_registry:helm_render-public",
         EXTERNAL_DNS_SOURCE_SURFACE,
@@ -221,6 +254,17 @@ APPROVED_RENDERED_SURFACES = frozenset({
             "HTTPRoute",
             "s3-system",
             "s3-gateway-cross-region",
+        ),
+    ),
+    # This route targets the private-access gateway and publishes only private DNS.
+    rendered_surface(
+        "//src/infra/argocd/components/velero_ui:base_render",
+        EXTERNAL_DNS_SOURCE_SURFACE,
+        ResourceIdentity(
+            "gateway.networking.k8s.io/v1",
+            "HTTPRoute",
+            "envoy-gateway-system",
+            "velero-ui",
         ),
     ),
     *(
@@ -331,11 +375,6 @@ def _validate_local_member_grants(
             frozenset({"tcp:53", "udp:53"}),
         ),
         # LINT.ThenChange(//src/infra/tools/cloud_emulator/stack/headscale/policy.hujson:local-private-dns-member-access)
-        (
-            frozenset({"autogroup:member", "tag:workspace"}),
-            frozenset({"tag:subnet-router"}),
-            frozenset({"tcp:8444"}),
-        ),
     }
     grants_seq = sequence(grants)
     observed = {
@@ -619,6 +658,11 @@ def cloud_member_grant_errors(grants: str) -> list[str]:
             frozenset({"${address}/32"}),
             frozenset({"tcp:443"}),
         ),
+        (
+            frozenset({"autogroup:member"}),
+            frozenset({"${cidr}"}),
+            frozenset({"tcp:22"}),
+        ),
     }
     observed = {
         normalized_template_grant(grant)
@@ -814,8 +858,9 @@ def source_surfaces(path: str, text: str) -> list[SourceSurface]:
                 and not removal_patch(lines, line_number)
             ):
                 surfaces.append(SourceSurface(path, EXTERNAL_IPS, resource))
-            if EXTERNAL_DNS_HOSTNAME in line or (
-                EXTERNAL_DNS_HOSTNAME_PATCH in line and not removal_patch(lines, line_number)
+            if any(hostname in line for hostname in EXTERNAL_DNS_HOSTNAMES) or (
+                any(patch in line for patch in EXTERNAL_DNS_HOSTNAME_PATCHES)
+                and not removal_patch(lines, line_number)
             ):
                 surfaces.append(SourceSurface(path, EXTERNAL_DNS_HOSTNAME_SURFACE, resource))
             if re.search(
@@ -934,7 +979,7 @@ def rendered_surfaces(document: Mapping[object, object]) -> list[str]:
             surfaces.append(EXTERNAL_IPS)
     elif kind == "EnvoyProxy":
         surfaces.extend(_envoy_proxy_surfaces(spec))
-    if annotations.get(EXTERNAL_DNS_HOSTNAME) is not None:
+    if any(annotations.get(hostname) is not None for hostname in EXTERNAL_DNS_HOSTNAMES):
         surfaces.append(EXTERNAL_DNS_HOSTNAME_SURFACE)
     if labels.get(EXTERNAL_DNS_SOURCE_LABEL) == EXTERNAL_DNS_SOURCE_VALUE:
         surfaces.append(EXTERNAL_DNS_SOURCE_SURFACE)
@@ -987,6 +1032,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         documents = yaml.safe_load_all(args.manifest.read_text(encoding="utf-8"))
         errors = rendered_errors(args.owner, documents)
     if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
         return 1
     return 0
 

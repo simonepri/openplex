@@ -3,7 +3,8 @@
 
 set -euo pipefail
 
-cd "${BUILD_WORKSPACE_DIRECTORY:?unclaimed_files must be run with bazel run}"
+root="${BUILD_WORKSPACE_DIRECTORY:-$(git rev-parse --show-toplevel 2>/dev/null || echo ".")}"
+cd "${root}"
 
 covered="$(mktemp)"
 tracked="$(mktemp)"

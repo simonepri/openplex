@@ -14,6 +14,7 @@
 - **Safeguard file paths against traversal**: resolve and verify paths against an allowed root directory before filesystem access; reject unvalidated path components containing `..`.
 - **Redact sensitive data from logs and telemetry**: never emit tokens, authorization headers, passwords, or PII into logs, error messages, or traces.
 - **Verify integrity of fetched external assets**: never pipe unverified network scripts directly into shells (`curl | sh`); verify checksums or signatures for downloaded artifacts.
+- **Prohibit interactive pod execution for database queries**: never invoke `kubectl exec` into ClickHouse or other database pods to run queries; execute queries via repository tooling (`mise run //src/infra:clickhouse-query`) or read-only service endpoints.
 
 ## Best Practices
 

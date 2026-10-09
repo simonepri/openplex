@@ -249,28 +249,30 @@ rules:
   - id: repository.security.strict-launch-template-imds-hop-limit
     languages: [regex]
     severity: ERROR
-    message: AWS launch template http_put_response_hop_limit must be strictly set to 2 for EKS Pod Identity / IMDSv2 pod traversal while preventing SSRF token forwarding beyond the pod.
+    message: AWS launch template http_put_response_hop_limit must be strictly set to 1 to prevent pods from accessing node instance credentials via IMDS.
     paths:
       include:
         - /src/infra/terraform/**/*.tf
       exclude:
         - "/src/bazel/checks/opengrep/**"
-    pattern-regex: 'http_put_response_hop_limit\s*=\s*(?!2\b)[0-9]+'
+    pattern-regex: 'http_put_response_hop_limit\s*=\s*(?!1\b)[0-9]+'
 
   - id: repository.lint.forbidden-domain-patterns
     languages: [regex]
     severity: ERROR
     message: >-
-      Forbidden domain or invalid intranet email address detected. Legacy domains (example.test, openplex.xyz, openplex.internal) and hardcoded tenant domains are forbidden outside deployments. Intranet hostnames must use 'corp.local.internal' (or '*.corp.local.internal'), never '<subdomain>.local.internal' without the 'corp.' prefix. User identity emails must use the public domain (e.g. '@local.internal'), never '@corp.local.internal'.
+      Forbidden domain or invalid intranet email address detected. Legacy domains (example.test, openplex.xyz, openplex.internal) and hardcoded tenant domains (example.*) are forbidden outside deployments. Intranet hostnames must use 'corp.local.internal' (or '*.corp.local.internal'), never '<subdomain>.local.internal' without the 'corp.' prefix. User identity emails must use the public domain (e.g. '@local.internal'), never '@corp.local.internal'.
     paths:
       include: [/src/**, /.github/**]
       exclude:
         - "/src/bazel/checks/opengrep/**"
         - "/src/infra/terraform/deployments/**"
         - "/src/infra/docs/**"
+        - "**/lint-values*.yaml"
+        - "**/lint-values*.yml"
         - "**/*test*"
         - "**/*_test.*"
-    pattern-regex: '(?i)\b[a-zA-Z0-9-]+\.(?<!corp\.)local\.internal\b|\b[a-zA-Z0-9._%+-]+@corp\.local\.internal\b|\b[a-zA-Z0-9.-]*\b(?:example\.test|openplex\.(?:xyz|internal))\b'
+    pattern-regex: '(?i)\b[a-zA-Z0-9-]+\.(?<!corp\.)local\.internal\b|\b[a-zA-Z0-9._%+-]+@corp\.local\.internal\b|\b[a-zA-Z0-9.-]*\b(?:example\.test|openplex\.(?:xyz|internal)|example\.(?:com|org|net))\b|\b[a-zA-Z0-9._%+-]+@example\.com\b'
 
   - id: repository.architecture.no-hardcoded-route53-nameservers
     languages: [regex]
@@ -290,7 +292,7 @@ rules:
     languages: [regex]
     severity: ERROR
     message: >-
-      Hardcoded tenant domain (openplex.*) or tenant email detected in reusable components or Terraform modules. Argo CD components and Terraform modules must be cloud-, region-, tenant-, and profile-agnostic and parameterized downstream from deployments. Use 'configured-by-applicationset.invalid' placeholders or variable inputs.
+      Hardcoded tenant domain (example.* or openplex.*) or tenant email detected in reusable components or Terraform modules. Argo CD components and Terraform modules must be cloud-, region-, tenant-, and profile-agnostic and parameterized downstream from deployments. Use 'configured-by-applicationset.invalid' placeholders or variable inputs.
     paths:
       include:
         - /src/infra/argocd/components/**/*.yaml
@@ -305,7 +307,8 @@ rules:
         - "**/lint-values*.yml"
         - "**/*test*"
         - "**/*_test.*"
-    pattern-regex: '(?i)\bopenplex\.(?!git\b|svg\b)[a-z0-9-]+\b|\b[a-zA-Z0-9._%+-]+@openplex\.[a-z0-9-]+\b'
+        - /src/infra/argocd/components/homer/**
+    pattern-regex: '(?i)\b(?:openplex)\.(?!git\b)[a-z0-9-]+\b|\b[a-zA-Z0-9._%+-]+@openplex\.[a-z0-9-]+\b'
 
   - id: repository.architecture.hardcoded-intranet-dns
     languages: [regex]
@@ -640,6 +643,12 @@ rules:
         # Local Floci AWS Secrets Manager provider default region
         - /src/infra/argocd/components/external_secrets/kustomize/cluster-secret-store.yaml
         - /src/infra/argocd/components/external_secrets/kustomize/secret-records-store.yaml
+        # Falco workspace exception for development Coder template image
+        - /src/infra/argocd/components/falco/helm/values.yaml
+        # Prowler CIS benchmark mutelist audited risk acceptance
+        - /src/infra/argocd/components/prowler/kustomize/mutelist-policy.yaml
+        # Atlantis local profile fallback region
+        - /src/infra/argocd/components/atlantis/kustomize/aws-config.yaml
     pattern-regex: '\b(?:(?:us|eu|ap|sa|ca|me|af|il)-(?:east|west|central|north|south|northeast|northwest|southeast|southwest)-[1-4]|(?:us|europe|asia|northamerica|southamerica|australia)-(?:east|west|central|north|south)[1-9])\b'
 
   # Platform components must not hardcode physical cloud provider endpoints.
@@ -681,7 +690,7 @@ rules:
         - /src/bazel/checks/opengrep/**
         - "**/lint-values*.yaml"
         - "**/*_test.*"
-    pattern-regex: '(?m)^[ \t]*(?:repoURL|url|repository|source|remote|orgAllowlist):[ \t]*.*?\b(?:git://|https?://github\.com/|git@github\.com:|github\.com/(?!example/|invalid\b|simonepri/))'
+    pattern-regex: '(?m)^[ \t]*(?:repoURL|url|repository|source|remote|orgAllowlist):[ \t]*.*?\b(?:git://|https?://github\.com/|git@github\.com:|github\.com/(?!example/|invalid\b|openplex/))'
 
   # Gateway IP must be computed dynamically via cidrhost() from the cluster service CIDR.
   - id: repository.architecture.no-hardcoded-gateway-ipv4
@@ -727,6 +736,20 @@ rules:
         - "**/*_test.*"
     pattern-regex: '(?m)^\s*image:\s*[''"]?[a-zA-Z0-9_./-]+:(?:latest|main|edge)\b'
 
+  # In-house container image references must use the placeholder format.
+  - id: repository.security.no-docker-io-cluster-image
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      In-house images must reference placeholder.invalid/<repository>:inventory, which the fleet ApplicationSets replace from src/infra/images/infrastructure-images.json.
+    paths:
+      include:
+        - /src/**
+        - /.github/**
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: "docker\\.io/(?:cluster|infra)/"
+
   # Workloads and platform capabilities must declare dedicated, isolated namespaces.
   - id: repository.architecture.no-default-namespace
     languages: [regex]
@@ -762,6 +785,8 @@ rules:
         - "**/lint-values*.yaml"
         - "**/*_test.*"
         - "**/values-*.yaml"
+        # Prowler CIS benchmark mutelist audited risk acceptance
+        - /src/infra/argocd/components/prowler/kustomize/mutelist-policy.yaml
     pattern-regex: '(?m)\b(?:cell|ctrl)-(?:eaws-lh1|aws-[a-z0-9]+|gcp-[a-z0-9]+)\b'
 
   # Team namespace names (team-*) must not be hardcoded in reusable component namespace selectors.
@@ -1147,6 +1172,8 @@ rules:
         - "**/*test*"
         - "**/*_test.*"
         - /src/infra/argocd/components/kyverno/kustomize/policies.yaml
+        # Falco workspace exception for development Coder template image
+        - /src/infra/argocd/components/falco/helm/values.yaml
     pattern-regex: '(?m)\b(?!602401143452|000000000000)\d{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\b'
 
   # Workload Identity federation token audiences in base manifests must not embed hardcoded GCP project numbers.
@@ -1262,4 +1289,35 @@ rules:
       exclude:
         - "/src/bazel/checks/opengrep/**"
     pattern-regex: '(?m)\b(?:repository|repository_path)\s*=\s*["\x27](?!src/)[^"\x27]+["\x27]'
+
+  # Installation-prefix fallbacks and legacy prefix annotations are prohibited across Argo CD manifests and templates.
+  - id: repository.argocd.no-installation-prefix-fallbacks
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Installation-prefix fallbacks and legacy prefix annotations (default "corp", default "cloud", annotations resource-prefix, bucket-prefix, storage-prefix, installation) are prohibited in Argo CD manifests and templates. Derive names deterministically from cluster identifiers.
+    paths:
+      include:
+        - /src/infra/argocd/**/*.yaml
+        - /src/infra/argocd/**/*.yml
+        - /src/infra/argocd/**/*.tpl
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: '(?m)(?:default\s+["\x27](?:corp|cloud)["\x27]|(?<![a-zA-Z0-9_-])(?:resource-prefix|storage-prefix|bucket-prefix|installation-prefix)(?![a-zA-Z0-9_-])|(?:\$annotations|\.annotations|\$labels|\.labels|\bannotations|\blabels)\b[^}\n]*["\x27]installation["\x27]|^\s*installation\s*:)'
+
+  # Agent interaction and behavioral rules in agents/interaction.rules.rulesync.md
+  # must define YAML frontmatter declaring globs so RuleSync emits them to .agents/rules/
+  # with trigger: always_on for agent context injection.
+  - id: repository.agents.interaction-rulesync-frontmatter-required
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Interaction rule file agents/interaction.rules.rulesync.md must declare YAML frontmatter with globs (e.g. globs: ["**/*"]) so RuleSync compiles it into an always-on rule in .agents/rules/ for agent context injection.
+    paths:
+      include:
+        - agents/interaction.rules.rulesync.md
+        - /agents/interaction.rules.rulesync.md
+      exclude:
+        - /src/bazel/checks/opengrep/**
+    pattern-regex: '\A(?!---\r?\n)'
 

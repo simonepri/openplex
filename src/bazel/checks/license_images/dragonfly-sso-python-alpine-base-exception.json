@@ -4,8 +4,8 @@
   "exceptionId": "dragonfly-sso-python-alpine-base-licenses",
   "artifactRepository": "index.docker.io/library/python",
   "artifacts": [
-    "index.docker.io/library/python@sha256:067d97da25897fa5342cdbef0eeb6a50a527faa965696c7bfa0a3b576ce65c8a",
-    "index.docker.io/library/python@sha256:4677924bcc0e94505a3270e87cb1601c2af54cd92d021b8dc306618a14333bbe"
+    "index.docker.io/library/python@sha256:7f2ec713f0436c59df2362d973b6a05af9e87ba78f0e94f5245c302984a7a1fd",
+    "index.docker.io/library/python@sha256:aae362254cea6b75fe812f0b428f10b3b361a090fe5655fb1d03937f6d38cda9"
   ],
   "findingCount": 26,
   "findings": [
@@ -118,11 +118,11 @@
     "scanner": "Trivy 0.74.0",
     "reports": [
       {
-        "artifact": "index.docker.io/library/python@sha256:067d97da25897fa5342cdbef0eeb6a50a527faa965696c7bfa0a3b576ce65c8a",
+        "artifact": "index.docker.io/library/python@sha256:aae362254cea6b75fe812f0b428f10b3b361a090fe5655fb1d03937f6d38cda9",
         "reportId": "01a0bd7f-c5d9-7a0a-9fb8-c97e0961e923"
       },
       {
-        "artifact": "index.docker.io/library/python@sha256:4677924bcc0e94505a3270e87cb1601c2af54cd92d021b8dc306618a14333bbe",
+        "artifact": "index.docker.io/library/python@sha256:7f2ec713f0436c59df2362d973b6a05af9e87ba78f0e94f5245c302984a7a1fd",
         "reportId": "01a0bd7f-bc8f-75d8-82d6-d1fe121a201d"
       }
     ]

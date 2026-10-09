@@ -620,6 +620,70 @@ class TestEcrPublication(unittest.TestCase):
                         ]
                     ]
 
+    def test_cache_hit_skips_stream_tag_when_newest_stream_tag_names_digest(self) -> None:
+        target_ref = f"{self.delivery.repository}@{self.delivery.digest}"
+        other_digest = "sha256:" + "b" * 64
+        cases = {
+            "newest tag names digest": (
+                "dev-20260914T120000Z_aaaaaaaaaaaa",
+                self.delivery.digest,
+                False,
+            ),
+            "newest tag names another digest": (
+                "dev-20260914T120000Z_aaaaaaaaaaaa",
+                other_digest,
+                True,
+            ),
+            "no stream tag yet": (None, None, True),
+        }
+        for name, (newest, newest_digest, expect_tag) in cases.items():
+            with self.subTest(name):
+                listing = "\n".join(
+                    filter(
+                        None,
+                        [
+                            "latest",
+                            "dev-20260901T120000Z_bbbbbbbbbbbb",
+                            "ci-20260930T120000Z_cccccccccccc",
+                            "dev-20260930T120000Z_dddddddddddd-worker",
+                            newest,
+                        ],
+                    )
+                )
+
+                def fake_run(
+                    cmd: list[str],
+                    *,
+                    tags: str = listing,
+                    tagged: str | None = newest,
+                    tagged_digest: str | None = newest_digest,
+                    **_kwargs: object,
+                ) -> subprocess.CompletedProcess[str]:
+                    if cmd[:2] == ["crane", "digest"] and cmd[2] == target_ref:
+                        return subprocess.CompletedProcess(cmd, 0, f"{self.delivery.digest}\n", "")
+                    if cmd[:2] == ["crane", "ls"]:
+                        return subprocess.CompletedProcess(cmd, 0, f"{tags}\n", "")
+                    if cmd[:2] == ["crane", "digest"] and tagged and cmd[2].endswith(f":{tagged}"):
+                        return subprocess.CompletedProcess(cmd, 0, f"{tagged_digest}\n", "")
+                    return subprocess.CompletedProcess(cmd, 0, "", "")
+
+                with (
+                    patch.dict(os.environ, {}, clear=False),
+                    patch(f"{deliver_to_ecr.__module__}.validate_ecr_identity"),
+                    patch("subprocess.run", side_effect=fake_run) as run,
+                ):
+                    os.environ.pop("WORKLOAD_EXTRA_TAGS", None)
+                    deliver_to_ecr(self.delivery)
+
+                tag_calls = [
+                    call.args[0]
+                    for call in run.call_args_list
+                    if call.args[0][:2] == ["crane", "tag"]
+                ]
+                assert tag_calls == (
+                    [["crane", "tag", target_ref, self.delivery.tag]] if expect_tag else []
+                )
+
     def test_invalid_extra_tag_rejects_before_ecr_delivery(self) -> None:
         with (
             patch.dict(os.environ, {"WORKLOAD_EXTRA_TAGS": "bad:tag"}),
@@ -1065,6 +1129,64 @@ class TestPublishAndRunExecution(unittest.TestCase):
             with patch.dict(os.environ, env, clear=True):
                 execute_run(args)
                 assert mock_run.called
+
+    def test_execute_run_stops_before_create_when_rbac_check_fails(self) -> None:
+        kubectl_error = "error: You must be logged in to the server (Unauthorized)\n"
+        cases = [
+            ("denied", subprocess.CalledProcessError(1, "kubectl", output="no\n", stderr="")),
+            (
+                "kubectl failure",
+                subprocess.CalledProcessError(1, "kubectl", output="", stderr=kubectl_error),
+            ),
+        ]
+        for name, can_i_error in cases:
+            with self.subTest(name), tempfile.TemporaryDirectory() as tmpdir:
+
+                def fake_run(
+                    cmd: list[str], *_args: object, err: Exception = can_i_error, **_kwargs: object
+                ) -> MagicMock:
+                    cmd_str = " ".join(cmd)
+                    if "config current-context" in cmd_str:
+                        return MagicMock(returncode=0, stdout="cell-eaws-lh1\n")
+                    if "auth can-i" in cmd_str:
+                        raise err
+                    return MagicMock(returncode=0, stdout="")
+
+                kubectl = Path(tmpdir) / "kubectl"
+                kubectl.touch(mode=0o755)
+                publisher = Path(tmpdir) / "publisher"
+                publisher.touch(mode=0o755)
+                manifest = Path(tmpdir) / "manifest.yaml"
+                manifest.write_text('{"kind": "RayJob"}', encoding="utf-8")
+                kubeconfig_dir = Path(tmpdir) / ".tmp/kubeconfigs"
+                kubeconfig_dir.mkdir(parents=True)
+                (kubeconfig_dir / "cell-eaws-lh1.yaml").touch()
+                env = {
+                    "BUILD_WORKSPACE_DIRECTORY": tmpdir,
+                    "WORKLOAD_RUN_ID": "run01",
+                    "WORKLOAD_LAUNCHER": "user",
+                    "WORKLOAD_TARGET_CELL": "cell-eaws-lh1",
+                }
+                args = RunArgs(
+                    workload="ray-data",
+                    repository_path="src/examples/ray_data",
+                    publisher=str(publisher),
+                    manifest=str(manifest),
+                    team_namespace="team-examples",
+                    kubectl=str(kubectl),
+                )
+                with (
+                    patch("subprocess.run", side_effect=fake_run) as mock_run,
+                    patch("sys.stderr") as stderr,
+                    patch.dict(os.environ, env, clear=True),
+                    raises_system_exit(1),
+                ):
+                    execute_run(args)
+
+                commands = [" ".join(call[0][0]) for call in mock_run.call_args_list]
+                assert not any("create --filename=-" in cmd for cmd in commands)
+                written = "".join(call[0][0] for call in stderr.write.call_args_list)
+                assert (kubectl_error in written) == (can_i_error.stderr == kubectl_error)
 
     @staticmethod
     def test_main_subcommand_dispatch() -> None:

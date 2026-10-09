@@ -23,14 +23,12 @@ fi
 workspace="${BUILD_WORKSPACE_DIRECTORY:-$(git rev-parse --show-toplevel)}"
 cd "${workspace}"
 
-# LINT.IfChange(dotenv_path_specs)
 pathspecs=(
   ":(glob)**/.env"
   ":(glob)**/.env.*"
   ":(glob)**/*.env"
   ":(glob)**/*.env.*"
 )
-# LINT.ThenChange(//src/bazel/rules/constants.bzl:dotenv_path_specs)
 
 stream_dotenv_files() {
   if [[ ${CHECK_MODE:-} == "affected" ]]; then
@@ -47,14 +45,14 @@ stream_dotenv_files() {
     else
       local diff_base="${DIFF_BASE:-$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo HEAD~1)}"
       {
-        git diff --name-only --diff-filter=d -z "${diff_base}" -- "${pathspecs[@]}" 2>/dev/null || true
-        git ls-files --others --exclude-standard -z -- "${pathspecs[@]}" 2>/dev/null || true
+        git diff --name-only --diff-filter=d -z "${diff_base}" -- "${pathspecs[@]}" ':(exclude)bazel-*' ':(exclude).tmp*' ':(exclude)_tmp*' 2>/dev/null || true
+        git ls-files --others --exclude-standard -z -- "${pathspecs[@]}" ':(exclude)bazel-*' ':(exclude).tmp*' ':(exclude)_tmp*' 2>/dev/null || true
       } | while IFS= read -r -d '' file; do
         [[ -f ${file} ]] && printf '%s\0' "${file}"
       done
     fi
   else
-    { git ls-files --cached --others --exclude-standard -z -- "${pathspecs[@]}" 2>/dev/null || true; } \
+    { git ls-files --cached --others --exclude-standard -z -- "${pathspecs[@]}" ':(exclude)bazel-*' ':(exclude).tmp*' ':(exclude)_tmp*' 2>/dev/null || true; } \
       | while IFS= read -r -d '' file; do
         [[ -f ${file} ]] && printf '%s\0' "${file}"
       done

@@ -1,0 +1,62 @@
+"""Define test and triage validation targets for Kubescape scans."""
+
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
+load("//src/bazel/rules/json_schema:defs.bzl", "json_schema")
+
+# Flat-module imports; targets are hand-wired.
+# gazelle:exclude .
+
+package(default_visibility = ["//visibility:public"])
+
+package_sources()
+
+exports_files([
+    "kubescape.sh",
+    "kubescape_triage.py",
+    "policy.json",
+    "policy.schema.json",
+])
+
+py_library(
+    name = "kubescape_triage_lib",
+    srcs = ["kubescape_triage.py"],
+    imports = ["."],
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "kubescape_triage_test",
+    size = "small",
+    srcs = ["kubescape_triage_test.py"],
+    imports = ["."],
+    main = "kubescape_triage_test.py",
+    precompile = "disabled",
+    deps = [":kubescape_triage_lib"],
+)
+
+sh_binary(
+    name = "kubescape_check",
+    srcs = ["kubescape.sh"],
+    args = ["$(rootpath //src/bazel/tools:kubescape)"],
+    data = [
+        "kubescape_triage.py",
+        "policy.json",
+        "//src/bazel/tools:kubescape",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "kubescape",
+    actual = ":kubescape_check",
+    visibility = ["//visibility:public"],
+)
+
+json_schema(
+    name = "kubescape_policy_schema",
+    srcs = ["policy.json"],
+    schema = "policy.schema.json",
+    visibility = ["//visibility:public"],
+)

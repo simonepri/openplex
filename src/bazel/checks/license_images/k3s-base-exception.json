@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "exceptionId": "k3s-1.36.1-k3s1-base-license-metadata",
+  "exceptionId": "k3s-1.36.5-k3s1-base-license-metadata",
   "description": "Exact reviewed UNKNOWN findings for Go modules in the pinned upstream k3s base images.",
   "artifactRepository": "index.docker.io/rancher/k3s",
   "artifacts": [
-    "index.docker.io/rancher/k3s@sha256:5ce2a98f009b4b6bc668dd894df232aff45b2068b7756aab899d3023c34c78c6",
-    "index.docker.io/rancher/k3s@sha256:97ee2717a5421dd314fe96825fd7b64b59cce6271f0ddce01466e8778bc223bd"
+    "index.docker.io/rancher/k3s@sha256:4ceb591dd1e592b98b7c51ff3bdb7143914e1bee0677e7bf3c4f6addde2c93b3",
+    "index.docker.io/rancher/k3s@sha256:81fc7349ba265f842f9b67311fabd9e7d72698798ba513b7cdf41ffdf1e923e4"
   ],
-  "findingCount": 428,
+  "findingCount": 445,
   "findings": [
     {
       "package": "cel.dev/expr",
@@ -27,6 +27,10 @@
     },
     {
       "package": "filippo.io/keygen",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/DataDog/zstd",
       "license": "UNKNOWN"
     },
     {
@@ -122,6 +126,30 @@
       "license": "UNKNOWN"
     },
     {
+      "package": "github.com/cockroachdb/errors",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cockroachdb/fifo",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cockroachdb/logtags",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cockroachdb/pebble",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cockroachdb/redact",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/cockroachdb/tokenbucket",
+      "license": "UNKNOWN"
+    },
+    {
       "package": "github.com/container-storage-interface/spec",
       "license": "UNKNOWN"
     },
@@ -167,6 +195,10 @@
     },
     {
       "package": "github.com/containerd/go-cni",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/containerd/go-dmverity",
       "license": "UNKNOWN"
     },
     {
@@ -322,6 +354,10 @@
       "license": "UNKNOWN"
     },
     {
+      "package": "github.com/erofs/go-erofs",
+      "license": "UNKNOWN"
+    },
+    {
       "package": "github.com/euank/go-kmsg-parser",
       "license": "UNKNOWN"
     },
@@ -367,6 +403,10 @@
     },
     {
       "package": "github.com/gammazero/deque",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/getsentry/sentry-go",
       "license": "UNKNOWN"
     },
     {
@@ -458,10 +498,6 @@
       "license": "UNKNOWN"
     },
     {
-      "package": "github.com/goccy/go-json",
-      "license": "UNKNOWN"
-    },
-    {
       "package": "github.com/godbus/dbus/v5",
       "license": "UNKNOWN"
     },
@@ -515,6 +551,10 @@
     },
     {
       "package": "github.com/google/gopacket",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/google/renameio/v2",
       "license": "UNKNOWN"
     },
     {
@@ -659,10 +699,6 @@
     },
     {
       "package": "github.com/jonboulle/clockwork",
-      "license": "UNKNOWN"
-    },
-    {
-      "package": "github.com/josharian/intern",
       "license": "UNKNOWN"
     },
     {
@@ -866,11 +902,23 @@
       "license": "UNKNOWN"
     },
     {
+      "package": "github.com/klauspost/crc32",
+      "license": "UNKNOWN"
+    },
+    {
       "package": "github.com/knqyf263/go-plugin",
       "license": "UNKNOWN"
     },
     {
       "package": "github.com/koron/go-ssdp",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/kr/pretty",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/kr/text",
       "license": "UNKNOWN"
     },
     {
@@ -1222,6 +1270,10 @@
       "license": "UNKNOWN"
     },
     {
+      "package": "github.com/philhofer/fwd",
+      "license": "UNKNOWN"
+    },
+    {
       "package": "github.com/pierrec/lz4",
       "license": "UNKNOWN"
     },
@@ -1362,6 +1414,10 @@
       "license": "UNKNOWN"
     },
     {
+      "package": "github.com/rogpeppe/go-internal",
+      "license": "UNKNOWN"
+    },
+    {
       "package": "github.com/rootless-containers/rootlesskit",
       "license": "UNKNOWN"
     },
@@ -1426,6 +1482,10 @@
       "license": "UNKNOWN"
     },
     {
+      "package": "github.com/t4db/t4",
+      "license": "UNKNOWN"
+    },
+    {
       "package": "github.com/tchap/go-patricia/v2",
       "license": "UNKNOWN"
     },
@@ -1435,6 +1495,10 @@
     },
     {
       "package": "github.com/tidwall/btree",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/tinylib/msgp",
       "license": "UNKNOWN"
     },
     {
@@ -1491,6 +1555,10 @@
     },
     {
       "package": "github.com/yl2chen/cidranger",
+      "license": "UNKNOWN"
+    },
+    {
+      "package": "github.com/zeebo/xxh3",
       "license": "UNKNOWN"
     },
     {

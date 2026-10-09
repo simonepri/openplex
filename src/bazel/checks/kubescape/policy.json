@@ -58,9 +58,9 @@
     {
       "controlID": "C-0012",
       "controlName": "Applications credentials in configuration files",
-      "kind": "Job",
+      "kind": "CronJob",
       "namespace": "coder",
-      "reason": "Coder template reconciler Job mounts Git authentication tokens via environment path references.",
+      "reason": "Coder template reconciler CronJob mounts Git authentication tokens via environment path references.",
       "name": "coder-template-reconciler"
     },
     {
@@ -123,6 +123,14 @@
       "controlID": "C-0012",
       "controlName": "Applications credentials in configuration files",
       "kind": "ConfigMap",
+      "namespace": "s3-system",
+      "reason": "Per-team rclone gateway configuration uses ambient pod credentials (env_auth); keys stay in cell secrets.",
+      "namePrefix": "s3-gateway-"
+    },
+    {
+      "controlID": "C-0012",
+      "controlName": "Applications credentials in configuration files",
+      "kind": "ConfigMap",
       "namespace": "signoz",
       "reason": "ClickHouse storage stats and schema scripts require database connection strings.",
       "name": "signoz-clickhouse-storage-stats-common"
@@ -147,7 +155,7 @@
       "controlID": "C-0012",
       "controlName": "Applications credentials in configuration files",
       "kind": "ConfigMap",
-      "namespace": "team-fixtureteam-workspaces",
+      "namespace": "workspaces",
       "reason": "Workload origin configuration publishes authorized build and pull endpoints.",
       "name": "coder-workspace-origin"
     },
@@ -172,8 +180,8 @@
       "controlName": "Applications credentials in configuration files",
       "kind": "Deployment",
       "namespace": "s3-system",
-      "reason": "S3 gateway replication and stats workers receive storage endpoint parameters.",
-      "name": "s3-gateway-global-replicator-cross-region"
+      "reason": "S3 gateway team reader fixture deployments receive test credentials for local conformance testing.",
+      "name": "s3-gateway-fixture-team-reader-local"
     },
     {
       "controlID": "C-0012",
@@ -196,8 +204,8 @@
       "controlName": "Applications credentials in configuration files",
       "kind": "Deployment",
       "namespace": "s3-system",
-      "reason": "S3 resolver deployment receives cluster endpoint and signing configurations.",
-      "name": "s3-resolver"
+      "reason": "The legacy research data S3 gateway builds its rclone auth key from secret-backed environment references.",
+      "name": "s3-gateway-legacy-research-data-local"
     },
     {
       "controlID": "C-0013",

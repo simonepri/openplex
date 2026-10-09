@@ -22,5 +22,7 @@ globs:
 
 ## Decisions
 
-- **Colocate companion tests beside targets in BUILD files**: place companion tests (`py_test`, `sh_test`, `go_test`) immediately following their corresponding library or binary target; never cluster tests at the bottom of `BUILD.bazel`.
-- **Enforce canonical four-part BUILD file anatomy**: structure `BUILD.bazel` files with package docstring, alphabetically sorted `load` statements, package configuration (`package_sources()`), and target/test pairs.
+- **Colocate companion tests beside targets in BUILD files**: place companion tests (`py_test`, `go_test`, `sh_test`) immediately following their corresponding library or binary target; never cluster tests at the bottom of `BUILD.bazel`.
+- **Default non-library targets to omit companion unit tests**: binaries, CLI dispatchers, packaging targets, and shell scripts do not require companion tests by default; author a companion test only when the target encapsulates non-trivial domain logic, data transformation, or branching that is not already exercised by integration suites.
+- **Order BUILD file declarations into four canonical sections**: structure `BUILD.bazel` files in strictly four sequential parts: (1) package docstring, (2) alphabetically sorted `load` statements, (3) package-level configuration (such as `package_sources()`), and (4) target declarations with colocated companion tests where applicable.
+- **Prohibit Bazel-in-Bazel execution shims**: never generate or invoke `bazel` commands inside a `bazel run` target or runner script (e.g., via `_render_nested_bazel_env` or subprocess shims). Validation aspects and tests must execute natively under `bazel build` and `bazel test` so Build Event Streams (BES) remain unified and unfragmented.

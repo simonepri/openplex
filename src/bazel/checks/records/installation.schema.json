@@ -29,6 +29,7 @@
       "type": "string",
       "format": "email"
     },
+    "aws_sso_domain": { "$ref": "#/$defs/dnsSubdomain" },
     "git": {
       "type": "object",
       "additionalProperties": false,

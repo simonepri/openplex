@@ -4,10 +4,10 @@
   "exceptionId": "coder-minimal-workspace-base-licenses",
   "artifactRepository": "index.docker.io/codercom/example-minimal",
   "artifacts": [
-    "index.docker.io/codercom/example-minimal@sha256:00c4753ef9c993214d8f22550566db54126c2f37d982191b72fae6508bce3f80",
-    "index.docker.io/codercom/example-minimal@sha256:c7b1dc99298e9fb34145f65f5365220b696b28c12d3858a54e0232b3a71a44c2"
+    "index.docker.io/codercom/example-minimal@sha256:a293349afdd2327c62c06a91e40046092b4bea1bdb414b296602ebd49359e510",
+    "index.docker.io/codercom/example-minimal@sha256:c188d0d8db807466fec9986cb648f6e99b131890c39641e70ffb88917cdd50ff"
   ],
-  "findingCount": 464,
+  "findingCount": 465,
   "findings": [
     {
       "package": "sensible-utils",
@@ -504,6 +504,10 @@
     {
       "package": "mawk",
       "license": "CC-BY-3.0"
+    },
+    {
+      "package": "rust-coreutils",
+      "license": "CC-BY-4.0"
     },
     {
       "package": "libc-bin",

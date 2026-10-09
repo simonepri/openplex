@@ -1,3 +1,8 @@
+---
+globs:
+  - "**/*"
+---
+
 # Interaction
 
 ## Principles
@@ -20,3 +25,4 @@
 - **Quote exact failure lines instead of verbose logs**: cite the specific error line or diff hunk rather than pasting surrounding log context.
 - **Execute writing standards silently without commentary**: never announce compliance with style rules; run the check and report what it found.
 - **Estimate implementation ETAs proactively via optimal model tier and task parallelism**: when discussing or presenting an implementation plan or proposal, proactively provide an estimated completion time based on parallel execution; decompose the work into independent concurrent tasks, choose the fastest capable model tier for each task (preferring fast Flash models for mechanical code edits, schema definitions, and tests), size concurrency around a baseline of ~8 parallel agents (scaling up or down based on natural task boundaries), and state the planned agent count, model tiers, and critical-path wall-clock duration.
+- **Avoid dividing single files across concurrent agents**: when decomposing tasks across parallel subagents, assign each subagent cohesive, whole-file or whole-component scope; do not fragment a single file or contiguous code block across concurrent agents to avoid merge conflicts, race conditions, and coordination overhead.

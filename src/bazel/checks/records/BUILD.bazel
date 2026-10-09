@@ -6,6 +6,8 @@ load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 # Flat-module imports; targets are hand-wired.
 # gazelle:exclude .
 
+package(default_visibility = ["//visibility:public"])
+
 package_sources()
 
 exports_files([

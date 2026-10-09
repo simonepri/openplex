@@ -1,0 +1,4 @@
+# Allowlist of approved existing cloud object naming violations.
+# Every entry is cataloged with an explicit rationale and scheduled for migration.
+
+violations: []

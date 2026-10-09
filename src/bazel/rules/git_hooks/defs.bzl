@@ -171,7 +171,7 @@ def _git_hooks_stage_runner_impl(ctx):
         'export BUILD_WORKSPACE_DIRECTORY="$PWD"',
         'export REPO_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/repo"',
         # Nested Bazel commands reuse the server running this script; see
-        # _render_nested_bazel_env in //src/bazel/rules/lint_aspect:defs.bzl.
+        # _render_nested_bazel_env in //src/bazel/rules/lint_aspect:format.bzl.
         # LINT.IfChange(nested_output_root)
         'output_base="${runfiles%%/execroot/*}"',
         'export BAZEL_OUTPUT_ROOT="$(dirname "$(dirname "$(readlink "$output_base/install")")")"',
@@ -179,7 +179,7 @@ def _git_hooks_stage_runner_impl(ctx):
         'printf "#!/bin/sh\\nexec \'%s\' --output_base=\'%s\' \\"\\$@\\"\\n" "$(command -v bazel)" "$output_base" >"$bazel_shim_dir/bazel"',
         'chmod +x "$bazel_shim_dir/bazel"',
         'export PATH="$bazel_shim_dir:$PATH"',
-        # LINT.ThenChange(//src/bazel/rules/lint_aspect/defs.bzl:nested_output_root)
+        # LINT.ThenChange(//src/bazel/rules/lint_aspect/format.bzl:nested_output_root)
         'export TFLINT_PLUGIN_DIR="${TFLINT_PLUGIN_DIR:-$REPO_CACHE_DIR/tflint/plugins}"',
         'export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-$REPO_CACHE_DIR/opentofu/plugins}"',
         'export RUMDL_CACHE_DIR="${RUMDL_CACHE_DIR:-$REPO_CACHE_DIR/rumdl}"',

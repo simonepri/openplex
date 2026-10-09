@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "exceptionId": "headscale-0.29.3-base-license-metadata",
+  "exceptionId": "headscale-0.29.4-base-license-metadata",
   "description": "Exact reviewed UNKNOWN findings for Go modules in the pinned upstream Headscale base images.",
   "artifactRepository": "ghcr.io/juanfont/headscale",
   "artifacts": [
-    "ghcr.io/juanfont/headscale@sha256:7816f7cdc37b17fda48307a2c956a10c4abae471f776a43505f51ee1f0ad5ac9",
-    "ghcr.io/juanfont/headscale@sha256:9a4d883997cbe9de8ff58e8e11c37c204a25bd76d4c0920d16e0d944bbe05fb8"
+    "ghcr.io/juanfont/headscale@sha256:2df4cb333db8496801780b8b15ac13026dbe5c0b5207fca4abdde33e1cffaa31",
+    "ghcr.io/juanfont/headscale@sha256:e690ce7e5551a684f1715d681bdd6714e4ffd44ecdb0c8aaf02d83f93103a1c7"
   ],
   "findingCount": 131,
   "findings": [
@@ -538,11 +538,11 @@
     "scanner": "Trivy 0.74.0",
     "reports": [
       {
-        "artifact": "ghcr.io/juanfont/headscale@sha256:7816f7cdc37b17fda48307a2c956a10c4abae471f776a43505f51ee1f0ad5ac9",
+        "artifact": "ghcr.io/juanfont/headscale@sha256:2df4cb333db8496801780b8b15ac13026dbe5c0b5207fca4abdde33e1cffaa31",
         "reportId": "01a05b56-49c8-73e4-8e0c-823a0d36ec80"
       },
       {
-        "artifact": "ghcr.io/juanfont/headscale@sha256:9a4d883997cbe9de8ff58e8e11c37c204a25bd76d4c0920d16e0d944bbe05fb8",
+        "artifact": "ghcr.io/juanfont/headscale@sha256:e690ce7e5551a684f1715d681bdd6714e4ffd44ecdb0c8aaf02d83f93103a1c7",
         "reportId": "01a05b57-912f-7b10-aea3-9dd558c705c2"
       }
     ]

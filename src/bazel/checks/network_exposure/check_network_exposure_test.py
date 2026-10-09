@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 import yaml
@@ -16,6 +18,7 @@ from check_network_exposure import (
     LOAD_BALANCER,
     NODE_PORT,
     PUBLIC_LOAD_BALANCER_DEFAULT,
+    main,
     rendered_errors,
     source_errors,
     source_surfaces,
@@ -255,12 +258,53 @@ class SourceExposureAccessTest(BaseSourceExposureTest):
       ],
       "ip": ["tcp:443"],
     },
+    {
+      "src": ["autogroup:member"],
+      "dst": [
+%{ for cidr in cell_service_cidrs ~}
+        "${cidr}",
+%{ endfor ~}
+      ],
+      "ip": ["tcp:22"],
+    },
   ],
 }
 """,
         )
 
         assert errors == []
+
+    def test_cloud_members_cannot_reach_unapproved_ports_on_cell_service_cidrs(self) -> None:
+        errors = self.managed_api_errors(
+            router="ip_forwarding_enabled = false\n",
+            policy="""
+{
+  "autoApprovers": {
+    "routes": {},
+    "services": {"svc:kube-api-${cluster_name}": ["${router_tag}"]},
+  },
+  "grants": [
+    {
+      "src": ["autogroup:member", "tag:k8s-egress"],
+      "dst": ["tag:kube-api"],
+      "ip": ["tcp:443"],
+    },
+    {
+      "src": ["autogroup:member"],
+      "dst": [
+%{ for cidr in cell_service_cidrs ~}
+        "${cidr}",
+%{ endfor ~}
+      ],
+      "ip": ["tcp:80"],
+    },
+  ],
+}
+""",
+        )
+
+        assert len(errors) == 1
+        assert "unreviewed grant" in errors[0]
 
     def test_managed_api_router_cannot_receive_a_network_grant(self) -> None:
         errors = self.managed_api_errors(
@@ -379,7 +423,6 @@ class SourceExposureAccessTest(BaseSourceExposureTest):
     {"src": ["autogroup:member"], "dst": ["172.31.0.0/20", "172.31.16.0/20"], "ip": ["tcp:2222"],},
     {"src": ["autogroup:member", "tag:workspace"], "dst": ["172.31.0.11/32", "172.31.16.11/32"], "ip": ["tcp:443"],},
     {"src": ["autogroup:member", "tag:workspace"], "dst": ["172.31.0.10/32", "172.31.16.10/32"], "ip": ["tcp:53", "udp:53"],},
-    {"src": ["autogroup:member", "tag:workspace"], "dst": ["tag:subnet-router"], "ip": ["tcp:8444"],},
   ],
 }
 """
@@ -398,7 +441,6 @@ class SourceExposureAccessTest(BaseSourceExposureTest):
     {{"src": ["autogroup:member"], "dst": ["172.31.0.0/20", "172.31.16.0/20"], "ip": ["tcp:2222"]}},
     {{"src": ["autogroup:member", "tag:workspace"], "dst": ["172.31.0.11/32", "172.31.16.11/32"], "ip": ["tcp:443"]}},
     {{"src": ["autogroup:member", "tag:workspace"], "dst": ["172.31.0.10/32", "172.31.16.10/32"], "ip": ["tcp:53", "udp:53"]}},
-    {{"src": ["autogroup:member", "tag:workspace"], "dst": ["tag:subnet-router"], "ip": ["tcp:8444"]}},
     {{"src": ["autogroup:member"], "dst": ["{destination}"], "ip": ["*"]}}
   ]
 }}
@@ -417,7 +459,6 @@ class SourceExposureAccessTest(BaseSourceExposureTest):
     {"src": ["autogroup:member"], "dst": ["172.31.0.0/20", "172.31.16.0/20"], "ip": ["tcp:80"]},
     {"src": ["autogroup:member", "tag:workspace"], "dst": ["172.31.0.11/32", "172.31.16.11/32"], "ip": ["tcp:443"]},
     {"src": ["autogroup:member", "tag:workspace"], "dst": ["172.31.0.10/32", "172.31.16.10/32"], "ip": ["tcp:53", "udp:53"]},
-    {"src": ["autogroup:member", "tag:workspace"], "dst": ["tag:subnet-router"], "ip": ["tcp:8444"]},
   ]
 }
 """
@@ -521,24 +562,26 @@ proxy:
         assert errors == []
 
     def test_deferred_s3_path_does_not_allow_another_resource(self) -> None:
-        errors = self.source_errors(
-            "src/infra/argocd/components/s3_gateway/helm/templates/routes.yaml",
-            """
+        for prefix in ("external-dns.kubernetes.io", "external-dns.alpha.kubernetes.io"):
+            with self.subTest(prefix=prefix):
+                errors = self.source_errors(
+                    "src/infra/argocd/components/s3_gateway/helm/templates/routes.yaml",
+                    f"""
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: shadow-door
   namespace: s3-system
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: shadow.unit.test
+    {prefix}/hostname: shadow.unit.test
   labels:
     app.kubernetes.io/component: external-dns-source
-spec: {}
+spec: {{}}
 """,
-        )
+                )
 
-        assert len(errors) == TWO_ERRORS
-        assert all("HTTPRoute s3-system/shadow-door" in error for error in errors)
+                assert len(errors) == TWO_ERRORS
+                assert all("HTTPRoute s3-system/shadow-door" in error for error in errors)
 
     def test_ctrl_apps_load_balancer_is_allowed(self) -> None:
         errors = self.source_errors(
@@ -863,6 +906,114 @@ spec: {}
     @staticmethod
     def errors(owner: str, manifest: str) -> list[str]:
         return rendered_errors(owner, yaml.safe_load_all(manifest))
+
+    def test_main_source_mode_exposure_prints_errors_and_exits_one(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "src/infra/argocd/bad.yaml"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(
+                """
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bad-ingress
+  namespace: default
+spec: {}
+""",
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(["source", "--root", str(root)])
+            assert exit_code == 1
+            output = stderr.getvalue()
+            assert (
+                "Ingress default/bad-ingress uses ingress outside the reviewed exposure allowlist"
+                in output
+            )
+
+    def test_main_source_mode_compliant_exits_zero_without_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "src/clean.yaml"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(
+                """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: safe-config
+  namespace: default
+data: {}
+""",
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(["source", "--root", str(root)])
+            assert exit_code == 0
+            assert stderr.getvalue() == ""
+
+    def test_main_rendered_mode_exposure_prints_errors_and_exits_one(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "rendered.yaml"
+            manifest.write_text(
+                """
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bad-ingress
+  namespace: default
+spec: {}
+""",
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main([
+                    "rendered",
+                    "--owner",
+                    "//unreviewed:owner",
+                    "--manifest",
+                    str(manifest),
+                ])
+            assert exit_code == 1
+            output = stderr.getvalue()
+            assert (
+                "//unreviewed:owner: Ingress default/bad-ingress uses ingress outside the reviewed exposure allowlist"
+                in output
+            )
+
+    def test_main_rendered_mode_compliant_exits_zero_without_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "rendered.yaml"
+            manifest.write_text(
+                """
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: s3-gateway-cross-region
+  namespace: s3-system
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: s3.unit.test
+  labels:
+    app.kubernetes.io/component: external-dns-source
+spec: {}
+""",
+                encoding="utf-8",
+            )
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main([
+                    "rendered",
+                    "--owner",
+                    "//src/infra/argocd/components/s3_gateway:helm_render",
+                    "--manifest",
+                    str(manifest),
+                ])
+            assert exit_code == 0
+            assert stderr.getvalue() == ""
 
 
 if __name__ == "__main__":

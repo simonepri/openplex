@@ -19,7 +19,7 @@ exceptions:
     scope: shipped-service
   - added: 2026-09-02
     evidence: src/bazel/checks/license_images/coder-workspace-base-exception.json
-    evidence_sha256: ccee77dd7a87fc0022186168b901063dec583f73adc71f2bbee9b9ed0c940e59
+    evidence_sha256: 9b3e0caa7d3eeefe4bd2de375f9879200c5539a06312162b27ff6b0358e0833b
     id: coder-minimal-workspace-base-licenses
     license: MULTIPLE
     owner: simone.primarosa@gmail.com
@@ -28,7 +28,7 @@ exceptions:
     scope: base-image
   - added: '2026-09-30'
     evidence: src/bazel/checks/license_images/dragonfly-client-base-exception.json
-    evidence_sha256: 557ea19b51717b5ffa374c299889f3573c058024e2426e59e949a175b547825b
+    evidence_sha256: 08779a5dd49f11cdfa229b05cba76dafb416eb16e2decf6940e1fab426a91b0e
     id: dragonfly-client-base-licenses
     license: MULTIPLE
     owner: simone.primarosa@gmail.com
@@ -37,7 +37,7 @@ exceptions:
     scope: base-image
   - added: 2026-09-05
     evidence: src/bazel/checks/license_images/dragonfly-sso-python-alpine-base-exception.json
-    evidence_sha256: 2e7f01060905d91e9a192a789a86d7ce5bf82235ab86b57c3a2c212ceeab31c1
+    evidence_sha256: 92d466de50cf2b035b4d8cabe576ca6d97b0b4ef52deb7dcc33b81627ae35c9e
     id: dragonfly-sso-python-alpine-base-licenses
     license: MULTIPLE
     owner: simone.primarosa@gmail.com
@@ -46,8 +46,8 @@ exceptions:
     scope: base-image
   - added: 2026-09-01
     evidence: src/bazel/checks/license_images/headscale-base-exception.json
-    evidence_sha256: c3bac17d94d24992bdf50360b5d1d14a9f1db90cf79b9c956ecf5587b15da47c
-    id: headscale-0.29.3-base-license-metadata
+    evidence_sha256: d64309144a2e26a64becc1b64f6e6a4604203afaa13aeacb68446fb28804cb71
+    id: headscale-0.29.4-base-license-metadata
     license: MULTIPLE
     owner: simone.primarosa@gmail.com
     reason: Trivy identifies Go modules in the exact upstream Headscale binaries but cannot recover their license metadata from the stripped binaries.
@@ -55,8 +55,8 @@ exceptions:
     scope: base-image
   - added: 2026-09-01
     evidence: src/bazel/checks/license_images/k3s-base-exception.json
-    evidence_sha256: 8d5f0226e2398d3fe4c1775b1b5cdc8a31db02770bd3ac4cf9935ac59b0469a1
-    id: k3s-1.36.1-k3s1-base-license-metadata
+    evidence_sha256: f9906b6c6258d69f0d5be2a18c9355c20fab8e55240729e5f718c5b641c1013a
+    id: k3s-1.36.5-k3s1-base-license-metadata
     license: MULTIPLE
     owner: simone.primarosa@gmail.com
     reason: Trivy identifies Go modules in the exact upstream k3s binaries but cannot recover their license metadata from the stripped binaries.

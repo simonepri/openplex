@@ -45,7 +45,7 @@ esac
 grep -F 'Intentionally unsafe scanner self-test input' "${negative_fixture}" >/dev/null \
   || die 'intentional security-negative fixture lacks its explicit source marker'
 
-for directory in "${output_dir}" "${cache_dir}"; do
+for directory in "${output_dir}" "${cache_dir}/reports"; do
   [[ ! -L ${directory} ]] || die "security scan directory must not be a symlink: ${directory}"
   mkdir -p "${directory}"
   chmod 0700 "${directory}"
@@ -81,6 +81,12 @@ scan() {
   fi
   jq -e 'type == "object"' "${temporary_report}" >/dev/null \
     || die "scanner produced invalid JSON: ${temporary_report}"
+  if [[ -d ${target} && ${target} != "." ]]; then
+    local normalized_report
+    normalized_report="$(mktemp "${output_dir}/.trivy-config.XXXXXX")"
+    jq --arg dir "${target}" 'walk(if type == "object" and has("Target") and (.Target | startswith("/") | not) then .Target = ($dir + "/" + .Target) else . end)' "${temporary_report}" >"${normalized_report}"
+    mv -f -- "${normalized_report}" "${temporary_report}"
+  fi
   chmod 0600 "${temporary_report}"
   mv -f -- "${temporary_report}" "${destination}"
 }
@@ -113,104 +119,91 @@ scan_fs() {
   fi
   jq -e 'type == "object"' "${temporary_report}" >/dev/null \
     || die "scanner produced invalid JSON: ${temporary_report}"
+  if [[ -d ${target} && ${target} != "." ]]; then
+    local normalized_report
+    normalized_report="$(mktemp "${output_dir}/.trivy-fs.XXXXXX")"
+    jq --arg dir "${target}" 'walk(if type == "object" and has("Target") and (.Target | startswith("/") | not) then .Target = ($dir + "/" + .Target) else . end)' "${temporary_report}" >"${normalized_report}"
+    mv -f -- "${normalized_report}" "${temporary_report}"
+  fi
   chmod 0600 "${temporary_report}"
   mv -f -- "${temporary_report}" "${destination}"
 }
 
-# Scan only what git sees: every ignored path is skipped, so local state,
-# agent worktrees, and build outputs never reach the scanners.
-ignored_paths="$(mktemp "${output_dir}/.ignored.XXXXXX")"
-git ls-files -z --others --ignored --exclude-standard --directory >"${ignored_paths}"
-skip_ignored=(--skip-dirs .git)
-while IFS= read -r -d '' path; do
-  if [[ ${path} == */ ]]; then
-    skip_ignored+=(--skip-dirs "${path%/}")
+policy_inputs=("${policy_file}" "${ignore_policy}" "${data_policy}" "${policy_dir}/trivy_triage.py")
+
+cached_scan() {
+  local kind="$1" target="$2" destination="$3" log_stem="$4"
+  shift 4
+  local shard_changes="" shard_key="" cached_report=""
+  shard_changes="$(git status --porcelain --untracked-files=all -- "${target}" "${policy_inputs[@]}")"
+  if [[ -z ${shard_changes} ]]; then
+    shard_key="$({
+      git ls-files -s -- "${target}" "${policy_inputs[@]}"
+      trivy --version | sed -n 's/^Version: //p'
+      jq -r .Digest "${cache_dir}/policy/metadata.json" 2>/dev/null || echo "no-digest"
+      printf '%s\n' "${KUBERNETES_VERSION}"
+    } | git hash-object --stdin)"
+    cached_report="${cache_dir}/reports/${log_stem}-${shard_key}.json"
+    if [[ -f ${cached_report} ]]; then
+      cp -- "${cached_report}" "${destination}"
+      return 0
+    fi
+  fi
+
+  if [[ ${kind} == "config" ]]; then
+    scan "${target}" "${destination}" "${log_stem}" "$@"
   else
-    skip_ignored+=(--skip-files "${path}")
+    scan_fs "${target}" "${destination}" "${log_stem}" "$@"
   fi
-done <"${ignored_paths}"
-rm -f -- "${ignored_paths}"
 
-primary_kubernetes="${output_dir}/trivy-config-kubernetes.json"
-primary_config="${output_dir}/trivy-config.json"
-primary_fs="${output_dir}/trivy-fs.json"
+  if [[ -n ${shard_key} && -n ${cached_report} ]]; then
+    cp -- "${destination}" "${cached_report}"
+  fi
+}
+
 negative="${output_dir}/trivy-config-intentional-negative.json"
+cached_scan config "${root}/${negative_fixture}" "${negative}" trivy-config-intentional-negative
 
-# Read the default scanners from the tool, so a scanner a Trivy upgrade adds
-# cannot fall out of the split below.
-default_scanners="$(trivy config --help | sed -n 's/.*--misconfig-scanners .*(default \[\(.*\)\])$/\1/p')"
-[[ ,${default_scanners}, == *,kubernetes,* ]] \
-  || die 'cannot read the default Trivy misconfiguration scanners'
-other_scanners="$(tr ',' '\n' <<<"${default_scanners}" | grep -vx kubernetes | paste -sd , -)"
+primary_reports=(
+  "${output_dir}/shard-argocd.json"
+  "${output_dir}/shard-definitions.json"
+  "${output_dir}/shard-examples.json"
+  "${output_dir}/shard-terraform.json"
+  "${output_dir}/shard-tools.json"
+  "${output_dir}/shard-fs-tools.json"
+  "${output_dir}/shard-fs-uv.json"
+)
 
-scan_remaining() {
-  scan "${root}" "${primary_config}" trivy-config \
-    --misconfig-scanners "${other_scanners}" \
-    --skip-files "${root}/${negative_fixture}" \
-    "${skip_ignored[@]}"
-  scan_fs "${root}" "${primary_fs}" trivy-fs "${skip_ignored[@]}" --skip-dirs .cache
-}
+pids=()
+cached_scan config src/infra/argocd "${output_dir}/shard-argocd.json" trivy-argocd &
+pids+=($!)
+cached_scan config src/infra/definitions "${output_dir}/shard-definitions.json" trivy-definitions \
+  --skip-files "${root}/${negative_fixture}" &
+pids+=($!)
+cached_scan config src/examples "${output_dir}/shard-examples.json" trivy-examples &
+pids+=($!)
+cached_scan config src/infra/terraform "${output_dir}/shard-terraform.json" trivy-terraform \
+  --misconfig-scanners terraform &
+pids+=($!)
+cached_scan config src/infra/tools "${output_dir}/shard-tools.json" trivy-tools &
+pids+=($!)
+cached_scan fs src/infra/tools "${output_dir}/shard-fs-tools.json" trivy-fs-tools &
+pids+=($!)
+cached_scan fs uv.lock "${output_dir}/shard-fs-uv.json" trivy-fs-uv &
+pids+=($!)
 
-# Trivy downloads its checks bundle into the cache on first use, and a scan
-# that starts while another one writes it loads a partial bundle. The
-# one-file scan of the negative fixture fetches the bundle before the
-# concurrent scans start.
-scan "${root}/${negative_fixture}" "${negative}" trivy-config-intentional-negative
-
-# The Kubernetes scan reads only YAML and JSON files, so its report is a
-# function of those files, the policy inputs, Trivy, and the checks bundle
-# the negative scan just refreshed. The key is empty while any of those
-# files differs from the index, so local edits always get a fresh scan.
-kubernetes_inputs=('*.yaml' '*.yml' '*.json' "${policy_dir}")
-kubernetes_key=""
-kubernetes_changes="$(git status --porcelain --untracked-files=all -- "${kubernetes_inputs[@]}")"
-if [[ -z ${kubernetes_changes} ]]; then
-  kubernetes_key="$({
-    git ls-files -s -- "${kubernetes_inputs[@]}"
-    trivy --version | sed -n 's/^Version: //p'
-    jq -r .Digest "${cache_dir}/policy/metadata.json"
-    printf '%s\n' "${KUBERNETES_VERSION}" "${negative_fixture}"
-  } | git hash-object --stdin)"
-fi
-kubernetes_reports="${cache_dir}/kubernetes-reports"
-cached_kubernetes="${kubernetes_reports}/${kubernetes_key}.json"
-
-# The Kubernetes checks take most of the run on a single core, so they get
-# their own process while the remaining scans run beside them. They still see
-# every manifest at once: a check applies to the whole batch when any
-# manifest in it matches the check's resource kind.
-scan_kubernetes() {
-  if [[ -n ${kubernetes_key} && -f ${cached_kubernetes} ]]; then
-    cp -- "${cached_kubernetes}" "${primary_kubernetes}"
-    return
-  fi
-  scan "${root}" "${primary_kubernetes}" trivy-config-kubernetes \
-    --misconfig-scanners kubernetes \
-    --skip-files "${root}/${negative_fixture}" \
-    "${skip_ignored[@]}"
-  if [[ -n ${kubernetes_key} ]]; then
-    rm -rf -- "${kubernetes_reports}"
-    mkdir -p -- "${kubernetes_reports}"
-    cp -- "${primary_kubernetes}" "${cached_kubernetes}"
-  fi
-}
-
-scan_kubernetes &
-kubernetes_pid=$!
-scan_remaining &
-remaining_pid=$!
 scan_status=0
-wait "${kubernetes_pid}" || scan_status=1
-wait "${remaining_pid}" || scan_status=1
+for pid in "${pids[@]}"; do
+  wait "${pid}" || scan_status=1
+done
 ((scan_status == 0)) || exit 1
 
 triage_status=0
 python3 "${policy_dir}/trivy_triage.py" \
   "${policy_file}" \
   "${negative}" \
-  "${primary_kubernetes}" \
-  "${primary_config}" \
-  "${primary_fs}" || triage_status=$?
+  "${primary_reports[@]}" || triage_status=$?
+
 if ((triage_status != 0)); then
   printf 'Trivy source triage gate failed.\n' >&2
   exit 1

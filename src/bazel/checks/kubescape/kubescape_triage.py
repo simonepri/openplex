@@ -6,7 +6,10 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 MIN_ARGV_COUNT = 4
 
@@ -109,16 +112,18 @@ def _audit_stale_exceptions(
             )
 
 
-def main() -> int:
-    if len(sys.argv) < MIN_ARGV_COUNT:
+def main(argv: Sequence[str] | None = None) -> int:
+    args = sys.argv if argv is None else list(argv)
+    if len(args) < MIN_ARGV_COUNT:
         return 2
 
-    policy = load_json(sys.argv[1])
-    neg_data = load_json(sys.argv[2])
-    primary_data = load_json(sys.argv[3])
+    policy = load_json(args[1])
+    neg_data = load_json(args[2])
+    primary_data = load_json(args[3])
 
+    denials: list[str] = []
     if not _extract_negative_failed_controls(neg_data):
-        return 1
+        denials.append("intentional security-negative fixture produced no findings")
 
     reviewed_exceptions = policy.get("reviewedExceptions", [])
     primary_resources = {
@@ -127,7 +132,6 @@ def main() -> int:
     primary_findings = _extract_primary_findings(primary_data, primary_resources)
 
     matched_exceptions: set[int] = set()
-    denials: list[str] = []
 
     for f in primary_findings:
         matched_idx = _find_matching_exception(f, reviewed_exceptions)
@@ -141,6 +145,8 @@ def main() -> int:
     _audit_stale_exceptions(reviewed_exceptions, matched_exceptions, denials)
 
     if denials:
+        for denial in denials:
+            print(denial, file=sys.stderr)
         return 1
     return 0
 

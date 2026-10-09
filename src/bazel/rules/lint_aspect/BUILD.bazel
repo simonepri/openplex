@@ -3,6 +3,11 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 
+# gazelle:resolve py src.bazel.rules.lint_aspect.generator_meta :generator_meta
+# gazelle:resolve_regexp py ^src\.bazel\.rules\.lint_aspect\.generator_meta(\..*)?$ :generator_meta
+# gazelle:resolve py src.bazel.tools.diff.gate_diff //src/bazel/tools/diff:gate_diff
+# gazelle:resolve py src.bazel.tools.diff //src/bazel/tools/diff:cli_lib
+
 package_sources()
 
 py_binary(
@@ -14,4 +19,16 @@ py_test(
     name = "build_headers_test",
     srcs = ["build_headers_test.py"],
     deps = [":build_headers"],
+)
+
+py_test(
+    name = "generator_meta_test",
+    srcs = ["generator_meta_test.py"],
+    deps = ["//src/bazel/rules/lint_aspect:generator_meta"],
+)
+
+py_binary(
+    name = "generator_meta",
+    srcs = ["generator_meta.py"],
+    deps = ["//src/bazel/tools/diff:gate_diff"],
 )

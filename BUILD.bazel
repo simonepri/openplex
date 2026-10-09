@@ -2,19 +2,10 @@
 
 load("@gazelle//:def.bzl", "gazelle", "gazelle_binary")
 load("@npm//:defs.bzl", "npm_link_all_packages")
-load(
-    "//src/bazel/rules:constants.bzl",
-    "ARGOCD_LINKS_PATH_SPECS",
-    "CODEOWNERS_PATH_SPECS",
-    "DOTENV_PATH_SPECS",
-    "GAZELLE_PATH_SPECS",
-    "PACKAGE_OVERRIDES_PATH_SPECS",
-    "RULESYNC_PATH_SPECS",
-)
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "GENERATED", "package_sources", "source_set")
 load("//src/bazel/rules/git_hooks:defs.bzl", "git_hook", "git_hooks")
 load("//src/bazel/rules/json_schema:defs.bzl", "json_schema")
-load("//src/bazel/rules/lint_aspect:defs.bzl", "check_all", "format_all")
+load("//src/bazel/rules/lint_aspect:defs.bzl", "format_all")
 
 # gazelle:exclude .github
 # gazelle:exclude .tmp
@@ -38,96 +29,6 @@ gazelle(
 )
 
 git_hook(
-    name = "coverage",
-    src = "//src/bazel/checks:unclaimed_files",
-    stage = "pre-commit",
-    summary = "Every file is in the Bazel graph",
-)
-
-git_hook(
-    name = "argocd_links",
-    src = "//src/bazel/checks/argocd_links",
-    pathspecs = ARGOCD_LINKS_PATH_SPECS,
-    stage = "pre-commit",
-    summary = "Every component and value link is valid",
-)
-
-git_hook(
-    name = "gazelle_drift",
-    src = "//:gazelle",
-    args = ["--mode=diff"],
-    pathspecs = GAZELLE_PATH_SPECS,
-    stage = "pre-commit",
-    summary = "BUILD targets match Gazelle",
-)
-
-git_hook(
-    name = "codeowners",
-    src = "//src/bazel/checks/records:codeowners",
-    pathspecs = CODEOWNERS_PATH_SPECS,
-    stage = "pre-commit",
-    summary = "Every record has an owner",
-)
-
-git_hook(
-    name = "source_names",
-    src = "//src/bazel/checks/source_names",
-    stage = "pre-commit",
-    summary = "Source names project to Kubernetes-safe names",
-)
-
-git_hook(
-    name = "dev_tool_isolation",
-    src = "//src/bazel/checks:dev_tool_isolation",
-    stage = "pre-commit",
-    summary = "Dev-tool locks stay out of shipped images",
-)
-
-git_hook(
-    name = "dotenv",
-    src = "//src/bazel/checks:dotenv",
-    pass_staged_files = True,
-    pathspecs = DOTENV_PATH_SPECS,
-    stage = "pre-commit",
-    summary = "Dotenv files are valid and consistently styled",
-    tool = "//src/bazel/tools:dotenv-linter",
-)
-
-git_hook(
-    name = "function_length",
-    src = "//src/bazel/checks/function_length",
-    stage = "pre-commit",
-    summary = "Production functions do not exceed 120 lines",
-)
-
-git_hook(
-    name = "semgrep",
-    src = "//src/bazel/checks:opengrep",
-    args = ["src/bazel/checks/opengrep/rules.yaml"],
-    pass_staged_files = True,
-    stage = "pre-commit",
-    summary = "OpenGrep baseline",
-    tool = "//src/bazel/tools:opengrep",
-)
-
-git_hook(
-    name = "ifttt",
-    src = "//src/bazel/checks:ifttt",
-    stage = "pre-commit",
-    summary = "LINT.IfChange and LINT.ThenChange consistency",
-)
-
-git_hook(
-    name = "json_schemas",
-    src = "//src/bazel/checks:json_schemas",
-    pass_staged_files = True,
-    pathspecs = ["'*.schema.json'"],
-    stage = "pre-commit",
-    summary = "JSON schemas conform to metaschema",
-    tool = "//src/bazel/tools:check-jsonschema",
-)
-
-git_hook(
     name = "format",
     src = ":fix",
     args = [
@@ -136,22 +37,6 @@ git_hook(
     ],
     stage = "pre-commit",
     summary = "Source and configuration files match formatting and generation",
-)
-
-git_hook(
-    name = "package_overrides",
-    src = "//src/bazel/checks/package_overrides",
-    pathspecs = PACKAGE_OVERRIDES_PATH_SPECS,
-    stage = "pre-commit",
-    summary = "Package overrides are synchronized and actively required",
-)
-
-git_hook(
-    name = "rulesync",
-    src = "//src/bazel/checks/rulesync",
-    pathspecs = RULESYNC_PATH_SPECS,
-    stage = "pre-commit",
-    summary = "RuleSync guidance drift",
 )
 
 git_hook(
@@ -206,6 +91,93 @@ package_sources(exclude = [
     "pnpm-workspace.yaml",
 ])
 
+filegroup(
+    name = "all_sources",
+    srcs = glob(
+        include = ["**/*"],
+        allow_empty = True,
+        exclude = [
+            ".cache/**",
+            ".git/**",
+            ".local/**",
+            ".tmp/**",
+            ".venv/**",
+            "bazel-*/**",
+        ],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "env_files",
+    srcs = glob(
+        include = [
+            "**/.env",
+            "**/.env.*",
+            "**/*.env",
+            "**/*.env.*",
+        ],
+        allow_empty = True,
+        exclude = [
+            ".git/**",
+            ".tmp/**",
+            "bazel-*/**",
+        ],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "json_schema_files",
+    srcs = glob(
+        include = [
+            "**/*.schema.json",
+        ],
+        allow_empty = True,
+        exclude = [
+            ".git/**",
+            ".tmp/**",
+            "bazel-*/**",
+        ],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "k8s_manifest_files",
+    srcs = glob(
+        include = [
+            "src/infra/argocd/**/*.yaml",
+            "src/infra/argocd/**/*.yml",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.generated.yaml",
+            "**/*.schema.json",
+        ],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "lock_files",
+    srcs = glob(
+        include = [
+            "pnpm-lock.yaml",
+            "**/*lock.txt",
+            "**/go.sum",
+            "**/Cargo.lock",
+        ],
+        allow_empty = True,
+        exclude = [
+            ".git/**",
+            ".tmp/**",
+            "bazel-*/**",
+        ],
+    ),
+    visibility = ["//visibility:public"],
+)
+
 exports_files([
     # keep-sorted start
     ".bazelrc",
@@ -247,89 +219,10 @@ format_all(
     ],
 )
 
-check_all(
+test_suite(
     name = "check",
-    checks = [
-        "//src/bazel/checks:unclaimed_files",
-        "//src/bazel/checks/cluster_network",
-        "//src/bazel/checks/records:codeowners",
-        "//src/bazel/checks/source_names:source_names",
-        "//src/bazel/checks/records:team_records",
-        "//src/bazel/checks/workload_portability:workload_portability",
-        "//src/bazel/checks/network_exposure:network_exposure",
-        (
-            "//src/bazel/checks:opengrep",
-            "//src/bazel/tools:opengrep",
-        ),
-        "//src/bazel/checks:dev_tool_isolation",
-        (
-            "//src/bazel/checks:dotenv",
-            "//src/bazel/tools:dotenv-linter",
-        ),
-        (
-            "//src/bazel/checks:json_schemas",
-            "//src/bazel/tools:check-jsonschema",
-        ),
-        "//src/bazel/checks/argocd_links",
-        "//src/bazel/checks:coder_templates",
-        "//src/bazel/checks:license_source",
-        "//src/bazel/checks:trivy_source",
-        (
-            "//src/bazel/checks:kubescape",
-            "//src/bazel/tools:kubescape",
-        ),
-        "//src/bazel/checks:ifttt",
-        "//src/bazel/checks/rulesync",
-        "//src/bazel/checks/function_length",
-        "//src/bazel/checks:lock_drift",
-        "//src/bazel/checks:dups",
-        "//src/bazel/checks:cyclo",
-    ],
-    # The two slowest gates read only the source tree, so they run beside the
-    # build below. Their runners build quickly on a cold runner, unlike those
-    # of the gates that need Go or Node.js tools.
-    concurrent_gates = [
-        # keep-sorted start
-        "//src/bazel/checks:opengrep",
-        "//src/bazel/checks:trivy_source",
-        # keep-sorted end
-    ],
-    fact_readers = [
-        # keep-sorted start
-        "//src/bazel/checks:coder_templates",
-        "//src/bazel/checks:dev_tool_isolation",
-        "//src/bazel/checks:unclaimed_files",
-        # keep-sorted end
-    ],
-    facts = "//src/bazel/checks/graph_facts",
-    # kubescape scans the rendered manifests that this build leaves in bazel-bin.
-    pre_commands = [
-        "bazel --output_user_root=\"${BAZEL_OUTPUT_ROOT}\" build ${BAZEL_CONFIG_FLAGS:-} --remote_download_regex='.*_render.*\\.yaml' -- //...",
-    ],
-    tools = {
-        # keep-sorted start block=yes
-        "//src/bazel/checks/rulesync": ["//src/bazel/tools:rulesync"],
-        "//src/bazel/checks:coder_templates": ["//src/bazel/tools:jq"],
-        "//src/bazel/checks:cyclo": ["//src/bazel/tools:gocyclo"],
-        "//src/bazel/checks:dev_tool_isolation": ["//src/bazel/tools:jq"],
-        "//src/bazel/checks:dups": ["//src/bazel/tools:jscpd"],
-        "//src/bazel/checks:ifttt": ["//src/bazel/tools:ifttt-lint"],
-        "//src/bazel/checks:kubescape": ["//src/bazel/tools:jq"],
-        "//src/bazel/checks:license_source": [
-            "//src/bazel/tools:jq",
-            "//src/bazel/tools:osv-scanner",
-        ],
-        "//src/bazel/checks:lock_drift": [
-            "//src/bazel/tools:pnpm",
-            "//src/bazel/tools:uv",
-        ],
-        "//src/bazel/checks:opengrep": ["//src/bazel/tools:jq"],
-        "//src/bazel/checks:trivy_source": [
-            "//src/bazel/tools:jq",
-            "//src/bazel/tools:trivy",
-        ],
-        # keep-sorted end
-    },
+    tests = ["//src/bazel/checks:all_checks"],
+    visibility = ["//visibility:public"],
 )
 
 json_schema(
@@ -339,6 +232,6 @@ json_schema(
 )
 
 alias(
-    name = "test",
-    actual = "//src/bazel/tools/diff:cli",
+    name = "review",
+    actual = "//src/infra/tools/review:cli",
 )

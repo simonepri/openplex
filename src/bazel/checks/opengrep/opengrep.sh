@@ -10,12 +10,19 @@ export PYTHONUTF8=1
 workspace="${BUILD_WORKSPACE_DIRECTORY:-$(git rev-parse --show-toplevel)}"
 opengrep="${1:?missing opengrep path}"
 rules="${2:-${workspace}/src/bazel/checks/opengrep/rules.yaml}"
+jq_bin="jq"
+shift 2 2>/dev/null || true
+if [[ $# -gt 0 ]] && [[ $1 == *jq* ]] && [[ -f $1 ]]; then
+  jq_bin="$1"
+  shift
+fi
 output="${TEST_TMPDIR:-$(mktemp -d)}/semgrep-results.json"
 
 # Absolutize without dereferencing: the tool is a runfiles symlink whose
 # ancestors carry the .runfiles tree its stub resolves against; realpath
 # would strand it at the raw bazel-out file.
 if [[ ${opengrep#/} == "${opengrep}" ]]; then opengrep="${PWD}/${opengrep}"; fi
+if [[ ${jq_bin#/} == "${jq_bin}" ]] && [[ -f ${jq_bin} ]]; then jq_bin="${PWD}/${jq_bin}"; fi
 rules="$(realpath "${rules}")"
 rm -f "${output}"
 
@@ -26,7 +33,7 @@ fi
 
 cd "${workspace}"
 
-scan_targets=("${@:3}")
+scan_targets=("$@")
 if ((${#scan_targets[@]} == 0)); then
   if [[ ${CHECK_MODE:-} == affected ]]; then
     rules_rel="${rules#"${workspace}/"}"
@@ -79,6 +86,8 @@ for ((i = 0; i < ${#scan_targets[@]}; i += batch_size)); do
     --json-output "${batch_file}" \
     --exclude .git \
     --exclude .tmp \
+    --exclude _tmp \
+    --exclude 'bazel-*' \
     --exclude src/bazel/checks/opengrep/fixtures \
     "${batch[@]}" >/dev/null
   batch_status=$?
@@ -103,7 +112,7 @@ done
 if ((${#batch_outputs[@]} == 1)); then
   mv -f "${batch_outputs[0]}" "${output}"
 else
-  jq -s '{results: [.[].results[]?], errors: [.[].errors[]?]}' "${batch_outputs[@]}" >"${output}"
+  "${jq_bin}" -s '{results: [.[].results[]?], errors: [.[].errors[]?]}' "${batch_outputs[@]}" >"${output}"
   rm -f "${batch_outputs[@]}"
 fi
 
@@ -113,14 +122,14 @@ if [[ ! -s ${output} ]]; then
   echo "Semgrep did not write machine-readable output" >&2
   exit 2
 fi
-if ! jq -e '.errors | length == 0' "${output}" >/dev/null; then
+if ! "${jq_bin}" -e '.errors | length == 0' "${output}" >/dev/null; then
   echo "Semgrep reported tool or rule errors" >&2
   exit 2
 fi
 
 if [[ ${status} -ne 0 ]]; then
   echo "OpenGrep findings:" >&2
-  jq -r '.results[] | "  \(.path):\(.start.line): \(.check_id) - \(.extra.message)"' "${output}" >&2
+  "${jq_bin}" -r '.results[] | "  \(.path):\(.start.line): \(.check_id) - \(.extra.message)"' "${output}" >&2
 fi
 
 exit "${status}"

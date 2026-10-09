@@ -38,6 +38,9 @@ FLOCI_REGISTRY_PATTERN = re.compile(
 )
 ECR_REGISTRY_PATTERN = re.compile(r"^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com(\.cn)?$")
 STREAM_TAG_PATTERN = re.compile(r"^((ci|dev)-)?[0-9]{8}T[0-9]{6}Z_[0-9a-f]{12}$")
+STREAM_TAG_PARTS = re.compile(
+    r"^(?P<prefix>(?:ci|dev)-)?(?P<stamp>[0-9]{8}T[0-9]{6}Z)_[0-9a-f]{12}(?P<role>-[a-z0-9-]+)?$"
+)
 EXTRA_TAG_PATTERN = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$")
 SHA256_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 TEAM_NAMESPACE_PATTERN = re.compile(r"^team-[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
@@ -574,8 +577,50 @@ def _setup_ecr_docker_config(docker_config: str, registry_host: str) -> None:
     cfg_json.chmod(0o600)
 
 
+def _latest_stream_tag(tags: list[str], current_tag: str) -> str | None:
+    """Return the newest tag in the same prefix and role stream as current_tag."""
+    current = STREAM_TAG_PARTS.match(current_tag)
+    if not current:
+        return None
+    stream = [
+        (match.group("stamp"), tag)
+        for tag in tags
+        if (match := STREAM_TAG_PARTS.match(tag))
+        and match.group("prefix") == current.group("prefix")
+        and match.group("role") == current.group("role")
+    ]
+    return max(stream)[1] if stream else None
+
+
+def _stream_already_tags_digest(delivery: ImageDelivery, ecr_env: dict[str, str]) -> bool:
+    """Report whether the newest stream tag already names this digest."""
+    listing = subprocess.run(
+        [delivery.crane, "ls", delivery.repository],
+        env=ecr_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if listing.returncode != 0:
+        return False
+    latest = _latest_stream_tag(listing.stdout.split(), delivery.tag)
+    if not latest:
+        return False
+    resolved = subprocess.run(
+        [delivery.crane, "digest", f"{delivery.repository}:{latest}"],
+        env=ecr_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return resolved.returncode == 0 and resolved.stdout.strip() == delivery.digest
+
+
 def _ecr_tag_stream(delivery: ImageDelivery, target_ref: str, ecr_env: dict[str, str]) -> None:
     if delivery.publication_mode == "stream" and delivery.tag:
+        # A new stream tag on an unchanged digest reads as a new release to tag-tracking consumers.
+        if _stream_already_tags_digest(delivery, ecr_env):
+            return
         try:
             subprocess.run(
                 [delivery.crane, "tag", target_ref, delivery.tag],
@@ -1170,11 +1215,19 @@ def _verify_cluster_context(target: ClusterTarget) -> None:
 def _verify_rbac_permission(target: ClusterTarget, manifest_path: str) -> None:
     """Check that user identity has admission privileges for the workload resource."""
     auth_resource, auth_error = resolve_auth_resource(manifest_path)
-    auth_out = run_kubectl_cmd(
-        target.kubectl,
-        target.kubeconfig,
-        ["auth", "can-i", "create", auth_resource, "--namespace", target.team_namespace],
-    ).strip()
+    # `kubectl auth can-i` answers "no" with exit status 1, so only other
+    # failures carry an error worth showing.
+    try:
+        auth_out = run_kubectl_cmd(
+            target.kubectl,
+            target.kubeconfig,
+            ["auth", "can-i", "create", auth_resource, "--namespace", target.team_namespace],
+        ).strip()
+    except subprocess.CalledProcessError as e:
+        if e.stdout.strip() != "no":
+            sys.stderr.write(e.stderr)
+            sys.exit(e.returncode)
+        auth_out = "no"
     if auth_out != "yes":
         sys.stderr.write(
             f"Kubernetes identity cannot create {auth_error} in {target.team_namespace} on {target.target_cell}.\n"

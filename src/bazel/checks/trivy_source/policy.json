@@ -384,10 +384,10 @@
       "evidence": "src/infra/terraform/components/identity/gcp/main.tf"
     },
     {
-      "path": "src/infra/terraform/deployments/production/main.tf",
+      "path": "src/infra/terraform/deployments/research/main.tf",
       "id": "AWS-0098",
       "reason": "Deploy key secret is encrypted using AWS Secrets Manager default encryption key for short-lived GitOps access.",
-      "evidence": "src/infra/terraform/deployments/production/main.tf"
+      "evidence": "src/infra/terraform/deployments/research/main.tf"
     }
   ],
   "exceptions": []

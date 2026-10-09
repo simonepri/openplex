@@ -1,5 +1,5 @@
 {
-  "description": "Defines the SPDX allowlist and explicit dependency reviews consumed by mise run check.",
+  "description": "Defines the SPDX allowlist and explicit dependency reviews consumed by repository license checks.",
   "schemaVersion": 2,
   "allowEverywhere": [
     "0BSD",
@@ -386,13 +386,6 @@
         "version": "1.6.2"
       },
       {
-        "chart": "kubescape-operator",
-        "component": "kubescape_operator",
-        "license": "Apache-2.0",
-        "repository": "https://kubescape.github.io/helm-charts",
-        "version": "1.40.3"
-      },
-      {
         "chart": "kueue",
         "component": "kueue",
         "license": "Apache-2.0",
@@ -405,6 +398,13 @@
         "license": "Apache-2.0",
         "repository": "https://kyverno.github.io/kyverno/",
         "version": "3.8.2"
+      },
+      {
+        "chart": "opentelemetry-ebpf-instrumentation",
+        "component": "obi",
+        "license": "Apache-2.0",
+        "repository": "https://open-telemetry.github.io/opentelemetry-helm-charts",
+        "version": "0.14.3"
       },
       {
         "chart": "opencost",
@@ -522,7 +522,7 @@
     "targets": [
       {
         "context": "dev-tool",
-        "entrypoint": "mise run check",
+        "entrypoint": "mise run test",
         "path": "requirements_dev_lock.txt"
       },
       {

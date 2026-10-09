@@ -5,6 +5,8 @@ load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 
 # gazelle:exclude .
 
+package(default_visibility = ["//visibility:public"])
+
 package_sources()
 
 py_library(

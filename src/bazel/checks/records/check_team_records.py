@@ -328,7 +328,6 @@ def validate_dev_secret_schema_contract(root: Path) -> None:
     schema_paths = {
         "team definition": root / "src/infra/definitions/teams/team.schema.json",
         "team chart": root / "src/infra/argocd/components/team_lane/helm/values.schema.json",
-        "team lane": root / "src/infra/argocd/components/team_namespace/helm/values.schema.json",
     }
     try:
         schemas = {
@@ -338,14 +337,12 @@ def validate_dev_secret_schema_contract(root: Path) -> None:
         slug_fields = {
             "team definition": schemas["team definition"]["properties"]["slug"],
             "team chart": schemas["team chart"]["definitions"]["team"]["properties"]["slug"],
-            "team lane": schemas["team lane"]["properties"]["team"]["properties"]["slug"],
         }
         secret_fields = {
             "team definition": schemas["team definition"]["properties"]["dev_secrets"]["items"],
             "team chart": schemas["team chart"]["definitions"]["team"]["properties"]["dev_secrets"][
                 "items"
             ],
-            "team lane": schemas["team lane"]["definitions"]["devSecretName"],
         }
     except (json.JSONDecodeError, KeyError, TypeError) as error:
         raise TeamRecordError(f"team schema identifier contract is unreadable: {error}") from error
@@ -375,7 +372,7 @@ def validate_dev_secret_schema_contract(root: Path) -> None:
         )
 
 
-# LINT.ThenChange(//src/infra/argocd/components/team_namespace/helm/templates/dev_secrets.yaml:team-dev-secret-identifier-bounds)
+# LINT.ThenChange(//src/infra/definitions/teams/team.schema.json,//src/infra/argocd/components/team_lane/helm/values.schema.json)
 
 
 def validate_repository(
@@ -558,6 +555,24 @@ def _validate_team_members(
         seen_member_ids[member_id] = path
 
 
+VALID_READERS_POLICIES = frozenset({"all", "members"})
+VALID_SUBMITTERS_POLICIES = frozenset({"all", "members"})
+
+
+def _validate_team_readers(path: Path, readers: object) -> None:
+    if readers is not None and readers not in VALID_READERS_POLICIES:
+        raise TeamRecordError(
+            f"{path}: readers must be one of {sorted(VALID_READERS_POLICIES)!r}, got {readers!r}"
+        )
+
+
+def _validate_team_submitters(path: Path, submitters: object) -> None:
+    if submitters is not None and submitters not in VALID_SUBMITTERS_POLICIES:
+        raise TeamRecordError(
+            f"{path}: submitters must be one of {sorted(VALID_SUBMITTERS_POLICIES)!r}, got {submitters!r}"
+        )
+
+
 def validate_teams(teams: dict[str, dict[str, Any]]) -> None:
     seen_member_ids: dict[str, Path] = {}
     for slug, record in teams.items():
@@ -570,6 +585,8 @@ def validate_teams(teams: dict[str, dict[str, Any]]) -> None:
             )
         if slug in RESERVED_TEAM_SLUGS:
             raise TeamRecordError(f"{path}: team slug {slug!r} is reserved")
+        _validate_team_readers(path, record.get("readers"))
+        _validate_team_submitters(path, record.get("submitters"))
         _validate_team_members(path, record.get("members"), seen_member_ids)
 
 
@@ -617,15 +634,6 @@ def validate_derived_namespaces(
                 f"{team['_path']}: derived namespace {workloads_ns!r} collides with team {previous!r}"
             )
         derived[workloads_ns] = slug
-
-        if team.get("workspaces", True):
-            workspaces_ns = derived_namespace(slug, "workspaces", team["_path"])
-            previous = derived.get(workspaces_ns)
-            if previous is not None and previous != slug:
-                raise TeamRecordError(
-                    f"{team['_path']}: derived namespace {workspaces_ns!r} collides with team {previous!r}"
-                )
-            derived[workspaces_ns] = slug
     return sorted(derived)
 
 

@@ -3,6 +3,15 @@
 
 set -euo pipefail
 
+tool="jscpd"
+if [[ $# -gt 0 ]] && [[ $1 == *jscpd* ]] && [[ -f $1 ]]; then
+  tool="$1"
+  if [[ ${tool#/} == "${tool}" ]]; then
+    tool="${PWD}/${tool}"
+  fi
+  shift
+fi
+
 root="${BUILD_WORKSPACE_DIRECTORY:-$(git rev-parse --show-toplevel)}"
 cd "${root}"
 
@@ -36,15 +45,15 @@ if [[ ${CHECK_MODE:-} == affected ]]; then
     exit 0
   fi
 
-  jscpd "${files[@]}" \
+  "${tool}" "${files[@]}" \
     --min-lines 25 \
     --min-tokens 80 \
     --ignore "**/*_test.*,**/test_*,**/*.test.k8s.yaml,**/*.schema.json,**/node_modules/**"
 else
   if [[ $# -gt 0 ]]; then
-    jscpd "$@"
+    "${tool}" "$@"
   else
-    jscpd src/ \
+    "${tool}" src/ \
       --min-lines 25 \
       --min-tokens 80 \
       --ignore "**/*_test.*,**/test_*,**/*.test.k8s.yaml,**/*.schema.json,**/node_modules/**"

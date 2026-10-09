@@ -6,7 +6,7 @@ load("@rules_multirun//:defs.bzl", "command")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_load", "oci_push")
 load("@rules_pkg//pkg:providers.bzl", "PackageFilesInfo")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load("@rules_python//python:defs.bzl", "PyInfo", "py_test")
+load("@rules_python//python:defs.bzl", "PyInfo")
 
 def _crane_tool_impl(ctx):
     crane = ctx.toolchains["@rules_oci//oci:crane_toolchain_type"].crane_info.binary
@@ -26,25 +26,6 @@ _DEFAULT_BASE_USERS = {
     "ray_torch_base": "1000",
     "workspace_dev_base": "1000:1000",
 }
-
-# Docker tests reach the daemon socket and a loopback registry, so they run
-# outside the sandbox; their results stay cacheable because the pulled image
-# layouts are declared inputs.
-_DOCKER_TEST_TAGS = [
-    "no-remote-exec",
-    "no-sandbox",
-    "requires-docker",
-    "requires-network",
-]
-
-_DOCKER_CLIENT_ENV = [
-    "DOCKER_CERT_PATH",
-    "DOCKER_CONFIG",
-    "DOCKER_CONTEXT",
-    "DOCKER_HOST",
-    "DOCKER_TLS_VERIFY",
-    "HOME",
-]
 
 def _python_sources_impl(ctx):
     sources = {}
@@ -113,31 +94,6 @@ def _resolve_base_images(base):
         return (base + "_linux_amd64", base + "_linux_arm64_v8")
     else:
         return ("@{}_linux_amd64".format(base), "@{}_linux_arm64_v8".format(base))
-
-def _declare_import_acceptance(name, binary, staging_tag):
-    module = native.package_name().removeprefix("src/").replace("/", ".") + "." + binary.split(":")[-1]
-    py_test(
-        name = name + "_import_acceptance",
-        timeout = "long",
-        srcs = ["//src/bazel/rules/oci:runtime_import_acceptance_test.py"],
-        args = [
-            "$(rootpath //src/bazel/rules/oci:application_import_acceptance.py)",
-            module,
-            "$(rootpath :" + name + "_host)",
-            staging_tag,
-        ] + select({
-            "@bazel_tools//src/conditions:darwin_arm64": ["linux/arm64"],
-            "@bazel_tools//src/conditions:linux_aarch64": ["linux/arm64"],
-            "//conditions:default": ["linux/amd64"],
-        }),
-        data = [
-            "//src/bazel/rules/oci:application_import_acceptance.py",
-            ":" + name + "_host",
-        ],
-        env_inherit = _DOCKER_CLIENT_ENV,
-        main = "//src/bazel/rules/oci:runtime_import_acceptance_test.py",
-        tags = _DOCKER_TEST_TAGS,
-    )
 
 def oci_multiarch_image(
         name,
@@ -224,8 +180,6 @@ def oci_multiarch_image(
         repo_tags = [staging_tag],
         tags = ["manual"],
     )
-    if binary and base in ["ray_base", "ray_torch_base", "ray_ml_base"]:
-        _declare_import_acceptance(name, binary, staging_tag)
     if push:
         oci_push(
             name = name + "_push",

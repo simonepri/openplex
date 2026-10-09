@@ -31,6 +31,8 @@ globs:
 - **Maintain single abstraction level per function**: do not mix high-level intent with low-level mechanics; each function reads at a single level of the story.
 - **Enforce command-query separation**: a function either does something or answers something, not both.
 - **Prefer pure functions and isolate side effects**: isolate side effects; use dependency injection for external resources.
+- **Select implementation language by execution model and requirements**: author system daemons, long-running processes, Kubernetes controllers/reconcilers, network/HTTP proxies, and container runtime orchestrators in Go using official typed client SDKs; author AST manipulation, monorepo linters, ML/LLM integrations, and complex data transformations in Python; author end-to-end Kubernetes cluster conformance suites in Chainsaw; validate Kubernetes manifests declaratively via schema tools rather than imperative parsing scripts.
+- **Restrict Shell scripts to linear process delegation**: Shell scripts (`.sh`) are restricted to linear command execution, environment setup, and process delegation (`exec`); any logic requiring control flow branching (`if`/`case`), iteration (`for`/`while`), structured data parsing (JSON/YAML), process concurrency, or signal traps must be authored in a typed language (Python or Go).
 - **Use options object for complex signatures**: use an options argument when a function has many parameters (~4+) or optional configuration.
 - **Return early for edge cases and errors**: return early for edge cases and errors to keep the happy path unindented.
 - **Order file contents top-down**: organize files like a newspaper, with high-level functions at the top and implementation details below; place callees below their callers.

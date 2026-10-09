@@ -37,9 +37,6 @@ from check_team_records import (
 from jsonschema import Draft7Validator, Draft202012Validator
 
 EXPECTED_VERSION = 3
-MAX_DNS_LEN = 63
-EXPECTED_UNIQUE_COUNT = 2
-HELM_RELEASE_LIMIT = 53
 MAX_KEY_LEN = 127
 
 
@@ -325,7 +322,6 @@ class TeamRecordValidationTest(BaseTeamRecordTest):
         schema_paths = [
             "src/infra/definitions/teams/team.schema.json",
             "src/infra/argocd/components/team_lane/helm/values.schema.json",
-            "src/infra/argocd/components/team_namespace/helm/values.schema.json",
         ]
         for schema_path in schema_paths:
             self.write(
@@ -335,7 +331,8 @@ class TeamRecordValidationTest(BaseTeamRecordTest):
         validate_dev_secret_schema_contract(self.root)
         team_lane_schema_path = self.root / schema_paths[-1]
         team_lane_schema = json.loads(team_lane_schema_path.read_text(encoding="utf-8"))
-        team_lane_schema["definitions"]["devSecretName"]["maxLength"] = 82
+        dev_secrets_field = team_lane_schema["definitions"]["team"]["properties"]["dev_secrets"]
+        dev_secrets_field["items"]["maxLength"] = 82
         team_lane_schema_path.write_text(json.dumps(team_lane_schema), encoding="utf-8")
 
         with _assert_raises(TeamRecordError, match="one dev-secret pattern and maxLength"):
@@ -909,10 +906,7 @@ class TeamRecordSchedulingTest(BaseTeamRecordTest):
             "svelte_web": load_record(self.svelte),
         }
 
-        assert validate_derived_namespaces(teams, projects) == [
-            "team-examples-workloads",
-            "team-examples-workspaces",
-        ]
+        assert validate_derived_namespaces(teams, projects) == ["team-examples-workloads"]
 
     def test_duplicate_project_directory_names_are_rejected(self) -> None:
         duplicate = self.project("src/other/ray_data", {"delivery": "submitted"})
@@ -932,20 +926,10 @@ class TeamRecordSchedulingTest(BaseTeamRecordTest):
         with _assert_raises(TeamRecordError, match="1-63 character"):
             validate_repository(self.root, [self.team], [self.ray, self.svelte, invalid])
 
-    def test_team_without_workspaces_derives_only_workloads(self) -> None:
-        team = self.record(
-            "src/infra/definitions/teams/noworkspaces.yaml",
-            {"slug": "noworkspaces", "projects": ["ray_data"], "workspaces": False},
-        )
-        teams = {"noworkspaces": load_record(team)}
-        projects = {"ray_data": load_record(self.ray)}
-
-        assert validate_derived_namespaces(teams, projects) == ["team-noworkspaces-workloads"]
-
     def test_overlength_derived_namespace_is_rejected(self) -> None:
         with _assert_raises(TeamRecordError, match="does not derive a valid DNS label"):
             derived_namespace(
-                "t" * 50, "workspaces", self.root / "src/infra/definitions/teams/test.yaml"
+                "t" * 50, "workloads", self.root / "src/infra/definitions/teams/test.yaml"
             )
 
     def test_project_cannot_claim_its_own_team(self) -> None:
@@ -1022,6 +1006,106 @@ class TeamRecordSchedulingTest(BaseTeamRecordTest):
 
         with _assert_raises(TeamRecordError):
             validate_repository(self.root, [team], [self.ray, self.svelte])
+
+    def test_reserved_team_slug_legacy_is_rejected(self) -> None:
+        team = self.record(
+            "src/infra/definitions/teams/legacy.yaml",
+            {
+                "slug": "legacy",
+                "projects": ["ray_data", "svelte_web"],
+            },
+        )
+
+        with _assert_raises(TeamRecordError):
+            validate_repository(self.root, [team], [self.ray, self.svelte])
+
+    def test_team_readers_policy_validation(self) -> None:
+        team_all = self.record(
+            "src/infra/definitions/teams/examples.yaml",
+            {
+                "slug": "examples",
+                "readers": "all",
+                "projects": ["ray_data", "svelte_web"],
+            },
+        )
+        validate_repository(self.root, [team_all], [self.ray, self.svelte])
+
+        team_members = self.record(
+            "src/infra/definitions/teams/examples.yaml",
+            {
+                "slug": "examples",
+                "readers": "members",
+                "projects": ["ray_data", "svelte_web"],
+            },
+        )
+        validate_repository(self.root, [team_members], [self.ray, self.svelte])
+
+        team_invalid = self.record(
+            "src/infra/definitions/teams/examples.yaml",
+            {
+                "slug": "examples",
+                "readers": "public",
+                "projects": ["ray_data", "svelte_web"],
+            },
+        )
+        with _assert_raises(TeamRecordError, match="readers must be one of"):
+            validate_repository(self.root, [team_invalid], [self.ray, self.svelte])
+
+        base_team_record = {
+            "slug": "examples",
+            "cells": {"matchLabels": {"role": "cell"}},
+            "quota": {"classes": {"ha": {"cpu": "2", "memory": "4Gi"}}},
+            "projects": ["project_a"],
+            "promotion": "manual",
+            "key_epoch": 1,
+        }
+        assert self.team_schema.is_valid({**base_team_record, "readers": "all"})
+        assert self.team_schema.is_valid({**base_team_record, "readers": "members"})
+        assert not self.team_schema.is_valid({**base_team_record, "readers": "public"})
+
+    def test_team_submitters_policy_validation(self) -> None:
+        team_all = self.record(
+            "src/infra/definitions/teams/examples.yaml",
+            {
+                "slug": "examples",
+                "submitters": "all",
+                "projects": ["ray_data", "svelte_web"],
+            },
+        )
+        validate_repository(self.root, [team_all], [self.ray, self.svelte])
+
+        team_members = self.record(
+            "src/infra/definitions/teams/examples.yaml",
+            {
+                "slug": "examples",
+                "submitters": "members",
+                "projects": ["ray_data", "svelte_web"],
+            },
+        )
+        validate_repository(self.root, [team_members], [self.ray, self.svelte])
+
+        team_invalid = self.record(
+            "src/infra/definitions/teams/examples.yaml",
+            {
+                "slug": "examples",
+                "submitters": "public",
+                "projects": ["ray_data", "svelte_web"],
+            },
+        )
+        with _assert_raises(TeamRecordError, match="submitters must be one of"):
+            validate_repository(self.root, [team_invalid], [self.ray, self.svelte])
+
+        base_team_record = {
+            "slug": "examples",
+            "cells": {"matchLabels": {"role": "cell"}},
+            "quota": {"classes": {"ha": {"cpu": "2", "memory": "4Gi"}}},
+            "projects": ["project_a"],
+            "promotion": "manual",
+            "key_epoch": 1,
+        }
+        assert self.team_schema.is_valid({**base_team_record, "submitters": "all"})
+        assert self.team_schema.is_valid({**base_team_record, "submitters": "members"})
+        assert not self.team_schema.is_valid({**base_team_record, "submitters": "public"})
 
     def test_reserved_project_name_is_rejected(self) -> None:
         reserved = self.project(
@@ -1271,7 +1355,7 @@ class TeamRecordRepositoryTest(BaseTeamRecordTest):
             scheduling_index(self.root, [team], [invalid_cell])
 
 
-class TeamLaneDevSecretsTest(unittest.TestCase):
+class TeamLaneChartTest(unittest.TestCase):
     helm: ClassVar[str]
 
     @classmethod
@@ -1287,17 +1371,20 @@ class TeamLaneDevSecretsTest(unittest.TestCase):
         self.chart = self.root / "src/infra/argocd/components/team_namespace/helm"
         self.team_chart = self.root / "src/infra/argocd/components/team_lane/helm"
         self.values = yaml.safe_load((self.chart / "lint-values.yaml").read_text(encoding="utf-8"))
+        self.team_schema = Draft202012Validator(
+            json.loads(
+                (self.root / "src/infra/definitions/teams/team.schema.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+        )
 
     @override
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
     def test_local_queues_route_projects_without_project_quota(self) -> None:
-        documents = self.render(
-            "aws",
-            {"region": "us-west-2"},
-            names=[],
-        )
+        documents = self.render_values(self.values, "local-queues")
         queues = {
             document["metadata"]["name"]: document
             for document in documents
@@ -1308,112 +1395,7 @@ class TeamLaneDevSecretsTest(unittest.TestCase):
         assert queues["ha"]["spec"] == {"clusterQueue": "team-fixtureteam-ha"}
         assert queues["wa"]["spec"] == {"clusterQueue": "team-fixtureteam-wa"}
 
-    def test_physical_identifiers_and_explicit_target_keys(self) -> None:
-        variants: dict[str, dict[str, Any]] = {
-            "aws": {
-                "config": {"region": "us-west-2"},
-                "providerKey": "aws",
-                "remoteKeys": [
-                    "cluster/teams/fixtureteam/slack_bot_token",
-                    "cluster/teams/fixtureteam/temporal_cloud_api_key",
-                ],
-            },
-            "gcp": {
-                "config": {"projectId": "fixture-dev"},
-                "providerKey": "gcpsm",
-                "remoteKeys": [
-                    "cluster-teams-fixtureteam-slack-bot-token",
-                    "cluster-teams-fixtureteam-temporal-cloud-api-key",
-                ],
-            },
-            "kubernetes": {
-                "config": {},
-                "providerKey": "kubernetes",
-                "remoteKeys": ["team-fixtureteam", "team-fixtureteam"],
-            },
-        }
-        for provider, expected in variants.items():
-            with self.subTest(provider=provider):
-                documents = self.render(provider, expected["config"])
-                secret_store = self.named_document(documents, "SecretStore")
-                external_secret = self.named_document(documents, "ExternalSecret")
-                entries = external_secret["spec"]["data"]
-
-                assert list(secret_store["spec"]["provider"]) == [expected["providerKey"]]
-                assert [entry["secretKey"] for entry in entries] == [
-                    "SLACK_BOT_TOKEN",
-                    "TEMPORAL_CLOUD_API_KEY",
-                ]
-                assert [entry["remoteRef"]["key"] for entry in entries] == expected["remoteKeys"]
-                assert "dataFrom" not in external_secret["spec"]
-                assert external_secret["spec"]["target"] == {
-                    "creationPolicy": "Owner",
-                    "deletionPolicy": "Retain",
-                    "name": "team-dev-secrets",
-                }
-                provider_config = secret_store["spec"]["provider"][expected["providerKey"]]
-                if provider == "aws":
-                    assert provider_config == {"region": "us-west-2", "service": "SecretsManager"}
-                if provider == "gcp":
-                    assert provider_config == {"projectID": "fixture-dev"}
-                if provider == "kubernetes":
-                    assert [entry["remoteRef"]["property"] for entry in entries] == [
-                        "slack_bot_token",
-                        "temporal_cloud_api_key",
-                    ]
-                    source_role = next(
-                        document
-                        for document in documents
-                        if document.get("kind") == "Role"
-                        and document.get("metadata", {}).get("namespace") == "dev-secrets"
-                    )
-                    assert source_role["rules"][0]["resourceNames"] == ["team-fixtureteam"]
-                    assert len(source_role["rules"]) == 1
-                    source_binding = next(
-                        document
-                        for document in documents
-                        if document.get("kind") == "RoleBinding"
-                        and document.get("metadata", {}).get("namespace") == "dev-secrets"
-                    )
-                    assert provider_config["remoteNamespace"] == "dev-secrets"
-                    assert provider_config["auth"]["serviceAccount"]["name"] == "team-dev-secrets"
-                    assert source_binding["subjects"] == [
-                        {
-                            "kind": "ServiceAccount",
-                            "name": "team-dev-secrets",
-                            "namespace": "team-fixtureteam-workloads",
-                        }
-                    ]
-                    review_binding = next(
-                        document
-                        for document in documents
-                        if document.get("kind") == "ClusterRoleBinding"
-                        and document.get("roleRef", {}).get("name")
-                        == "external-secrets-self-subject-rules-reviewer"
-                    )
-                    assert review_binding["subjects"] == [
-                        {
-                            "kind": "ServiceAccount",
-                            "name": "team-dev-secrets",
-                            "namespace": "team-fixtureteam-workloads",
-                        }
-                    ]
-                else:
-                    assert all("property" not in entry["remoteRef"] for entry in entries)
-
-    def test_empty_dev_secrets_emit_no_secret_projection_objects(self) -> None:
-        documents = self.render("", {}, names=[])
-
-        assert not any(
-            document.get("metadata", {}).get("name", "").startswith("team-dev-secrets")
-            for document in documents
-        )
-
-    def test_team_foundations_satisfy_schema_and_propagate_buildbuddy_domain(self) -> None:
-        team_values = yaml.safe_load(
-            (self.team_chart / "lint-values.yaml").read_text(encoding="utf-8")
-        )
-        access_alias_domain = team_values["accessAliasDomain"]
+    def test_team_foundations_satisfy_schema(self) -> None:
         rendered = subprocess.run(
             [
                 self.helm,
@@ -1448,25 +1430,6 @@ class TeamLaneDevSecretsTest(unittest.TestCase):
             with self.subTest(provider=provider):
                 documents = self.render_values(values, f"team-foundation-{provider}")
                 assert documents
-                if values["devWorkspaces"]["enabled"]:
-                    assert (
-                        values["devWorkspaces"]["buildbuddy"]["accessAliasDomain"]
-                        == access_alias_domain
-                    )
-                    config = next(
-                        document
-                        for document in documents
-                        if document.get("kind") == "ConfigMap"
-                        and document.get("metadata", {}).get("name")
-                        == "workspace-buildbuddy-config"
-                    )
-                    assert (
-                        f"common:bb-community --bes_results_url=https://buildbuddy.{access_alias_domain}/invocation/"
-                        in config["data"]["buildbuddy.bazelrc"]
-                    )
-                    assert (
-                        "build --disk_cache=" in config["data"]["buildbuddy.bazelrc"].splitlines()
-                    )
 
     def test_local_storage_rbac_has_one_owner_and_exact_namespace_bindings(self) -> None:
         team_render = subprocess.run(
@@ -1517,14 +1480,14 @@ class TeamLaneDevSecretsTest(unittest.TestCase):
         team_slug = team_values["team"]["slug"]
         expected_cells = {
             cluster["name"]
-            for cluster in team_values["clusterRegistry"]["clusters"]
-            if cluster["role"] == "cell"
+            for cluster in team_values["registeredClusters"]
+            if cluster["labels"]["role"] == "cell"
         }
-        expected_suffixes = ["workloads", "workspaces"]
+        expected_suffixes = ["workloads"]
         local_cells = {
             cluster["name"]
-            for cluster in team_values["clusterRegistry"]["clusters"]
-            if cluster["role"] == "cell" and cluster["provider"] == "floci"
+            for cluster in team_values["registeredClusters"]
+            if cluster["labels"]["role"] == "cell" and cluster["labels"]["provider"] == "floci"
         }
 
         assert len(foundations) == len(expected_cells) * len(expected_suffixes)
@@ -1600,162 +1563,25 @@ class TeamLaneDevSecretsTest(unittest.TestCase):
             "name": f"s3-team-{team_slug}-reader",
         }
 
-    def test_workspace_store_names_are_bounded_and_collision_resistant(self) -> None:
-        names = [
-            self.workspace_store_name("t" * 30 + "a"),
-            self.workspace_store_name("t" * 30 + "b"),
-        ]
-
-        assert all(len(name) <= MAX_DNS_LEN for name in names)
-        assert len(set(names)) == EXPECTED_UNIQUE_COUNT
-
-    def test_cell_eaws_lh1_workspace_backup_store_examples_workspaces_release_name_fits_helm_limit(
-        self,
-    ) -> None:
-        documents = self.render_workspace_team("examples")
-        store_application = next(
-            document
-            for document in documents
-            if document.get("kind") == "Application"
-            and document.get("metadata", {}).get("name")
-            == "cell-eaws-lh1-workspace-backup-store-examples-workspaces"
-        )
-        application_name = "cell-eaws-lh1-workspace-backup-store-examples-workspaces"
-
-        assert store_application["metadata"]["name"] == application_name
-        assert (
-            store_application["spec"]["source"]["helm"]["releaseName"]
-            == "workspace-backup-store-examples-workspaces"
-        )
-        assert len(application_name) > HELM_RELEASE_LIMIT
-        assert len(store_application["spec"]["source"]["helm"]["releaseName"]) <= HELM_RELEASE_LIMIT
-
-    def test_workspace_store_release_name_is_bounded_and_dns_safe(self) -> None:
-        documents = self.render_workspace_team("t" * 31)
-        application = next(
-            document
-            for document in documents
-            if document.get("kind") == "Application"
-            and document
-            .get("metadata", {})
-            .get("name", "")
-            .startswith("cell-eaws-lh1-workspace-backup-store-")
-        )
-        release_name = application["spec"]["source"]["helm"]["releaseName"]
-
-        assert len(release_name) <= HELM_RELEASE_LIMIT
-        assert re.search(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", release_name)
-
-    def workspace_store_name(self, slug: str) -> str:
-        documents = self.render_workspace_team(slug)
-        store_application = next(
-            document
-            for document in documents
-            if document.get("kind") == "Application"
-            and document.get("metadata", {}).get("name")
-            == f"cell-eaws-lh1-workspace-backup-store-{slug}-workspaces"
-        )
-        store_name = store_application["spec"]["source"]["helm"]["valuesObject"]["storeName"]
-        foundation = next(
-            document
-            for document in documents
-            if document.get("kind") == "Application"
-            and document.get("metadata", {}).get("name") == f"cell-eaws-lh1-team-{slug}-workspaces"
-        )
-        lane_store_name = foundation["spec"]["source"]["helm"]["valuesObject"]["devWorkspaces"][
-            "secretStoreName"
-        ]
-
-        assert store_name == lane_store_name
-        assert isinstance(store_name, str)
-        return store_name
-
-    def render_workspace_team(self, slug: str) -> list[dict[str, Any]]:
-        def replace_key_recursive(obj: object, old_key: str, new_key: str) -> object:
-            if isinstance(obj, dict):
-                new_dict = {}
-                for k, v in obj.items():
-                    new_dict[k] = replace_key_recursive(v, old_key, new_key)
-                    if k == old_key:
-                        new_dict[new_key] = replace_key_recursive(v, old_key, new_key)
-                return new_dict
-            if isinstance(obj, list):
-                return [replace_key_recursive(elem, old_key, new_key) for elem in obj]
-            return obj
-
-        raw_values = yaml.safe_load(
-            (self.team_chart / "lint-values.yaml").read_text(encoding="utf-8")
-        )
-        assert isinstance(raw_values, dict)
-        values: dict[str, Any] = raw_values
-        if slug != "examples":
-            recursed = replace_key_recursive(values, "examples", slug)
-            assert isinstance(recursed, dict)
-            values = recursed
-            values["team"]["slug"] = slug
-            for project in values["projectIndex"]["projects"]:
-                project["team"] = slug
-        values_path = Path(self.tempdir.name) / f"team-{slug[-1]}.yaml"
-        values_path.write_text(yaml.safe_dump(values, sort_keys=False), encoding="utf-8")
-        rendered = subprocess.run(
-            [self.helm, "template", "fleet-team", str(self.team_chart), "-f", str(values_path)],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
-        return [document for document in yaml.safe_load_all(rendered) if isinstance(document, dict)]
-
     def test_provider_identifier_length_boundary(self) -> None:
         slug = "t" * 31
-        name = "a" * 81
-        documents = self.render(
-            "gcp",
-            {"projectId": "fixture-dev"},
-            names=[name],
-            slug=slug,
-        )
-        external_secret = self.named_document(documents, "ExternalSecret")
-
-        assert (
-            external_secret["spec"]["data"][0]["remoteRef"]["key"] == f"cluster-teams-{slug}-{name}"
-        )
-        assert len(external_secret["spec"]["data"][0]["remoteRef"]["key"]) == MAX_KEY_LEN
-
-        with _assert_raises(subprocess.CalledProcessError):
-            self.render(
-                "gcp",
-                {"projectId": "fixture-dev"},
-                names=["a" * 82],
-                slug=slug,
-            )
-
-    def render(
-        self,
-        provider: str,
-        config: dict[str, str],
-        *,
-        names: list[str] | None = None,
-        slug: str = "fixtureteam",
-    ) -> list[dict[str, Any]]:
-        self.values["team"]["slug"] = slug
-        self.values["team"]["group"] = f"cluster:group:team:{slug}"
-        self.values["workspaceSubmissions"]["sourceNamespace"] = f"team-{slug}-workspaces"
-        self.values["devSecrets"] = {
-            "names": names if names is not None else ["slack_bot_token", "temporal_cloud_api_key"],
+        valid_record = {
+            "cells": {},
+            "dev_secrets": ["a" * 81],
+            "key_epoch": 1,
+            "projects": ["ray_data"],
+            "promotion": "automatic",
+            "quota": {"classes": {"ha": {"cpu": "2", "memory": "6Gi"}}},
+            "slug": slug,
         }
-        self.values["runtimeSecrets"] = {
-            "adapter": provider,
-            "auth": {provider: config} if provider else {},
-        }
-        values_path = Path(self.tempdir.name) / f"{provider or 'empty'}.yaml"
-        values_path.write_text(yaml.safe_dump(self.values, sort_keys=False), encoding="utf-8")
-        rendered = subprocess.run(
-            [self.helm, "template", "team-lane", str(self.chart), "-f", str(values_path)],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
-        return [document for document in yaml.safe_load_all(rendered) if isinstance(document, dict)]
+        assert self.team_schema.is_valid(valid_record)
+        assert len(f"cluster-teams-{slug}-{'a' * 81}") == MAX_KEY_LEN
+
+        invalid_secret_record = {**valid_record, "dev_secrets": ["a" * 82]}
+        assert not self.team_schema.is_valid(invalid_secret_record)
+
+        invalid_slug_record = {**valid_record, "slug": "t" * 32}
+        assert not self.team_schema.is_valid(invalid_slug_record)
 
     def render_values(self, values: dict[str, Any], name: str) -> list[dict[str, Any]]:
         values_path = Path(self.tempdir.name) / f"{name}.yaml"
@@ -1767,15 +1593,6 @@ class TeamLaneDevSecretsTest(unittest.TestCase):
             text=True,
         ).stdout
         return [document for document in yaml.safe_load_all(rendered) if isinstance(document, dict)]
-
-    @staticmethod
-    def named_document(documents: list[dict[str, Any]], kind: str) -> dict[str, Any]:
-        return next(
-            document
-            for document in documents
-            if document.get("kind") == kind
-            and document.get("metadata", {}).get("name") == "team-dev-secrets"
-        )
 
 
 if __name__ == "__main__":

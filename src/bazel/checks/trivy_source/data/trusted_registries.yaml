@@ -3,6 +3,7 @@
 ksv0125:
   trusted_registries:
     # keep-sorted start
+    - buildbuddy.bbcr.io
     - docker.io
     - gcr.io
     - ghcr.io

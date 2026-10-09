@@ -15,15 +15,15 @@ bazel_dep(name = "gazelle", version = "0.54.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "rules_distroless", version = "0.9.4")
 bazel_dep(name = "rules_gitops", version = "1.0.0-rc.2")
-bazel_dep(name = "rules_go", version = "0.64.1")
+bazel_dep(name = "rules_go", version = "0.64.2")
 bazel_dep(name = "rules_helm", version = "0.31.0")
 bazel_dep(name = "rules_kustomize", version = "0.5.3")
 bazel_dep(name = "rules_multirun", version = "0.14.0")
 bazel_dep(name = "rules_multitool", version = "1.11.1")
 bazel_dep(name = "rules_oci", version = "2.3.0")
 bazel_dep(name = "rules_pkg", version = "1.3.0")
-bazel_dep(name = "rules_python", version = "2.3.4")
-bazel_dep(name = "rules_python_gazelle_plugin", version = "2.3.4")
+bazel_dep(name = "rules_python", version = "2.4.1")
+bazel_dep(name = "rules_python_gazelle_plugin", version = "2.4.1")
 bazel_dep(name = "rules_shell", version = "0.8.0")
 bazel_dep(name = "rules_tf", version = "0.0.10")
 # keep-sorted end
@@ -58,7 +58,7 @@ single_version_override(
 include("//src/bazel/module_deps:vendor_helm_charts.MODULE.bazel")
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
-go_sdk.download(version = "1.27.1")
+go_sdk.download(version = "1.27.2")
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//src/infra/tools/headscale_workspace_enrollment:go.mod")
@@ -88,21 +88,22 @@ tf = use_extension("@rules_tf//tf:extensions.bzl", "tf_repositories", dev_depend
 tf.download(
     mirror = {
         "archive": "hashicorp/archive:2.8.0",
-        "aws": "hashicorp/aws:6.66.0",
-        "cloudflare": "cloudflare/cloudflare:5.24.0",
+        "aws": "hashicorp/aws:6.68.0",
+        "cloudflare": "cloudflare/cloudflare:5.27.0",
         "docker": "kreuzwerker/docker:4.5.0",
-        "google": "hashicorp/google:8.4.0",
+        "google": "hashicorp/google:8.6.0",
         "google-beta": "hashicorp/google-beta:7.45.0",
         "helm": "hashicorp/helm:3.3.0",
-        "kubernetes": "hashicorp/kubernetes:3.2.1",
+        "kubernetes": "hashicorp/kubernetes:3.3.0",
         "local": "hashicorp/local:2.9.0",
+        "random": "hashicorp/random:3.9.1",
         "tailscale": "tailscale/tailscale:0.29.2",
         "tls": "hashicorp/tls:4.4.1",
     },
     provider_lock = "//src/bazel/module_deps:tofu_providers.lock.hcl",
     tflint_version = "0.64.0",
     use_tofu = True,
-    version = "1.12.6",
+    version = "1.13.1",
 )
 use_repo(tf, "tf_toolchains")
 
@@ -116,26 +117,30 @@ oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 # Dragonfly's first-party SSO bridge adds only audited stdlib Python source.
 oci.pull(
     name = "dragonfly_sso_base_linux_amd64",
-    digest = "sha256:4677924bcc0e94505a3270e87cb1601c2af54cd92d021b8dc306618a14333bbe",
+    digest = "sha256:7f2ec713f0436c59df2362d973b6a05af9e87ba78f0e94f5245c302984a7a1fd",
     image = "index.docker.io/library/python",
+    tag = "3.14.8-alpine",
 )
 oci.pull(
     name = "dragonfly_sso_base_linux_arm64_v8",
-    digest = "sha256:067d97da25897fa5342cdbef0eeb6a50a527faa965696c7bfa0a3b576ce65c8a",
+    digest = "sha256:aae362254cea6b75fe812f0b428f10b3b361a090fe5655fb1d03937f6d38cda9",
     image = "index.docker.io/library/python",
+    tag = "3.14.8-alpine",
 )
 
 # Upstream Dragonfly client supplies the base runtime layers for the reviewed derivative.
 # LINT.IfChange(dragonfly-client-base-images)
 oci.pull(
     name = "dragonfly_client_base_linux_amd64",
-    digest = "sha256:b8d3462aebd425cd9b99d37894bca24613abf2e52a9be0574e40433e3f17b63b",
+    digest = "sha256:6f95f773f7d4029c8d60672dc23977b839007e619727b22b98cc97666d4b1e60",
     image = "index.docker.io/dragonflyoss/client",
+    tag = "latest",
 )
 oci.pull(
     name = "dragonfly_client_base_linux_arm64",
-    digest = "sha256:b545bc84116e9543a23bcf316558c67c1a6a108d43acfebe1014d08c209c898b",
+    digest = "sha256:cba45e5a7fb2ac834a1705f8d114d9152f4cadfe77248af12d827d6571a74350",
     image = "index.docker.io/dragonflyoss/client",
+    tag = "latest",
 )
 # LINT.ThenChange(//src/third_party/dragonflyoss/client/BUILD.bazel:dragonfly-client-base-images)
 
@@ -144,11 +149,13 @@ oci.pull(
     name = "rawfile_localpv_base_linux_amd64",
     digest = "sha256:3f5e3bd60011fe29f1581a8661cfc384bf542ea3b86d25703a6e801cb553b06f",
     image = "index.docker.io/openebs/rawfile-localpv",
+    tag = "v0.15.3",
 )
 oci.pull(
     name = "rawfile_localpv_base_linux_arm64",
     digest = "sha256:47bd4005573f813da1b7c9adc0e4b1f557c931e365ae9540db06ae0a936f6906",
     image = "index.docker.io/openebs/rawfile-localpv",
+    tag = "v0.15.3",
 )
 # LINT.ThenChange(//src/third_party/openebs/rawfile-localpv/BUILD.bazel:rawfile-localpv-base-images)
 
@@ -157,11 +164,13 @@ oci.pull(
     name = "workspace_snapshot_catalog_base_linux_amd64",
     digest = "sha256:a8a6666cb7b13df7d18fd65b4264c2edafbce92acc0f32c423b5470d7d717665",
     image = "gcr.io/distroless/static-debian13",
+    tag = "latest",
 )
 oci.pull(
     name = "workspace_snapshot_catalog_base_linux_arm64_v8",
     digest = "sha256:63c8322db7adc53a501d276c2c3285e41fb9a9628d01809dfa60e1c925b3cf38",
     image = "gcr.io/distroless/static-debian13",
+    tag = "latest",
 )
 
 # The workspace backup proxy retains the pinned rclone runtime while adding
@@ -171,13 +180,15 @@ oci.pull(
     name = "workspace_backup_proxy_base_linux_amd64",
     digest = "sha256:4055fb65b7a975caf3cb54a94bf12713e81947d6f3d0bb221907a05b0f6ab390",
     image = "index.docker.io/rclone/rclone",
+    tag = "1.75.1",
 )
 oci.pull(
     name = "workspace_backup_proxy_base_linux_arm64_v8",
     digest = "sha256:91a77202e418409fa20be95def08e438c107d81046a2ebb5a1da1fdfeb212b3a",
     image = "index.docker.io/rclone/rclone",
+    tag = "1.75.1",
 )
-# LINT.ThenChange(//src/infra/tools/workspace_backup_proxy/BUILD.bazel:workspace-backup-proxy-base-images,//src/infra/tools/workspace_backup_proxy/workspace-backup-proxy_boundary_test.sh:workspace-backup-proxy-pinned-rclone)
+# LINT.ThenChange(//src/infra/tools/workspace_backup_proxy/BUILD.bazel:workspace-backup-proxy-base-images)
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 apt.sources_list(
@@ -220,28 +231,32 @@ use_repo(apt, "workspace_ssh_packages")
 # the static Kubernetes record reconciler built below.
 oci.pull(
     name = "headscale_base_linux_amd64",
-    digest = "sha256:9a4d883997cbe9de8ff58e8e11c37c204a25bd76d4c0920d16e0d944bbe05fb8",
+    digest = "sha256:e690ce7e5551a684f1715d681bdd6714e4ffd44ecdb0c8aaf02d83f93103a1c7",
     image = "ghcr.io/juanfont/headscale",
+    tag = "0.29.4",
 )
 oci.pull(
     name = "headscale_base_linux_arm64_v8",
-    digest = "sha256:7816f7cdc37b17fda48307a2c956a10c4abae471f776a43505f51ee1f0ad5ac9",
+    digest = "sha256:2df4cb333db8496801780b8b15ac13026dbe5c0b5207fca4abdde33e1cffaa31",
     image = "ghcr.io/juanfont/headscale",
+    tag = "0.29.4",
 )
 
 # The local Floci control plane extends the exact upstream k3s filesystem with
 # repository-owned startup and air-gap image contracts.
 # LINT.IfChange(floci-k3s-version)
-# Runtime7 keeps the v1.36.1 base and assigns asymmetric shared CPU capacity.
+# Runtime1 moves to the v1.36.5 base and assigns asymmetric shared CPU capacity.
 oci.pull(
     name = "k3s_base_linux_amd64",
-    digest = "sha256:97ee2717a5421dd314fe96825fd7b64b59cce6271f0ddce01466e8778bc223bd",
+    digest = "sha256:81fc7349ba265f842f9b67311fabd9e7d72698798ba513b7cdf41ffdf1e923e4",
     image = "index.docker.io/rancher/k3s",
+    tag = "v1.36.5-k3s1",
 )
 oci.pull(
     name = "k3s_base_linux_arm64_v8",
-    digest = "sha256:5ce2a98f009b4b6bc668dd894df232aff45b2068b7756aab899d3023c34c78c6",
+    digest = "sha256:4ceb591dd1e592b98b7c51ff3bdb7143914e1bee0677e7bf3c4f6addde2c93b3",
     image = "index.docker.io/rancher/k3s",
+    tag = "v1.36.5-k3s1",
 )
 # LINT.ThenChange(//src/third_party/k3s-io/k3s/images.toml:floci-k3s-version)
 
@@ -249,13 +264,15 @@ oci.pull(
 # tooling out of its production image.
 oci.pull(
     name = "node_base_linux_amd64",
-    digest = "sha256:979dc379a2fb11d76d9ae0257ea4559e36b533088b062ff2f93d771b11a76f76",
+    digest = "sha256:85482a8359e1524bd1278f5b418bb397bbebbf2b5ceeea7ec13a9e640e2c1911",
     image = "gcr.io/distroless/nodejs24-debian13",
+    tag = "latest",
 )
 oci.pull(
     name = "node_base_linux_arm64_v8",
-    digest = "sha256:595acbac29c7b4a64fe66616414f4e9c6f8bcf9f7dc06e5170e12a408c6d9eab",
+    digest = "sha256:26f548b31653cec660bc838cf126b3d5eb028030d479f05672e0550b93a56b75",
     image = "gcr.io/distroless/nodejs24-debian13",
+    tag = "latest",
 )
 
 # LINT.IfChange(ray-version)
@@ -265,24 +282,28 @@ oci.pull(
     name = "ray_base_linux_amd64",
     digest = "sha256:7f16ff8f5df93cd2d8aa701242b3e4f2dedc69647f2d05ccdd43a11cbbdca603",
     image = "index.docker.io/rayproject/ray",
+    tag = "2.59.0",
 )
 oci.pull(
     name = "ray_base_linux_arm64_v8",
     digest = "sha256:eb8247d53a5f210b1b3a93d454a9d51f784b27d224a44514c4c0d598b780f15b",
     image = "index.docker.io/rayproject/ray",
+    tag = "2.59.0",
 )
 
 # Coder's minimal image supplies the non-root user, Git, curl, and the shell
 # needed to bootstrap an agent. Mise owns every development tool above it.
 oci.pull(
     name = "workspace_dev_base_linux_amd64",
-    digest = "sha256:00c4753ef9c993214d8f22550566db54126c2f37d982191b72fae6508bce3f80",
+    digest = "sha256:a293349afdd2327c62c06a91e40046092b4bea1bdb414b296602ebd49359e510",
     image = "index.docker.io/codercom/example-minimal",
+    tag = "latest",
 )
 oci.pull(
     name = "workspace_dev_base_linux_arm64_v8",
-    digest = "sha256:c7b1dc99298e9fb34145f65f5365220b696b28c12d3858a54e0232b3a71a44c2",
+    digest = "sha256:c188d0d8db807466fec9986cb648f6e99b131890c39641e70ffb88917cdd50ff",
     image = "index.docker.io/codercom/example-minimal",
+    tag = "latest",
 )
 
 # LINT.ThenChange(//pyproject.toml:ray-version)
@@ -343,16 +364,6 @@ kubernetes_schemas(
 http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-
-http_archive(
-    name = "dragonfly_client_source",
-    build_file_content = "filegroup(name = \"all_files\", srcs = glob([\"**\"]), visibility = [\"//visibility:public\"])",
-    patch_args = ["-p1"],
-    patches = ["//src/third_party/dragonflyoss/client:source-date-epoch-v1.5.2.patch"],
-    sha256 = "09e65ef3ac7837890c0d4ed964fc447586a30b55bc1a78101dcd957362606ca0",
-    strip_prefix = "client-8212ee1a04483eddf2b25c7039b58ea11b01a97e",
-    urls = ["https://github.com/dragonflyoss/client/archive/8212ee1a04483eddf2b25c7039b58ea11b01a97e.tar.gz"],
-)
 
 http_archive(
     name = "rawfile_localpv_source",
