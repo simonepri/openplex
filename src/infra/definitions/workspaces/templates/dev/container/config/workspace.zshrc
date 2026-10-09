@@ -4,6 +4,11 @@ autoload -Uz colors promptinit
 colors
 setopt PROMPT_SUBST
 
+# Ensure user binaries (~/.local/bin for uv tools) precede standard system paths
+typeset -U path PATH
+path=("${HOME}/.local/bin" "${path[@]}")
+export PATH
+
 
 # Command history configuration
 HISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/zsh/history"
@@ -52,14 +57,22 @@ fi
 PURE_CMD_MAX_EXEC_TIME=1
 zstyle ':prompt:pure:host' show no
 promptinit
-prompt pure
-prompt_pure_precmd
-psvar[13]=
-prompt_pure_state[username]=""
-parts=("${(@s/${prompt_newline}/)PROMPT}")
-PROMPT="${parts[1]}${prompt_newline}%F{${snazzy[fg]:-white}}%* ${parts[2]}"
+if [[ -n "${prompt_themes[(r)pure]}" ]]; then
+  prompt pure
+  if (( $+functions[prompt_pure_precmd] )); then
+    prompt_pure_precmd
+    psvar[13]=
+    prompt_pure_state[username]=""
+    parts=("${(@s/${prompt_newline}/)PROMPT}")
+    PROMPT="${parts[1]}${prompt_newline}%F{${snazzy[fg]:-white}}%* ${parts[2]}"
+  fi
+fi
 
 alias reboot='reboot'
+alias nano='micro'
+alias vim='nvim'
+export EDITOR=micro
+export VISUAL=micro
 
 # Modern file navigation and S3 protection defaults
 if (( $+commands[eza] )); then

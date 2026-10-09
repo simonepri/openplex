@@ -68,7 +68,7 @@ data "coder_parameter" "accelerator_count" {
 data "coder_parameter" "cpu" {
   name         = "cpu"
   display_name = "CPU"
-  description  = "Workspace guaranteed CPU request in vCPU. The selected placement supports ${local.workspace_cpu.min}-${local.workspace_cpu.max} vCPU."
+  description  = "Workspace guaranteed CPU request in vCPU."
   default      = tostring(local.workspace_cpu.default)
   type         = "number"
   form_type    = "slider"
@@ -84,7 +84,7 @@ data "coder_parameter" "cpu" {
 data "coder_parameter" "cpu_burst" {
   name         = "cpu_burst"
   display_name = "CPU (Burst)"
-  description  = "Workspace burstable CPU headroom above base in vCPU. Bursts to idle host cores without CFS throttling (up to +${local.workspace_cpu.max - local.workspace_cpu.min} vCPU)."
+  description  = "Workspace burstable CPU headroom above base in vCPU. Bursts to idle host cores without CFS throttling."
   default      = tostring(max(0, min(64 - local.workspace_cpu.default, local.workspace_cpu.max - local.workspace_cpu.default)))
   type         = "number"
   form_type    = "slider"
@@ -100,7 +100,7 @@ data "coder_parameter" "cpu_burst" {
 data "coder_parameter" "memory_gib" {
   name         = "memory_gib"
   display_name = "Memory"
-  description  = "Workspace guaranteed RAM request in GiB. The selected placement supports ${local.workspace_memory.min}-${local.workspace_memory.max} GiB."
+  description  = "Workspace guaranteed RAM request in GiB."
   default      = tostring(local.workspace_memory.default)
   type         = "number"
   form_type    = "slider"
@@ -116,7 +116,7 @@ data "coder_parameter" "memory_gib" {
 data "coder_parameter" "memory_burst_gib" {
   name         = "memory_burst_gib"
   display_name = "Memory (Burst)"
-  description  = "Workspace burstable memory headroom above RAM in GiB, backed by host swap (up to +${local.workspace_memory.max - local.workspace_memory.min} GiB)."
+  description  = "Workspace burstable memory headroom above RAM in GiB, backed by host swap."
   default      = tostring(max(0, min(8, local.workspace_memory.max - local.workspace_memory.default)))
   type         = "number"
   form_type    = "slider"
@@ -132,7 +132,7 @@ data "coder_parameter" "memory_burst_gib" {
 data "coder_parameter" "home_disk_gib" {
   name         = "home_disk_gib"
   display_name = "Workspace disk"
-  description  = "Persistent disk for the home and repository directories. Available range: ${local.workspace_storage.min}-${local.workspace_storage.max} GiB. Reducing disk size requires an explicit backup selector in 'Restore from backup'."
+  description  = "Persistent disk for the home and repository directories. Reducing disk size requires an explicit backup selector in 'Restore from backup'.${local.is_ebs_storage ? "\n\nMonthly cost: $0.08 per GiB (e.g. 100 GiB = $8/month)." : ""}"
   default      = tostring(local.workspace_storage.default)
   type         = "number"
   form_type    = "slider"
@@ -142,6 +142,42 @@ data "coder_parameter" "home_disk_gib" {
   validation {
     min = local.workspace_storage.min
     max = local.workspace_storage.max
+  }
+}
+
+data "coder_parameter" "disk_throughput_mbps" {
+  count = local.is_ebs_storage ? 1 : 0
+
+  name         = "disk_throughput_mbps"
+  display_name = "Disk sequential throughput (MB/s)"
+  description  = "Provisioned sequential throughput.\n\nExtra monthly cost: $0.04 per MB/s above 125 MB/s (e.g. 500 MB/s = +$15/month)."
+  default      = "500"
+  type         = "number"
+  form_type    = "slider"
+  mutable      = true
+  order        = 27
+
+  validation {
+    min = 125
+    max = 1000
+  }
+}
+
+data "coder_parameter" "disk_iops" {
+  count = local.is_ebs_storage ? 1 : 0
+
+  name         = "disk_iops"
+  display_name = "Disk random 4K IOPS"
+  description  = "Provisioned random 4K IOPS.\n\nExtra monthly cost: $0.005 per IOPS above 3,000 (e.g. 8,000 IOPS = +$25/month)."
+  default      = "8000"
+  type         = "number"
+  form_type    = "slider"
+  mutable      = true
+  order        = 28
+
+  validation {
+    min = 3000
+    max = 16000
   }
 }
 
@@ -156,7 +192,7 @@ data "coder_parameter" "restore_selector" {
   ephemeral    = true
   form_type    = "input"
   mutable      = true
-  order        = 27
+  order        = 29
   styling      = jsonencode({ placeholder = "Verified backup selector" })
 
   validation {
@@ -173,7 +209,7 @@ data "coder_parameter" "ssh_enabled" {
   type         = "bool"
   form_type    = "checkbox"
   mutable      = true
-  order        = 28
+  order        = 30
 }
 
 data "coder_parameter" "ssh_public_key" {
@@ -183,15 +219,16 @@ data "coder_parameter" "ssh_public_key" {
     **macOS setup: run this once, then paste the copied public key below:**
 
     ```sh
-    key=~/.ssh/${var.access_alias_domain}_ed25519; mkdir -p ~/.ssh && ssh-keygen -t ed25519 -f "$key" && pbcopy < "$key.pub"
+    key=~/.ssh/id_ed25519; mkdir -p ~/.ssh && { [ -f "$key" ] || ssh-keygen -t ed25519 -f "$key"; } && pbcopy < "$key.pub"
     ```
 
-    The private key stays on your Mac. A non-empty value replaces the saved
+    The command reuses your default Ed25519 key, or creates one, so `ssh`
+    offers it without any `~/.ssh/config` entry. The private key stays on your Mac. A non-empty value replaces the saved
     public key. Disabling SSH keeps the key for later use.
   EOT
   default      = ""
   mutable      = true
-  order        = 29
+  order        = 31
   styling      = jsonencode({ disabled = data.coder_parameter.ssh_enabled.value != "true" })
 
   validation {

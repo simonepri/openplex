@@ -11,7 +11,7 @@ ui {
 }
 
 web_client {
-    font "Menlo, Monaco, monospace"
+    font "monospace"
 }
 
 themes {

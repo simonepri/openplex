@@ -1,0 +1,20 @@
+# Configures OpenTelemetry export, feedback, and analytics defaults for Codex in workspace containers.
+
+[otel]
+environment = "workspace"
+log_user_prompt = false
+
+[otel.exporter.otlp-grpc]
+endpoint = "http://otel-collector.otel-system.svc.cluster.local:4317"
+
+[otel.trace_exporter.otlp-grpc]
+endpoint = "http://otel-collector.otel-system.svc.cluster.local:4317"
+
+[otel.metrics_exporter.otlp-grpc]
+endpoint = "http://otel-collector.otel-system.svc.cluster.local:4317"
+
+[feedback]
+enabled = false
+
+[analytics]
+enabled = false

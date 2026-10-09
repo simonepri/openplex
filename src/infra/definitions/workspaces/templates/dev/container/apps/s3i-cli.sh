@@ -40,8 +40,6 @@ get_parquet_sources() {
   fi
 
   local search_paths=(
-    "/fs/s3/${target_cell}/meta/inventory/*/*/*/*.parquet"
-    "/fs/s3/${target_cell}/meta/inventory/*/*/*/*/*.parquet"
     "/fs/s3/${target_cell}/meta/inventory/**/*.parquet"
     "/fs/s3/${target_cell}/meta/dt=latest/*.parquet"
     "/fs/s3/${target_cell}/meta/**/*.parquet"
@@ -118,7 +116,7 @@ run_find() {
     local sql_pattern="${pattern//\*/%}"
     sql_pattern="${sql_pattern//\?/_}"
     [[ ${sql_pattern} != *%* ]] && sql_pattern="%${sql_pattern}%"
-    where_clauses+=("key ILIKE '${sql_pattern}'")
+    where_clauses+=("coalesce(COLUMNS('^(key|name)$')) ILIKE '${sql_pattern}'")
   fi
 
   if [[ -n ${min_size} ]]; then
@@ -146,10 +144,10 @@ run_find() {
     SELECT 
       regexp_extract(filename, '/fs/s3/([^/]+)/meta', 1) AS cell,
       format_bytes(size) AS size,
-      strftime(last_modified, '%Y-%m-%d %H:%M:%S') AS modified,
-      storage_class,
-      key
-    FROM read_parquet('${parquet_path}', filename=true)
+      strftime(coalesce(COLUMNS('^(last_modified_date|updated)$')), '%Y-%m-%d %H:%M:%S') AS modified,
+      coalesce(COLUMNS('^(storage_class|storageClass)$')) AS storage_class,
+      coalesce(COLUMNS('^(key|name)$')) AS key
+    FROM read_parquet('${parquet_path}', filename=true, union_by_name=true)
     ${where_sql}
     ORDER BY size DESC
     LIMIT ${limit};
@@ -178,14 +176,14 @@ run_ls() {
   local query="
     SELECT 
       regexp_extract(filename, '/fs/s3/([^/]+)/meta', 1) AS cell,
-      CASE WHEN key LIKE '${prefix}%/%' THEN 
-        concat('${prefix}', split_part(substr(key, length('${prefix}') + 1), '/', 1), '/')
-      ELSE key END AS item,
-      CASE WHEN key LIKE '${prefix}%/%' THEN 'DIR' ELSE format_bytes(size) END AS size,
-      strftime(max(last_modified), '%Y-%m-%d %H:%M:%S') AS modified
-    FROM read_parquet('${parquet_path}', filename=true)
-    WHERE key LIKE '${prefix}%'
-    GROUP BY cell, item, (CASE WHEN key LIKE '${prefix}%/%' THEN 'DIR' ELSE format_bytes(size) END)
+      CASE WHEN coalesce(COLUMNS('^(key|name)$')) LIKE '${prefix}%/%' THEN
+        concat('${prefix}', split_part(substr(coalesce(COLUMNS('^(key|name)$')), length('${prefix}') + 1), '/', 1), '/')
+      ELSE coalesce(COLUMNS('^(key|name)$')) END AS item,
+      CASE WHEN coalesce(COLUMNS('^(key|name)$')) LIKE '${prefix}%/%' THEN 'DIR' ELSE format_bytes(size) END AS size,
+      strftime(max(coalesce(COLUMNS('^(last_modified_date|updated)$'))), '%Y-%m-%d %H:%M:%S') AS modified
+    FROM read_parquet('${parquet_path}', filename=true, union_by_name=true)
+    WHERE coalesce(COLUMNS('^(key|name)$')) LIKE '${prefix}%'
+    GROUP BY cell, item, (CASE WHEN coalesce(COLUMNS('^(key|name)$')) LIKE '${prefix}%/%' THEN 'DIR' ELSE format_bytes(size) END)
     ORDER BY item ASC
     LIMIT 200;
   "
@@ -213,13 +211,13 @@ run_du() {
   local query="
     SELECT 
       regexp_extract(filename, '/fs/s3/([^/]+)/meta', 1) AS cell,
-      CASE WHEN key LIKE '${prefix}%/%' THEN 
-        concat('${prefix}', split_part(substr(key, length('${prefix}') + 1), '/', 1), '/')
-      ELSE key END AS prefix,
+      CASE WHEN coalesce(COLUMNS('^(key|name)$')) LIKE '${prefix}%/%' THEN
+        concat('${prefix}', split_part(substr(coalesce(COLUMNS('^(key|name)$')), length('${prefix}') + 1), '/', 1), '/')
+      ELSE coalesce(COLUMNS('^(key|name)$')) END AS prefix,
       count(*) AS object_count,
       format_bytes(sum(size)) AS total_size
-    FROM read_parquet('${parquet_path}', filename=true)
-    WHERE key LIKE '${prefix}%'
+    FROM read_parquet('${parquet_path}', filename=true, union_by_name=true)
+    WHERE coalesce(COLUMNS('^(key|name)$')) LIKE '${prefix}%'
     GROUP BY cell, prefix
     ORDER BY sum(size) DESC
     LIMIT 200;
@@ -236,11 +234,14 @@ run_sql() {
   fi
 
   local query="
-    CREATE TEMP VIEW objects AS 
-      SELECT 
+    CREATE TEMP VIEW objects AS
+      SELECT
         regexp_extract(filename, '/fs/s3/([^/]+)/meta', 1) AS cell,
-        *
-      FROM read_parquet('${parquet_path}', filename=true);
+        coalesce(COLUMNS('^(key|name)$')) AS key,
+        size,
+        coalesce(COLUMNS('^(last_modified_date|updated)$')) AS last_modified,
+        coalesce(COLUMNS('^(storage_class|storageClass)$')) AS storage_class
+      FROM read_parquet('${parquet_path}', filename=true, union_by_name=true);
     ${custom_query}
   "
 

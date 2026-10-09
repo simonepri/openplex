@@ -30,6 +30,12 @@ runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
 mkdir -p "${runtime_dir}"
 chmod 0700 "${runtime_dir}"
 mkdir -p "${XDG_CACHE_HOME:-/tmp/cache}" "${BAZEL_OUTPUT_ROOT:-/tmp/bazel}" "${CARGO_TARGET_DIR:-/tmp/cargo-target}"
+local_bin="${HOME}/.local/bin"
+mkdir -p "${local_bin}"
+case ":${PATH}:" in
+  *":${local_bin}:"*) ;;
+  *) export PATH="${local_bin}:${PATH}" ;;
+esac
 mounts_ready_file="${runtime_dir}/workspace-mounts-ready"
 restore_ready_file="${runtime_dir}/workspace-restore-ready"
 setup_ready_file="${runtime_dir}/workspace-setup-ready"
@@ -158,7 +164,7 @@ repair_interrupted_rust() {
   rust_version="$(
     mise ls --json rust \
       | jq -er '
-        map(.requested_version) | unique |
+        map(.requested_version | strings) | unique |
         select(length == 1) | .[0] | strings |
         select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
       '
@@ -183,7 +189,7 @@ repair_interrupted_zig() {
   zig_version="$(
     mise ls --json zig \
       | jq -er '
-        map(.requested_version) | unique |
+        map(.requested_version | strings) | unique |
         select(length == 1) | .[0] | strings |
         select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
       '
@@ -223,14 +229,28 @@ configure_codex_sandbox() {
   fi
 }
 
+configure_agy_telemetry() {
+  /usr/bin/python3 /usr/local/lib/agy-otel/hook.py install || true
+}
+
+
 install_tools() {
   cd "${WORKSPACE_CHECKOUT_PATH}"
   local repo_mise_file="${WORKSPACE_CHECKOUT_PATH}/mise.toml"
   local global_mise_file="/etc/workspace/config/config.toml"
   local hash_file="${workspace_volume}/.mise.sha256"
   local current_hash=""
+  local github_token=""
 
   configure_codex_sandbox
+  configure_agy_telemetry
+
+  if [[ -z ${GITHUB_TOKEN:-} ]] && command -v coder >/dev/null 2>&1; then
+    github_token="$(coder external-auth access-token github 2>/dev/null || true)"
+    if [[ -n ${github_token} ]]; then
+      export GITHUB_TOKEN="${github_token}"
+    fi
+  fi
 
   local hash_inputs=()
   if [[ -f ${global_mise_file} ]]; then
@@ -244,28 +264,27 @@ install_tools() {
     mise trust "${repo_mise_file}" >/dev/null 2>&1 || true
   fi
 
+  local mise_reinstalled=true
   if [[ ${#hash_inputs[@]} -gt 0 ]]; then
     current_hash="$(sha256sum "${hash_inputs[@]}" | sha256sum | cut -d' ' -f1)"
     if [[ -f ${hash_file} ]] && [[ "$(<"${hash_file}")" == "${current_hash}" ]]; then
       printf '[setup] mise configs unchanged; skipping tool reinstall.\n'
-      return 0
+      mise_reinstalled=false
     fi
   fi
-  if [[ -z ${GITHUB_TOKEN:-} ]] && command -v coder >/dev/null 2>&1; then
-    github_token="$(coder external-auth access-token github 2>/dev/null || true)"
-    if [[ -n ${github_token} ]]; then
-      export GITHUB_TOKEN="${github_token}"
-    fi
-  fi
-  repair_interrupted_zig
-  CI=1 mise install zig
-  repair_interrupted_rust
-  CI=1 mise install rust
-  CI=1 mise install
 
-  if [[ -n ${current_hash} ]]; then
-    printf '%s\n' "${current_hash}" >"${hash_file}"
+  if [[ ${mise_reinstalled} == true ]]; then
+    repair_interrupted_zig
+    CI=1 mise install zig
+    repair_interrupted_rust
+    CI=1 mise install rust
+    CI=1 mise install
+
+    if [[ -n ${current_hash} ]]; then
+      printf '%s\n' "${current_hash}" >"${hash_file}"
+    fi
   fi
+
 }
 
 wait_for_ready_marker "${mounts_ready_file}"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Connects to the Kopia snapshot broker, verifies retention policies, and executes snapshot restores if requested.
+# Connects to the Kopia snapshot repository using the repository password file, verifies retention policies, and executes snapshot restores if requested.
 
 set -euo pipefail
 
@@ -9,25 +9,8 @@ set -euo pipefail
 : "${WORKSPACE_MACHINE:?workspace machine name was not injected}"
 : "${KOPIA_REPOSITORY_ACCESS_KEY_ID:?workspace backup proxy access key was not injected}"
 : "${KOPIA_REPOSITORY_SECRET_ACCESS_KEY:?workspace backup proxy secret key was not injected}"
-: "${KOPIA_SNAPSHOT_BROKER_URL:?snapshot broker URL was not injected}"
 : "${WORKSPACE_USERNAME:?workspace user was not injected}"
 : "${WORKSPACE_BOOT_TOKEN:?workspace boot token was not injected}"
-: "${CODER_AGENT_TOKEN:?Coder agent token was not injected}"
-
-case "${KOPIA_SNAPSHOT_BROKER_URL}" in
-  https://ctrl-*-services.tailnet.k8s.*:8444 | https://ctrl-*-services.tailnet.c.*:8444) ;;
-  *)
-    printf '%s\n' 'snapshot broker must use the private ctrl tailnet runtime alias' >&2
-    exit 1
-    ;;
-esac
-case "${KOPIA_SNAPSHOT_BROKER_URL#https://}" in
-  */*)
-    printf '%s\n' 'snapshot broker URL must not contain a path' >&2
-    exit 1
-    ;;
-  *) ;;
-esac
 
 restore_script="${1:-/etc/workspace/config/kopia-restore.sh}"
 workspace_volume="${2:-/var/lib/workspace}"
@@ -38,10 +21,8 @@ mounts_ready_file="${runtime_dir}/workspace-mounts-ready"
 snapshots_ready_file="${runtime_dir}/workspace-snapshots-ready"
 restore_ready_file="${runtime_dir}/workspace-restore-ready"
 repository_endpoint=http://127.0.0.1:19847
-tailnet_http_proxy=http://127.0.0.1:1055
 
 responder_pid=
-curl_config=
 
 stop_healthcheck_responder() {
   if [[ -n ${responder_pid:-} ]]; then
@@ -53,9 +34,6 @@ stop_healthcheck_responder() {
 
 cleanup() {
   stop_healthcheck_responder
-  if [[ -n ${curl_config:-} ]]; then
-    rm -f -- "${curl_config}" 2>/dev/null || true
-  fi
 }
 trap cleanup EXIT INT TERM
 
@@ -64,6 +42,7 @@ start_healthcheck_responder() {
   read -r -a ports <<<"${WORKSPACE_APP_HEALTHCHECK_PORTS:-6768 8048 13337 13339}"
   python3 - "${ports[@]}" <<'EOF' >/dev/null 2>&1 &
 import http.server
+import os
 import signal
 import socketserver
 import sys
@@ -109,7 +88,7 @@ def sig_handler(sig, frame):
             s.server_close()
         except Exception:
             pass
-    sys.exit(0)
+    os._exit(0)
 
 signal.signal(signal.SIGTERM, sig_handler)
 signal.signal(signal.SIGINT, sig_handler)
@@ -195,7 +174,22 @@ if [[ ${is_restore} == false ]]; then
   write_ready_marker "${restore_ready_file}"
 fi
 
-printf 'Connecting to Kopia snapshot broker...\n'
+password_file="${KOPIA_PASSWORD_FILE:-/var/run/workspace/snapshot-repository/password}"
+
+if [[ -z ${password_file} || ! -f ${password_file} ]]; then
+  if [[ ${is_restore} == true ]]; then
+    printf '%s\n' 'snapshot restore requested but snapshot repository password file is not configured' >&2
+    exit 1
+  fi
+  printf 'Snapshots are off: snapshot repository password file is not configured.\n'
+  exit 0
+fi
+
+# Kopia reads the repository password only from KOPIA_PASSWORD.
+KOPIA_PASSWORD="$(<"${password_file}")"
+export KOPIA_PASSWORD
+
+printf 'Connecting to Kopia snapshot repository...\n'
 
 export AWS_ACCESS_KEY_ID="${KOPIA_REPOSITORY_ACCESS_KEY_ID}"
 export AWS_SECRET_ACCESS_KEY="${KOPIA_REPOSITORY_SECRET_ACCESS_KEY}"
@@ -205,35 +199,6 @@ mkdir -p "$(dirname "${KOPIA_CONFIG_PATH}")"
 rm -f "${KOPIA_CONFIG_PATH}"
 
 wait_for_backup_proxy
-
-if [[ -z ${KOPIA_PASSWORD:-} ]]; then
-  curl_config="$(mktemp)"
-  chmod 0600 "${curl_config}"
-  printf 'header = "Authorization: Bearer %s"\n' "${CODER_AGENT_TOKEN}" >"${curl_config}"
-  repository_password_response="$(
-    curl --config "${curl_config}" \
-      --proxy "${tailnet_http_proxy}" \
-      --fail-with-body \
-      --silent \
-      --show-error \
-      --connect-timeout 2 \
-      --max-time 5 \
-      --request POST \
-      "${KOPIA_SNAPSHOT_BROKER_URL}/v1/snapshots/repository" 2>/dev/null || true
-  )"
-  rm -f -- "${curl_config}" 2>/dev/null || true
-  curl_config=
-  KOPIA_PASSWORD="$(jq -er '.repositoryPassword | strings | select(test("^[A-Za-z0-9_-]{43}$"))' \
-    <<<"${repository_password_response}" 2>/dev/null || true)"
-  if [[ -z ${KOPIA_PASSWORD:-} ]]; then
-    if command -v sha256sum >/dev/null 2>&1; then
-      KOPIA_PASSWORD="$(printf '%s' "kopia-repository-password-${CODER_WORKSPACE_OWNER_ID:-default}" | sha256sum | awk '{print substr($1, 1, 43)}')"
-    else
-      KOPIA_PASSWORD="$(printf '%s' "kopia-repository-password-${CODER_WORKSPACE_OWNER_ID:-default}" | shasum -a 256 | awk '{print substr($1, 1, 43)}')"
-    fi
-  fi
-  export KOPIA_PASSWORD
-fi
 
 kopia=(mise exec -- kopia)
 

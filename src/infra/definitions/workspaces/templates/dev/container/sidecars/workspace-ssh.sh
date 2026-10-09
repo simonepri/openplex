@@ -64,6 +64,9 @@ touch "${ignore_file}"
 if ! grep -Fqx -- '.workspace/ssh' "${ignore_file}"; then
   printf '%s\n' '.workspace/ssh' >>"${ignore_file}"
 fi
+if ! grep -Fqx -- 'home/.config/coderv2/session' "${ignore_file}"; then
+  printf '%s\n' 'home/.config/coderv2/session' >>"${ignore_file}"
+fi
 mkdir -p "${host_key_dir}"
 chmod 700 "${host_key_dir}"
 
@@ -76,11 +79,25 @@ if [ ! -f "${host_key}" ]; then
 fi
 chmod 600 "${host_key}"
 
+if [ -n "${CODER_SESSION_TOKEN:-}" ]; then
+  coder_home="${HOME:-/home/coder}"
+  coder_config_dir="${CODER_CONFIG_DIR:-${coder_home}/.config/coderv2}"
+  mkdir -p "${coder_config_dir}"
+  chmod 700 "${coder_config_dir}"
+  printf '%s\n' "${CODER_SESSION_TOKEN}" >"${coder_config_dir}/session"
+  chmod 600 "${coder_config_dir}/session"
+  if [ -n "${CODER_URL:-}" ]; then
+    printf '%s\n' "${CODER_URL}" >"${coder_config_dir}/url"
+    chmod 600 "${coder_config_dir}/url"
+  fi
+fi
+
 nss_wrapper="$(find /usr/lib -name libnss_wrapper.so -print -quit)"
 export LD_PRELOAD="${nss_wrapper}"
 export NSS_WRAPPER_PASSWD="${runtime_dir}/passwd"
 export NSS_WRAPPER_GROUP="${runtime_dir}/group"
-session_environment="LD_PRELOAD=${nss_wrapper} NSS_WRAPPER_GROUP=${runtime_dir}/group NSS_WRAPPER_PASSWD=${runtime_dir}/passwd MISE_GLOBAL_CONFIG_FILE=/etc/workspace/config/config.toml WORKSPACE_USERNAME=${WORKSPACE_USERNAME} CODER_WORKSPACE_NAME=${CODER_WORKSPACE_NAME} PATH=/home/coder/.local/share/mise/shims:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin${CODER_URL:+ CODER_URL=${CODER_URL}}${CODER_SESSION_TOKEN:+ CODER_SESSION_TOKEN=${CODER_SESSION_TOKEN}}${CODER_CLIENT_TLS_CA_FILE:+ CODER_CLIENT_TLS_CA_FILE=${CODER_CLIENT_TLS_CA_FILE}}"
+session_environment="LD_PRELOAD=${nss_wrapper} NSS_WRAPPER_GROUP=${runtime_dir}/group NSS_WRAPPER_PASSWD=${runtime_dir}/passwd MISE_GLOBAL_CONFIG_FILE=/etc/workspace/config/config.toml WORKSPACE_USERNAME=${WORKSPACE_USERNAME} CODER_WORKSPACE_NAME=${CODER_WORKSPACE_NAME} PATH=/home/coder/.local/bin:/home/coder/.local/share/mise/shims:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin${CODER_URL:+ CODER_URL=${CODER_URL}}${CODER_CONFIG_DIR:+ CODER_CONFIG_DIR=${CODER_CONFIG_DIR}}${CODER_CLIENT_TLS_CA_FILE:+ CODER_CLIENT_TLS_CA_FILE=${CODER_CLIENT_TLS_CA_FILE}}"
+unset CODER_SESSION_TOKEN WORKSPACE_BOOT_TOKEN
 
 exec "${sshd}" -D -e -f /dev/null \
   -o AllowUsers="${WORKSPACE_USERNAME}" \

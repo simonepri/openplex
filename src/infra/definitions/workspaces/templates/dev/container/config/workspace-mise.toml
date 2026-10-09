@@ -2,26 +2,30 @@
 
 [tools]
 # keep-sorted start
+"aqua:aws/aws-cli" = "2.37.10"
+"aqua:micro-editor/micro" = "2.0.15"
+"aqua:neovim/neovim" = "0.12.5"
 "cargo:ifttt-lint" = { version = "0.11.2", depends = "rust" }
-"github:coder/code-server" = "4.139.1"
-"github:lablup/all-smi" = "0.26.3"
+"github:buildbuddy-io/bazel" = { version = "5.0.492", bin = "bb" }
+"github:coder/code-server" = "4.141.0"
+"github:lablup/all-smi" = "0.27.0"
 "github:zasper-io/zasper" = "2.0.0"
-"npm:@getpaseo/cli" = { version = "0.10.1", depends = "node" }
-"npm:@simonepri/refined-antigravity-acp" = { version = "1.2.9", depends = "node", allow_low_downloads = true }
-antigravity-cli = "1.2.12"
-claude-code = "2.1.284"
+"npm:@getpaseo/cli" = { version = "0.11.1", depends = "node" }
+"npm:@simonepri/refined-antigravity-acp" = { version = "1.4.2", depends = "node", allow_low_downloads = true }
+antigravity-cli = "1.3.1"
+claude-code = "2.1.294"
 codex = "0.159.0"
 duckdb = "1.5.6"
 eza = "0.23.5"
 fd = "10.5.0"
 fzf = "0.74.4"
-herdr = "0.9.1"
+herdr = "0.9.3"
 kopia = "0.23.1"
 node = "24.21.0"
 python = "3.13.15"
 ripgrep = "15.2.0"
-rust = { version = "1.98.1", profile = "minimal" }
-uv = "0.12.19"
+rust = { version = "1.99.0", profile = "minimal" }
+uv = "0.12.23"
 zellij = "0.45.1"
 zig = "0.16.0"
 # keep-sorted end

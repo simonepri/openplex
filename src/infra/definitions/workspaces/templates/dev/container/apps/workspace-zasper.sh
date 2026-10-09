@@ -33,9 +33,7 @@ fi
 if [[ -n ${KOPIA_RESTORE_SELECTOR:-} && ${KOPIA_RESTORE_SELECTOR} != "__start-fresh__" ]]; then
   wait_for_boot_marker "${restore_ready_file}"
 fi
-if [[ -f ${setup_ready_file} ]]; then
-  wait_for_boot_marker "${setup_ready_file}"
-fi
+wait_for_boot_marker "${setup_ready_file}"
 rm -f -- "${ready_file}"
 
 write_ready_marker() {

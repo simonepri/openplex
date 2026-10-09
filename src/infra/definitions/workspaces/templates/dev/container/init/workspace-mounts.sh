@@ -47,7 +47,7 @@ fi
 # 3. S3 storage mounts check if present
 if [[ -d /fs/s3 ]]; then
   shopt -s nullglob
-  for s3_mount in /fs/s3/*; do
+  for s3_mount in /fs/s3/* /fs/s3/*/* /fs/s3/*/*/*; do
     if [[ -d ${s3_mount} ]]; then
       if ls -d "${s3_mount}" >/dev/null 2>&1; then
         printf '[mounts] S3 mount verified: %s\n' "${s3_mount}"
@@ -57,6 +57,12 @@ if [[ -d /fs/s3 ]]; then
     fi
   done
   shopt -u nullglob
+fi
+
+if [[ -z ${WORKSPACE_S3_TEAMS:-} ]]; then
+  printf 'No team storage: %s is not a member of any team on this cell; only legacy research data is mounted.\n' "${USER:-}"
+else
+  printf 'Team storage: %s; files written outside /fs/s3/<cell>/{home,scratch}/<team> are ephemeral.\n' "${WORKSPACE_S3_TEAMS}"
 fi
 
 write_ready_marker "${mounts_ready_file}"

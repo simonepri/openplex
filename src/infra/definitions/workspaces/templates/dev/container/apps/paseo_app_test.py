@@ -28,7 +28,7 @@ class WorkspaceAppsTest(unittest.TestCase):
         assert "value = local.paseo_app_hostname" in self.main
         assert 'data "coder_workspace_owner" "me" {}' in self.main
         assert re.search(
-            r'(?m)^\s*paseo_app_hostname\s*=\s*"paseo--\$\{data\.coder_workspace\.me\.name\}--\$\{local\.coder_owner_name\}\$\{local\.coder_app_host_suffix\}"$',
+            r'(?m)^\s*paseo_app_hostname\s*=\s*"paseo--\$\{lower\(data\.coder_workspace\.me\.name\)\}--\$\{local\.coder_owner_name\}\.\$\{var\.coder_app_domain\}"$',
             self.main,
         )
         assert not re.search(
@@ -124,18 +124,14 @@ class WorkspaceAppsTest(unittest.TestCase):
             r'(?m)^\s*ssh_enabled\s*=\s*data\.coder_parameter\.ssh_enabled\.value == "true" && data\.coder_parameter\.ssh_public_key\.value != ""$',
             self.main,
         )
-        assert 'resource "coder_app" "ssh"' in self.apps
-        assert "count        = local.ssh_enabled ? 1 : 0" in self.apps
-        assert "order        = 30" in self.apps
-        assert 'url          = "http://localhost:19848/ssh"' in self.apps
         assert (
-            'ssh_hostname = "${local.workspace_machine}.${local.selected_cell}.tailnet.${var.access_alias_domain}"'
+            'ssh_alias_hostname    = "${lower(data.coder_workspace.me.name)}.${local.owner_username}.${var.access_alias_domain}"'
             in self.main
         )
-        assert "ssh_port               = 2222" in self.main
-        assert (
-            'ssh_uri                = "ssh://${local.owner_username}@${local.ssh_hostname}:${local.ssh_port}"'
-            in self.main
+        assert re.search(r"(?m)^\s*ssh_port\s*=\s*22$", self.main)
+        assert re.search(
+            r'(?m)^\s*ssh_uri\s*=\s*"ssh://\$\{local\.owner_username\}@\$\{local\.ssh_hostname\}:\$\{local\.ssh_port\}"$',
+            self.main,
         )
         assert re.search(
             r'(?ms)env\s*\{\s*name\s*=\s*"SSH_URI"\s*value\s*=\s*local\.ssh_uri\s*\}', self.main
@@ -144,6 +140,15 @@ class WorkspaceAppsTest(unittest.TestCase):
             r'(?ms)env\s*\{\s*name\s*=\s*"VSCODE_SSH_URI"\s*value\s*=\s*local\.vscode_remote_ssh_url\s*\}',
             self.main,
         )
+
+    def test_template_rejects_coder_app_with_slug_ssh(self) -> None:
+        """Coder apps must not use the slug 'ssh' to avoid collision with workspace SSH routing."""
+        assert 'slug         = "ssh"' not in self.main
+        assert 'slug = "ssh"' not in self.main
+        app_slugs = re.findall(
+            r'resource\s+"coder_app"\s+"[^"]+"\s*\{[\s\S]*?slug\s*=\s*"([^"]+)"', self.main
+        )
+        assert "ssh" not in app_slugs
 
     def test_ssh_validation_accepts_wire_format_not_base64_shape(self) -> None:
         key_pattern = re.compile(
@@ -195,9 +200,7 @@ class WorkspaceAppsTest(unittest.TestCase):
         assert "count              = local.ssh_enabled ? 1 : 0" in self.main
 
     def test_coder_wildcard_hosts_are_bounded_to_access_parent_domain(self) -> None:
-        assert re.search(
-            r'(?m)^\s*coder_app_host_suffix\s*=\s*"\.\$\{local\.coder_access_host\}"$', self.main
-        )
+        assert "var.coder_app_domain" in self.main
 
     def test_workspace_paseo_script_uses_versionless_mise_exec(self) -> None:
         template = pathlib.Path(__file__).parents[2]
@@ -207,9 +210,6 @@ class WorkspaceAppsTest(unittest.TestCase):
         assert "npm:@getpaseo/cli@" not in paseo_sh, (
             "workspace-paseo.sh must not hardcode @getpaseo/cli versions; mise must resolve versions from config"
         )
-
-        assert "local.coder_access_authority == local.coder_access_host" in self.main
-        assert 'can(regex("^coder\\\\.' in self.main
 
     def test_template_import_skips_real_owner_name_constraints(self) -> None:
         assert re.search(

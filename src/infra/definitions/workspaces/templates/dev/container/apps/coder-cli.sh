@@ -3,6 +3,9 @@
 
 set -euo pipefail
 
+export CODER_TELEMETRY_ENABLE=false
+export CODER_DISABLE_NETWORK_TELEMETRY=true
+
 if [[ -z ${CODER_CLIENT_TLS_CA_FILE:-} && -r /tmp/workspace-ca-bundle.crt ]]; then
   export CODER_CLIENT_TLS_CA_FILE=/tmp/workspace-ca-bundle.crt
 fi
