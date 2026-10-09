@@ -1,68 +1,91 @@
 """Builds and tests the constrained Dragonfly Console SSO bridge."""
 
-# gazelle:resolve py sso //src/infra/tools/dragonfly_sso:dragonfly_sso
-
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_load")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/oci:defs.bzl", "oci_workload_publish")
 
+# gazelle:prefix go.invalid/internal/tools/dragonfly_sso
+
 package(default_visibility = ["//visibility:public"])
 
-py_test(
-    name = "sso_test",
-    srcs = ["sso_test.py"],
-    imports = ["."],
-    # keep
-    deps = ["//src/infra/tools/dragonfly_sso"],
+platform(
+    name = "linux_amd64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
 )
 
-py_binary(
-    name = "sso",
-    srcs = ["sso.py"],
-    visibility = ["//src:__subpackages__"],
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:linux",
+    ],
 )
 
-py_library(
+go_library(
+    name = "dragonfly_sso_lib",
+    srcs = ["main.go"],
+    importpath = "go.invalid/internal/tools/dragonfly_sso",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
     name = "dragonfly_sso",
-    srcs = ["sso.py"],
-    imports = ["../../.."],
-    visibility = ["//src:__subpackages__"],
+    embed = [":dragonfly_sso_lib"],
+    pure = "on",
+)
+
+go_test(
+    name = "dragonfly_sso_test",
+    srcs = ["main_test.go"],
+    embed = [":dragonfly_sso_lib"],
 )
 
 pkg_files(
-    name = "program_file",
-    srcs = ["sso.py"],
+    name = "binary_file",
+    srcs = [":dragonfly_sso"],
     attributes = pkg_attributes(mode = "0555"),
-    prefix = "/opt/dragonfly-sso",
+    prefix = "/ko-app",
+    renames = {"dragonfly_sso": "dragonfly-sso"},
+    strip_prefix = strip_prefix.files_only(),
 )
 
 pkg_tar(
-    name = "program_layer",
-    srcs = [":program_file"],
+    name = "binary_layer",
+    srcs = [":binary_file"],
+)
+
+platform_transition_filegroup(
+    name = "binary_layer_linux_amd64",
+    srcs = [":binary_layer"],
+    target_platform = ":linux_amd64",
+)
+
+platform_transition_filegroup(
+    name = "binary_layer_linux_arm64",
+    srcs = [":binary_layer"],
+    target_platform = ":linux_arm64",
 )
 
 oci_image(
     name = "image_linux_amd64",
     base = "@dragonfly_sso_base_linux_amd64",
-    entrypoint = [
-        "python3",
-        "/opt/dragonfly-sso/sso.py",
-    ],
-    tars = [":program_layer"],
+    entrypoint = ["/ko-app/dragonfly-sso"],
+    tars = [":binary_layer_linux_amd64"],
     user = "65532:65532",
 )
 
 oci_image(
     name = "image_linux_arm64",
     base = "@dragonfly_sso_base_linux_arm64_v8",
-    entrypoint = [
-        "python3",
-        "/opt/dragonfly-sso/sso.py",
-    ],
-    tars = [":program_layer"],
+    entrypoint = ["/ko-app/dragonfly-sso"],
+    tars = [":binary_layer_linux_arm64"],
     user = "65532:65532",
 )
 
@@ -74,23 +97,10 @@ oci_image_index(
     ],
 )
 
-oci_load(
-    name = "preload",
-    format = "oci",
-    image = ":image_multiarch",
-    repo_tags = ["docker.io/cluster/dragonfly-sso:v2.5.1-r2"],
-)
-
 oci_workload_publish(
     name = "publish",
     image = ":image_multiarch",
     publication_mode = "digest",
-)
-
-filegroup(
-    name = "preload_archive",
-    srcs = [":preload"],
-    output_group = "tarball",
 )
 
 package_sources()
