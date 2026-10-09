@@ -6,6 +6,13 @@ set -euo pipefail
 export KOPIA_CHECK_FOR_UPDATES=false
 export KOPIA_CONFIG_PATH="${KOPIA_CONFIG_PATH:-/tmp/workspace-kopia/repository.config}"
 
+password_file="${KOPIA_PASSWORD_FILE:-/var/run/workspace/snapshot-repository/password}"
+if [[ -f ${password_file} ]]; then
+  # Kopia reads the repository password only from KOPIA_PASSWORD.
+  KOPIA_PASSWORD="$(<"${password_file}")"
+  export KOPIA_PASSWORD
+fi
+
 workspace_volume="${TARGET_DIR:-${1:-/home/developer}}"
 
 snapshot="${KOPIA_RESTORE_SELECTOR:-}"

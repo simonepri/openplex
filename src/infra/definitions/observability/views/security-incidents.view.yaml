@@ -32,7 +32,7 @@ spec:
                 "name": "A",
                 "signal": "logs",
                 "filter": {
-                  "expression": "k8s_container_name IN ('falco', 'kyverno', 'envoy')"
+                  "expression": "k8s.container.name IN ('falco', 'kyverno', 'envoy') OR service.name = 'cloud-telemetry' OR log.source = 'network-policy'"
                 }
               }
             }

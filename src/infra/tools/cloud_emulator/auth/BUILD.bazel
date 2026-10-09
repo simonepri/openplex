@@ -1,6 +1,6 @@
 """Builds EKS authentication token generator and Headscale key provisioning targets."""
 
-# gazelle:resolve py infra.tools.cloud_emulator.runtime //src/infra/tools/cloud_emulator:runtime
+# gazelle:resolve_regexp py ^infra\.tools\.cloud_emulator\.engine\.([^.]+)(\..*)?$ //src/infra/tools/cloud_emulator/engine:$1
 # gazelle:resolve py infra.tools.cloud_emulator.auth.eks_token //src/infra/tools/cloud_emulator/auth:eks_token
 # gazelle:resolve py src.infra.tools.cloud_emulator.auth.eks_token //src/infra/tools/cloud_emulator/auth:eks_token
 # gazelle:resolve py infra.tools.cloud_emulator.auth.headscale_keys //src/infra/tools/cloud_emulator/auth:headscale_keys
@@ -34,7 +34,10 @@ py_library(
         "../../../..",
     ],
     visibility = ["//visibility:public"],
-    deps = ["//src/infra/tools/cloud_emulator:runtime"],
+    deps = [
+        "//src/infra/tools/cloud_emulator/engine:compose",
+        "//src/infra/tools/cloud_emulator/engine:readiness",
+    ],
 )
 
 py_test(
@@ -52,7 +55,8 @@ py_binary(
     srcs = ["coder_token.py"],
     visibility = ["//visibility:public"],
     deps = [
-        "//src/infra/tools/cloud_emulator:runtime",
+        "//src/infra/tools/cloud_emulator/engine:compose",
+        "//src/infra/tools/cloud_emulator/engine:readiness",
     ],
 )
 

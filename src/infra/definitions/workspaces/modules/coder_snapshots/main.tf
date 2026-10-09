@@ -41,6 +41,11 @@ locals {
       ])), 0, 40) : local.requested_workspace_lineage
     )
   )
+
+  ebs_annotations = merge(
+    var.disk_iops != null ? { "ebs.csi.aws.com/iops" = tostring(var.disk_iops) } : {},
+    var.disk_throughput_mbps != null ? { "ebs.csi.aws.com/throughput" = tostring(var.disk_throughput_mbps) } : {},
+  )
 }
 
 resource "terraform_data" "applied_restore_selector" {
@@ -86,9 +91,10 @@ resource "terraform_data" "workspace_lineage" {
 
 resource "kubernetes_persistent_volume_claim_v1" "home" {
   metadata {
-    name      = local.home_volume_claim_name
-    namespace = var.workspace_namespace
-    labels    = var.app_labels
+    name        = local.home_volume_claim_name
+    namespace   = var.workspace_namespace
+    labels      = var.app_labels
+    annotations = local.ebs_annotations
   }
 
   wait_until_bound = false

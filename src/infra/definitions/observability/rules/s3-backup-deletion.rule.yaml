@@ -1,0 +1,53 @@
+# Defines the S3 backup deletion alert reconciled into SigNoz. Alerts when a principal other than a backup writer role deletes objects or buckets in backup storage.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: s3-backup-deletion
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: S3 backup deletion by an unexpected principal
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: critical}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "log.source = 'cloud-audit' AND aws.event_source = 's3.amazonaws.com' AND aws.event_name IN ('DeleteObject', 'DeleteObjects', 'DeleteBucket') AND aws.bucket_name LIKE '%-backups-%' AND aws.principal_arn NOT REGEXP ':assumed-role/[a-z0-9-]+-(backups|kopia|velero|clickhouse)/'"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: at_least_once
+              op: above
+              target: 0
+      description: A principal other than the backup writer roles (*-backups, *-kopia, *-velero, *-clickhouse) deleted objects or a bucket in backup storage; investigate immediately to prevent unauthorized data destruction.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 1h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

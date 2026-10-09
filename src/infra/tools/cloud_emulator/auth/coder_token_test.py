@@ -49,9 +49,9 @@ class CoderTokenTest(unittest.TestCase):
 
     def test_reconcile_with_explicit_token(self) -> None:
         with (
-            patch.object(coder_token.runtime, "load_local_deployment", return_value={}),
+            patch.object(coder_token.compose, "load_local_deployment", return_value={}),
             patch.object(
-                coder_token.runtime, "control_cluster_record", return_value="ctrl-eaws-lh1"
+                coder_token.readiness, "control_cluster_record", return_value="ctrl-eaws-lh1"
             ),
             patch.object(coder_token, "ensure_secret_record") as mock_ensure,
         ):

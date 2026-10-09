@@ -5,6 +5,6 @@ locals {
     secret_id   = var.realized.secret_id
     secret_arn  = var.realized.secret_arn
     secret_name = var.secret_name
-    keys        = keys(var.secret_values)
+    keys        = nonsensitive(keys(var.secret_values))
   }
 }

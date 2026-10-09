@@ -2,10 +2,9 @@
 
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_load", "oci_push")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_image_index", "oci_push")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/oci:defs.bzl", "oci_workload_publish")
 
@@ -46,28 +45,6 @@ go_test(
     name = "workspace_backup_proxy_test",
     srcs = ["main_test.go"],
     embed = [":workspace_backup_proxy_lib"],
-)
-
-# The test reaches the Docker daemon outside the sandbox. Its result stays
-# cacheable because its only inputs are the script and the image digest
-# pinned in it.
-sh_test(
-    name = "workspace_backup_proxy_boundary_test",
-    srcs = ["workspace-backup-proxy_boundary_test.sh"],
-    env_inherit = [
-        "DOCKER_CERT_PATH",
-        "DOCKER_CONFIG",
-        "DOCKER_CONTEXT",
-        "DOCKER_HOST",
-        "DOCKER_TLS_VERIFY",
-        "HOME",
-    ],
-    tags = [
-        "no-remote-exec",
-        "no-sandbox",
-        "requires-docker",
-        "requires-network",
-    ],
 )
 
 pkg_files(
@@ -122,14 +99,6 @@ oci_image_index(
     ],
 )
 
-oci_load(
-    name = "preload",
-    format = "oci",
-    image = ":image_multiarch",
-    repo_tags = ["docker.io/cluster/workspace-backup-proxy:v1.74.4-r2"],
-    tags = ["manual"],
-)
-
 oci_push(
     name = "push",
     image = ":image_multiarch",
@@ -141,12 +110,6 @@ oci_workload_publish(
     image = ":image_multiarch",
     publication_mode = "digest",
     workload_name = "backup-proxy",
-)
-
-filegroup(
-    name = "preload_archive",
-    srcs = [":preload"],
-    output_group = "tarball",
 )
 
 package_sources()

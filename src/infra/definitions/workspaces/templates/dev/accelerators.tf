@@ -79,7 +79,7 @@ locals {
         offer.kind == "gpu" ? try(local.gpu_catalog.models[offer.class].display_name, upper(offer.class)) : "${local.accelerator_kind_names[offer.kind]} ${offer.class}",
         try(local.gpu_catalog.capacity_types[offer.capacity_type].display_name, title(offer.capacity_type)),
       )
-    })
+    }) if offer.capacity_type != "spot"
   }
 
   # LINT.IfChange(no-accelerator-sentinel)

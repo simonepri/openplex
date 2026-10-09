@@ -23,9 +23,9 @@ from infra.terraform.lifecycle.cluster_common import (
     run_tofu_init,
     wait_for_argocd_sync,
 )
-from infra.tools.cloud_emulator import runtime
 from infra.tools.cloud_emulator.access import cluster_tailnet, kubeconfig
 from infra.tools.cloud_emulator.auth import headscale_keys
+from infra.tools.cloud_emulator.engine import compose, docker, readiness
 
 # gazelle:include_dep //src/infra/tools/cloud_emulator/access:kubeconfig
 # gazelle:include_dep @rules_python//python/runfiles
@@ -102,18 +102,18 @@ def cluster_up(config: ClusterUpConfig | None = None) -> None:
     # 1. Preflight check
     if cfg.target == "local":
         root = find_repo_root()
-        runtime.ensure_docker_local(root, require_capacity=True)
-        runtime.start(root, timeout=cfg.timeout)
+        docker.ensure_docker_local(root, require_capacity=True)
+        compose.start(root, timeout=cfg.timeout)
 
     # 2. OpenTofu execution
     target_dir = ensure_deployment_dir(cfg.target)
     run_tofu_init(target_dir)
     run_tofu_apply(target_dir, cfg.availability)
     if cfg.target == "local":
-        runtime.reconcile_registry(root)
+        compose.reconcile_registry(root)
         kubeconfig.project(root)
         seed_local_images()
-        runtime.reconcile_tls(root, timeout=cfg.timeout)
+        readiness.reconcile_tls(root, timeout=cfg.timeout)
         headscale_keys.reconcile(root, timeout=cfg.timeout)
 
     # 3. GitOps bootstrap verification

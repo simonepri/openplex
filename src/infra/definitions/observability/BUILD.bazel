@@ -1,6 +1,7 @@
 """Defines check targets for platform observability alert rules, dashboards, and saved views."""
 
 load("@rules_kustomize//kustomize:kustomize.bzl", "kustomization", "kustomized_resources")
+load("@rules_python//python:defs.bzl", "py_test")
 load("//src/bazel/rules/kubernetes_manifests:defs.bzl", "manifest_checks")
 
 kustomization(
@@ -22,4 +23,12 @@ kustomized_resources(
 manifest_checks(
     name = "base_checks",
     rendered = ":base_render",
+)
+
+py_test(
+    name = "dashboard_layout_test",
+    srcs = ["dashboard_layout_test.py"],
+    args = ["$(location dashboards/fleet-security.dashboard.yaml)"],
+    data = ["dashboards/fleet-security.dashboard.yaml"],
+    deps = ["@python_deps//pyyaml"],
 )

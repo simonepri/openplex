@@ -1,0 +1,53 @@
+# Defines the VPC rejected flows surge alert reconciled into SigNoz. Alerts on an abnormal surge of rejected network flows across VPC flow logs.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: vpc-rejected-flows-surge
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: VPC rejected flows surge detected
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: warning}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "log.source = 'network-flow' AND flow_action = 'REJECT'"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: at_least_once
+              op: above
+              target: 100
+      description: Sudden surge in rejected VPC network flows detected within a five-minute window; investigate possible network port scans or misconfigured security group policies.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 2h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

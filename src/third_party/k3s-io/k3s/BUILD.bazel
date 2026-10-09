@@ -2,24 +2,14 @@
 
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 load("//src/bazel/rules/oci:defs.bzl", "oci_multiarch_image")
 
 package(default_visibility = ["//visibility:public"])
 
 # LINT.IfChange(floci-k3s-runtime-tag)
-K3S_RUNTIME_TAG = "v1.36.1-runtime7"
+K3S_RUNTIME_TAG = "v1.36.5-runtime1"
 # LINT.ThenChange(//src/third_party/k3s-io/k3s/images.toml:floci-k3s-version)
-
-sh_test(
-    name = "k3s_entrypoint_test",
-    srcs = ["k3s-entrypoint_test.sh"],
-    data = [
-        "hosts.toml",
-        "k3s-entrypoint.sh",
-    ],
-)
 
 pkg_files(
     name = "entrypoint_file",

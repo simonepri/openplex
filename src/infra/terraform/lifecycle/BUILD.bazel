@@ -1,13 +1,13 @@
 """Defines Python check and execution targets for cluster lifecycle and GitOps bootstrap automation."""
 
-# gazelle:resolve py infra.tools.cloud_emulator.runtime //src/infra/tools/cloud_emulator:runtime
-# gazelle:resolve py infra.tools.cloud_emulator //src/infra/tools/cloud_emulator:runtime
+# gazelle:resolve_regexp py ^infra\.tools\.cloud_emulator\.engine\.([^.]+)(\..*)?$ //src/infra/tools/cloud_emulator/engine:$1
 # gazelle:resolve py infra.tools.cloud_emulator.access.cluster_tailnet //src/infra/tools/cloud_emulator/access:cluster_tailnet
+# gazelle:resolve py infra.tools.cloud_emulator.access.kubeconfig //src/infra/tools/cloud_emulator/access:kubeconfig
+# gazelle:resolve py infra.tools.cloud_emulator.auth.headscale_keys //src/infra/tools/cloud_emulator/auth:headscale_keys
 # gazelle:resolve py infra.terraform.lifecycle.cluster_up //src/infra/terraform/lifecycle:cluster_up_lib
 # gazelle:resolve_regexp py ^infra\.terraform\.lifecycle\.([^.]+)(\..*)?$ //src/infra/terraform/lifecycle:$1
 
-load("@aspect_bazel_lib//lib:output_files.bzl", "output_files")
-load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 
 py_library(
@@ -23,10 +23,12 @@ py_library(
     imports = ["../../.."],  # keep
     deps = [
         "//src/infra/terraform/lifecycle:cluster_common",
-        "//src/infra/tools/cloud_emulator:runtime",
         "//src/infra/tools/cloud_emulator/access:cluster_tailnet",
         "//src/infra/tools/cloud_emulator/access:kubeconfig",
         "//src/infra/tools/cloud_emulator/auth:headscale_keys",
+        "//src/infra/tools/cloud_emulator/engine:compose",
+        "//src/infra/tools/cloud_emulator/engine:docker",
+        "//src/infra/tools/cloud_emulator/engine:readiness",
         "@rules_python//python/runfiles",
     ],
 )
@@ -42,19 +44,14 @@ py_binary(
     visibility = ["//visibility:public"],
     deps = [
         "//src/infra/terraform/lifecycle:cluster_common",
-        "//src/infra/tools/cloud_emulator:runtime",
         "//src/infra/tools/cloud_emulator/access:cluster_tailnet",
         "//src/infra/tools/cloud_emulator/access:kubeconfig",
         "//src/infra/tools/cloud_emulator/auth:headscale_keys",
+        "//src/infra/tools/cloud_emulator/engine:compose",
+        "//src/infra/tools/cloud_emulator/engine:docker",
+        "//src/infra/tools/cloud_emulator/engine:readiness",
         "@rules_python//python/runfiles",
     ],
-)
-
-# The seed wrapper alone, without the image publishers in its runfiles.
-output_files(
-    name = "seed_wrapper",
-    paths = ["src/infra/images/seed.bash"],
-    target = "//src/infra/images:seed",
 )
 
 py_binary(
@@ -64,26 +61,10 @@ py_binary(
     visibility = ["//visibility:public"],
     deps = [
         "//src/infra/terraform/lifecycle:cluster_common",
-        "//src/infra/tools/cloud_emulator:runtime",
         "//src/infra/tools/cloud_emulator/access:cluster_tailnet",
-    ],
-)
-
-py_test(
-    name = "cluster_lifecycle_test",
-    srcs = ["cluster_lifecycle_test.py"],
-    data = [
-        ":seed_wrapper",
-        "@bazel_tools//tools/bash/runfiles",
-    ],
-    env = {"CLUSTER_SEED_RLOCATIONPATH": "$(rlocationpath :seed_wrapper)"},
-    imports = ["../../.."],  # keep
-    tags = ["no-sandbox"],
-    deps = [
-        "//src/infra/terraform/lifecycle:cluster_common",
-        "//src/infra/terraform/lifecycle:cluster_down",
-        "//src/infra/terraform/lifecycle:cluster_up_lib",
-        "//src/infra/tools/cloud_emulator/access:cluster_tailnet",
+        "//src/infra/tools/cloud_emulator/engine:compose",
+        "//src/infra/tools/cloud_emulator/engine:docker",
+        "//src/infra/tools/cloud_emulator/engine:storage",
     ],
 )
 

@@ -85,6 +85,27 @@ resource "coder_agent" "main" {
     }
 
     precondition {
+      condition = try(
+        !local.is_ebs_storage ||
+        local.disk_iops == null ||
+        local.disk_throughput_mbps == null ||
+        local.disk_iops >= 4 * local.disk_throughput_mbps,
+        false,
+      )
+      error_message = "Disk IOPS must be at least 4 times sequential throughput in MB/s (AWS gp3 constraint: IOPS >= 4 * throughput)."
+    }
+
+    precondition {
+      condition = try(
+        !local.is_ebs_storage ||
+        local.disk_iops == null ||
+        local.disk_iops <= 500 * tonumber(data.coder_parameter.home_disk_gib.value),
+        false,
+      )
+      error_message = "Disk IOPS must not exceed 500 times the disk size in GiB (AWS gp3 constraint: IOPS <= 500 * home_disk_gib)."
+    }
+
+    precondition {
       condition = (
         local.selected_accelerator_key == local.no_accelerator ||
         contains(keys(local.available_accelerator_offers), local.selected_accelerator_key)
@@ -116,11 +137,6 @@ resource "coder_agent" "main" {
         can(regex("^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-P][A-Za-z0-9+/]{42}( [^\\x00-\\x1F\\x7F]+)?$", data.coder_parameter.ssh_public_key.value))
       )
       error_message = "Enabling direct SSH requires one structurally valid OpenSSH Ed25519 public key."
-    }
-
-    precondition {
-      condition     = local.workspace_namespace == "team-${var.team}-workspaces"
-      error_message = "The workspace namespace must be the template team's dedicated workspaces lane."
     }
 
     precondition {
@@ -159,7 +175,7 @@ resource "coder_agent" "main" {
           local.workload_origin_provider == "aws" &&
           can(regex("^[0-9]{12}\\.dkr\\.ecr\\.${local.workload_origin_region}\\.amazonaws\\.com$", local.workload_registry)) &&
           local.workload_registry_insecure == "false" &&
-          local.workload_origin_role_arn != "" &&
+          (local.workload_origin_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_-]{1,64}$", local.workload_origin_role_arn))) &&
           local.workload_origin_token_audience == "" &&
           local.workload_origin_token_file == ""
           ) : (
@@ -208,41 +224,6 @@ resource "coder_agent" "main" {
   }
 }
 
-resource "terraform_data" "workspace_agent_registration" {
-  # Disabled for brokerless architecture: workspace pods do not enroll into Headscale
-  count = 0
-
-  triggers_replace = [data.external.workspace_build_context.result.build_id]
-
-  provisioner "local-exec" {
-    command = "${path.module}/hooks/register-workspace-agent.sh"
-    environment = {
-      CODER_WORKSPACE_AGENT_REGISTRATION_TOKEN_FILE = "/var/run/cluster/workspace-agent-registration/token"
-      CODER_WORKSPACE_AGENT_REGISTRATION_URL        = "https://headscale-workspace-registration.headscale.svc.cluster.local:8443/v1/workspace-agents/register"
-      CODER_AGENT_TOKEN                             = coder_agent.main.token
-      CODER_WORKSPACE_BUILD_ID                      = data.external.workspace_build_context.result.build_id
-      WORKSPACE_CELL                                = local.selected_cell
-      WORKSPACE_CELL_INCARNATION                    = local.selected_incarnation
-      CODER_WORKSPACE_IS_PREBUILD_CLAIM             = tostring(data.coder_workspace.me.is_prebuild_claim)
-      WORKSPACE_MACHINE                             = local.workspace_machine
-      CODER_WORKSPACE_OWNER_ID                      = local.owner_id
-      WORKSPACE_TEAM                                = var.team
-      CODER_WORKSPACE_ID                            = data.coder_workspace.me.id
-      WORKSPACE_LINEAGE                             = local.workspace_lineage
-      CODER_WORKSPACE_NAME                          = data.coder_workspace.me.name
-      WORKSPACE_PARENT_LINEAGE                      = local.workspace_parent_lineage
-      WORKSPACE_PARENT_SNAPSHOT                     = local.workspace_parent_snapshot
-      WORKSPACE_IS_ROOT                             = tostring(local.workspace_is_root)
-    }
-  }
-
-  lifecycle {
-    precondition {
-      condition     = can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", data.external.workspace_build_context.result.build_id))
-      error_message = "A running workspace requires the immutable Coder workspace build ID."
-    }
-  }
-}
 
 resource "coder_script" "workspace_start" {
   agent_id           = coder_agent.main.id

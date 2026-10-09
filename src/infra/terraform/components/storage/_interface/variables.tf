@@ -1,12 +1,12 @@
 # Declares provider-neutral input variables for storage bucket tiers, retention, and lifecycle policies.
 
-variable "installation_name" {
-  description = "Installation identifier for resource naming."
+variable "cluster_name" {
+  description = "Name of the Kubernetes cluster."
   type        = string
 }
 
-variable "cell_name" {
-  description = "Cell identifier for resource naming."
+variable "account_id" {
+  description = "AWS account ID for globally unique bucket naming."
   type        = string
 }
 

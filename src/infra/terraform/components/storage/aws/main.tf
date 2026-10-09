@@ -3,9 +3,9 @@
 module "interface" {
   source = "../_interface"
 
-  installation_name = var.installation_name
-  cell_name         = var.cell_name
-  storage_tiers     = var.storage_tiers
+  cluster_name  = var.cluster_name
+  account_id    = var.account_id
+  storage_tiers = var.storage_tiers
   realized = {
     buckets = {
       for k, b in aws_s3_bucket.this : k => {
@@ -28,7 +28,7 @@ check "meta_tier_present" {
 resource "aws_s3_bucket" "this" {
   for_each = toset(var.storage_tiers)
 
-  bucket = module.interface.names[each.key]
+  bucket = "${var.cluster_name}-${each.key}-${var.account_id}"
 
   lifecycle {
     precondition {
@@ -41,7 +41,7 @@ resource "aws_s3_bucket" "this" {
 data "aws_caller_identity" "current" {}
 
 resource "aws_kms_key" "storage" {
-  description             = "KMS key for ${var.cell_name} S3 storage tiers"
+  description             = "KMS key for ${var.cluster_name} S3 storage tiers"
   deletion_window_in_days = 7
   enable_key_rotation     = true
 
@@ -90,6 +90,11 @@ resource "aws_kms_key" "storage" {
   })
 }
 
+resource "aws_kms_alias" "storage" {
+  name          = "alias/${var.kms_alias_prefix}${var.cluster_name}-storage"
+  target_key_id = aws_kms_key.storage.key_id
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   for_each = toset(var.storage_tiers)
 
@@ -105,7 +110,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
 }
 
 resource "aws_s3_bucket_logging" "this" {
-  for_each = contains(var.storage_tiers, "logs") ? toset(var.storage_tiers) : toset([])
+  for_each = contains(var.storage_tiers, "logs") ? toset([for t in var.storage_tiers : t if t != "logs"]) : toset([])
 
   bucket        = aws_s3_bucket.this[each.key].id
   target_bucket = aws_s3_bucket.this["logs"].id
@@ -213,29 +218,6 @@ resource "aws_s3_bucket_policy" "enforce_tls" {
             }
           }
         }
-      ] : [],
-      each.key == "meta" ? [
-        {
-          Sid    = "AllowS3GatewayStorageStatsRead"
-          Effect = "Allow"
-          Principal = {
-            AWS = "*"
-          }
-          Action = [
-            "s3:GetObject",
-            "s3:ListBucket",
-          ]
-          Resource = [
-            aws_s3_bucket.this[each.key].arn,
-            "${aws_s3_bucket.this[each.key].arn}/inventory/*",
-          ]
-          Condition = {
-            StringEquals = {
-              "aws:PrincipalAccount"                      = data.aws_caller_identity.current.account_id
-              "aws:PrincipalTag/eks:service-account-name" = "s3-gateway-storage-stats"
-            }
-          }
-        }
       ] : []
     )
   })
@@ -264,6 +246,7 @@ resource "aws_s3_bucket_inventory" "this" {
   optional_fields = [
     "Size",
     "LastModifiedDate",
+    "StorageClass",
   ]
 
   lifecycle {

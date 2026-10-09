@@ -1,9 +1,9 @@
 # Provisions AWS ECR container image repositories, KMS encryption keys, and lifecycle expiration policies.
 
 module "interface" {
-  source            = "../_interface"
-  installation_name = var.installation_name
-  repositories      = var.repositories
+  source       = "../_interface"
+  cluster_name = var.cluster_name
+  repositories = var.repositories
   realized = {
     registry_url = length(var.repositories) > 0 ? split("/", aws_ecr_repository.this[var.repositories[0]].repository_url)[0] : "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.region}.amazonaws.com"
     repositories = {
@@ -16,7 +16,7 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 resource "aws_kms_key" "registry" {
-  description             = "Customer-managed key for ${var.installation_name} ECR repositories"
+  description             = "Customer-managed key for ${var.cluster_name} ECR repositories"
   deletion_window_in_days = 7
   enable_key_rotation     = true
 
@@ -46,6 +46,11 @@ resource "aws_kms_key" "registry" {
       }
     ]
   })
+}
+
+resource "aws_kms_alias" "registry" {
+  name          = "alias/${var.kms_alias_prefix}${var.cluster_name}-registry"
+  target_key_id = aws_kms_key.registry.key_id
 }
 
 resource "aws_ecr_repository" "this" {

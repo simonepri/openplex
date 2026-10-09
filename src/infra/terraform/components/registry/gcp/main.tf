@@ -1,9 +1,9 @@
 # Provisions GCP Artifact Registry Docker repositories, KMS keys, and cleanup policies.
 
 module "interface" {
-  source            = "../_interface"
-  installation_name = var.installation_name
-  repositories      = var.repositories
+  source       = "../_interface"
+  cluster_name = var.cluster_name
+  repositories = var.repositories
   realized = {
     registry_url = "${google_artifact_registry_repository.this.location}-docker.pkg.dev"
     repositories = {
@@ -13,9 +13,9 @@ module "interface" {
 }
 
 resource "google_artifact_registry_repository" "this" {
-  repository_id = var.installation_name
+  repository_id = var.cluster_name
   format        = "DOCKER"
-  description   = "Container image registry for ${var.installation_name}"
+  description   = "Container image registry for ${var.cluster_name}"
 
   docker_config {
     immutable_tags = true

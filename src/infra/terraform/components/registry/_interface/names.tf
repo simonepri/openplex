@@ -1,7 +1,8 @@
-# Computes deterministic container repository names from installation name and logical repository keys.
+# Computes deterministic container repository names from the cluster name and logical repository keys.
 
 locals {
+  namespace = var.cluster_name
   names = {
-    for r in var.repositories : r => "${var.installation_name}/${r}"
+    for r in var.repositories : r => "${local.namespace}/${r}"
   }
 }

@@ -1,0 +1,53 @@
+# Defines the CloudTrail heartbeat absence alert reconciled into SigNoz. Alerts when zero CloudTrail audit events arrive over a rolling 15m window, detecting trail deletion, logging suspension, or collector failure.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: cloudtrail-heartbeat-absence
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: CloudTrail audit logging stream inactive
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: critical}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "log.source = 'cloud-audit'"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: critical
+              matchType: at_least_once
+              op: below
+              target: 1
+      description: Zero CloudTrail audit logs arrived in SigNoz over a 15-minute window; verify CloudTrail logging state, SQS queue health, and cloud-telemetry collector status immediately.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 15m, frequency: 5m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 30m}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

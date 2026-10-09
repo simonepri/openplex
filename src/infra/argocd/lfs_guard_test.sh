@@ -3,13 +3,18 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || true)"
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "${SCRIPT_PATH}")"
+REPO_ROOT="${BUILD_WORKSPACE_DIRECTORY:-}"
+
+if [[ -z ${REPO_ROOT} ]]; then
+  REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || true)"
+fi
 
 if [[ -z ${REPO_ROOT} ]]; then
   dir="${SCRIPT_DIR}"
   while [[ ${dir} != "/" ]]; do
-    if [[ -f "${dir}/MODULE.bazel" ]] || [[ -d "${dir}/.git" ]]; then
+    if [[ -d "${dir}/.git" ]]; then
       REPO_ROOT="${dir}"
       break
     fi
@@ -25,53 +30,41 @@ fi
 LFS_HEADER_PREFIX="version https://git-lfs.github.com/spec/v1"
 failed=0
 
-check_file() {
-  local file="$1"
-  if [[ ! -f ${file} ]]; then
-    echo "Error: expected file does not exist: ${file}" >&2
-    failed=1
-    return
-  fi
+check_blob() {
+  local rel_file="$1"
+  local blob_hash="$2"
 
-  local rel_file="${file#"${REPO_ROOT}/"}"
-  local blob_header=""
-  if [[ -d "${REPO_ROOT}/.git" ]] || git -C "${REPO_ROOT}" rev-parse --git-dir >/dev/null 2>&1; then
-    blob_header="$(git -C "${REPO_ROOT}" cat-file -p ":${rel_file}" 2>/dev/null | head -n 1 || true)"
-    if [[ -z ${blob_header} ]]; then
-      blob_header="$(git -C "${REPO_ROOT}" show "HEAD:${rel_file}" 2>/dev/null | head -n 1 || true)"
-    fi
-  fi
-
-  if [[ -n ${blob_header} ]] && echo "${blob_header}" | grep -q "^${LFS_HEADER_PREFIX}$"; then
+  if git -C "${REPO_ROOT}" cat-file -p "${blob_hash}" 2>/dev/null | head -c 100 | grep -q "^${LFS_HEADER_PREFIX}"; then
     echo "Error: committed git blob is an unresolved Git LFS pointer: ${rel_file}" >&2
     failed=1
-    return
-  fi
-
-  if head -n 1 "${file}" 2>/dev/null | grep -q "^${LFS_HEADER_PREFIX}$"; then
-    echo "Error: working file is an unresolved Git LFS pointer: ${file}" >&2
-    failed=1
-    return
   fi
 }
 
 echo "Checking Bazel build inputs for Git LFS pointers..."
-check_file "${REPO_ROOT}/src/infra/tools/coder_snapshot_portal/web/static/favicon.svg"
-check_file "${REPO_ROOT}/src/infra/docs/artwork/wordmark.svg"
+CRITICAL_FILES=(
+  "src/infra/tools/coder_snapshot_portal/web/static/favicon.svg"
+  "src/infra/docs/artwork/wordmark.svg"
+)
 
-echo "Checking files under src/infra/argocd for Git LFS pointers..."
-THIS_SCRIPT="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
-
-# shellcheck disable=SC2312
-while IFS= read -r -d '' file; do
-  if [[ ${file} == "${THIS_SCRIPT}" ]]; then
+for rel_file in "${CRITICAL_FILES[@]}"; do
+  blob_entry="$(git -C "${REPO_ROOT}" ls-files -s -- "${rel_file}")"
+  if [[ -z ${blob_entry} ]]; then
+    echo "Error: expected critical file is not tracked in git: ${rel_file}" >&2
+    failed=1
     continue
   fi
-  check_file "${file}"
-done < <(find "${REPO_ROOT}/src/infra/argocd" -type f ! -path "*/.git/*" -print0)
+  blob_hash="$(awk '{print $2}' <<<"${blob_entry}")"
+  check_blob "${rel_file}" "${blob_hash}"
+done
+
+echo "Checking files under src/infra/argocd for Git LFS pointers..."
+# shellcheck disable=SC2312
+while read -r _mode hash _stage file; do
+  check_blob "${file}" "${hash}"
+done < <(git -C "${REPO_ROOT}" ls-files -s -- src/infra/argocd)
 
 if [[ ${failed} -ne 0 ]]; then
-  echo "Git LFS guard check failed: found files containing LFS pointer header." >&2
+  echo "Git LFS guard check failed: found committed git blobs containing LFS pointer header." >&2
   exit 1
 fi
 

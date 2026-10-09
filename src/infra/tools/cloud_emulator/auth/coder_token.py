@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from http.client import HTTPMessage
 
-from infra.tools.cloud_emulator import runtime
+from infra.tools.cloud_emulator.engine import compose, readiness
 
 TOKEN_NAME = "coder-automation-token"
 TOKEN_LIFETIME = 10 * 365 * 24 * 60 * 60 * 1_000_000_000  # 10 years in nanoseconds
@@ -364,8 +364,10 @@ def reconcile(
     token: str | None = None,
 ) -> str:
     """Reconcile and write the Coder automation token into the local fleet's secret records."""
-    manifest = runtime.load_local_deployment(root)
-    control_cluster = context or runtime.control_cluster_record(manifest) or DEFAULT_CONTROL_CLUSTER
+    manifest = compose.load_local_deployment(root)
+    control_cluster = (
+        context or readiness.control_cluster_record(manifest) or DEFAULT_CONTROL_CLUSTER
+    )
 
     if token is not None:
         minted_token = token

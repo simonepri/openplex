@@ -68,31 +68,6 @@
       }
     ]
   },
-  "bazel-diff": {
-    "binaries": [
-      {
-        "cpu": "arm64",
-        "kind": "file",
-        "os": "linux",
-        "sha256": "3c528f28c079f5889728613771ea5f679c26ec67a12acecac345322dcb13c4af",
-        "url": "https://github.com/Tinder/bazel-diff/releases/download/v49.1.0/bazel-diff-rust-linux-arm64"
-      },
-      {
-        "cpu": "x86_64",
-        "kind": "file",
-        "os": "linux",
-        "sha256": "ab9dea07341a4d764aaed15225ac5ea65f381fc1a1ae304e9fc0147b5e832a87",
-        "url": "https://github.com/Tinder/bazel-diff/releases/download/v49.1.0/bazel-diff-rust-linux-amd64"
-      },
-      {
-        "cpu": "arm64",
-        "kind": "file",
-        "os": "macos",
-        "sha256": "1a0ca31c4bf28f8ad14a8fde17d9380f0513f8f386ba20f8d05e441aa12438f5",
-        "url": "https://github.com/Tinder/bazel-diff/releases/download/v49.1.0/bazel-diff-rust-macos-arm64"
-      }
-    ]
-  },
   "buildifier": {
     "binaries": [
       {
@@ -302,6 +277,42 @@
         "os": "linux",
         "sha256": "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
         "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
+      }
+    ]
+  },
+  "golangci-lint": {
+    "binaries": [
+      {
+        "cpu": "arm64",
+        "file": "golangci-lint-2.14.0-darwin-arm64/golangci-lint",
+        "kind": "archive",
+        "os": "macos",
+        "sha256": "5ef5f36a7147e91dc58ef9ef4d11bb7bad5ead0c76eb6c01327a73c641d1dcc3",
+        "url": "https://github.com/golangci/golangci-lint/releases/download/v2.14.0/golangci-lint-2.14.0-darwin-arm64.tar.gz"
+      },
+      {
+        "cpu": "x86_64",
+        "file": "golangci-lint-2.14.0-darwin-amd64/golangci-lint",
+        "kind": "archive",
+        "os": "macos",
+        "sha256": "a5667c1c3536be1740133213e1e822bfb8f0d98ea12903174d6d5f635e4ed68d",
+        "url": "https://github.com/golangci/golangci-lint/releases/download/v2.14.0/golangci-lint-2.14.0-darwin-amd64.tar.gz"
+      },
+      {
+        "cpu": "arm64",
+        "file": "golangci-lint-2.14.0-linux-arm64/golangci-lint",
+        "kind": "archive",
+        "os": "linux",
+        "sha256": "ee7ec5f3453d15ddf106fae5a4d6c71737712348a979d1fe9cd52ec7ea299bae",
+        "url": "https://github.com/golangci/golangci-lint/releases/download/v2.14.0/golangci-lint-2.14.0-linux-arm64.tar.gz"
+      },
+      {
+        "cpu": "x86_64",
+        "file": "golangci-lint-2.14.0-linux-amd64/golangci-lint",
+        "kind": "archive",
+        "os": "linux",
+        "sha256": "ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab",
+        "url": "https://github.com/golangci/golangci-lint/releases/download/v2.14.0/golangci-lint-2.14.0-linux-amd64.tar.gz"
       }
     ]
   },

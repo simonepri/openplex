@@ -4,7 +4,7 @@ name: openplex-local
 
 services:
   floci:
-    image: floci/floci:nightly@sha256:68508176a2991e91b601caf98f2eecd1724f5dfa7d01c4dcb65d055cebd7d118
+    image: floci/floci:nightly@sha256:3da21c86eee2010f8c2e98fd5e19bac1a12c41babcdb9d9b63e56d8401927a99
     container_name: openplex-local-floci
     logging:
       driver: json-file
@@ -29,7 +29,7 @@ services:
       FLOCI_SERVICES_EKS_API_SERVER_MAX_PORT: "6510"
       FLOCI_SERVICES_EKS_DATA_PATH: /app/data/eks
       # LINT.IfChange(floci-k3s-version)
-      FLOCI_SERVICES_EKS_DEFAULT_IMAGE: &k3s-runtime-image cluster/k3s-runtime:v1.36.1-runtime7
+      FLOCI_SERVICES_EKS_DEFAULT_IMAGE: &k3s-runtime-image cluster/k3s-runtime:v1.36.5-runtime1
       # LINT.ThenChange(//src/third_party/k3s-io/k3s/images.toml:floci-k3s-version)
       FLOCI_SERVICES_EKS_DISABLE_CNI: "false"
       FLOCI_SERVICES_EKS_DOCKER_NETWORK: openplex-local

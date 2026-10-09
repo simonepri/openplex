@@ -59,8 +59,59 @@ variable "enable_flow_logs" {
 }
 
 variable "cluster_name" {
-  description = "Optional cluster name for subnet discovery tags."
+  description = "Cluster name for subnet discovery tags."
+  type        = string
+}
+
+variable "iam_name_prefix" {
+  description = "Prefix applied to IAM role, policy, user, and instance profile names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.iam_name_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.iam_name_prefix))
+    error_message = "iam_name_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "kms_alias_prefix" {
+  description = "Prefix applied to KMS key alias names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.kms_alias_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.kms_alias_prefix))
+    error_message = "kms_alias_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
+}
+
+variable "iam_permissions_boundary" {
+  description = "ARN of the permissions boundary policy to attach to IAM roles."
   type        = string
   default     = null
+}
+
+variable "enable_resolver_query_logging" {
+  description = "Whether to enable Route 53 Resolver query logging."
+  type        = bool
+  default     = true
+}
+
+variable "resolver_query_log_retention_days" {
+  description = "Retention period in days for Route 53 Resolver query logs."
+  type        = number
+  default     = 14
+}
+
+variable "kms_key_arn" {
+  description = "Optional KMS key ARN to encrypt Route 53 Resolver query CloudWatch log group."
+  type        = string
+  default     = null
+}
+
+variable "tags" {
+  description = "A map of tags to assign to resources."
+  type        = map(string)
+  default     = {}
 }
 

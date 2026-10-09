@@ -12,12 +12,6 @@ alias(
 )
 
 alias(
-    name = "bazel-diff",
-    actual = "@multitool//tools/bazel-diff",
-    visibility = ["//visibility:public"],
-)
-
-alias(
     name = "committed",
     actual = "@multitool//tools/committed",
     visibility = ["//visibility:public"],
@@ -146,6 +140,12 @@ alias(
 alias(
     name = "jscpd",
     actual = "@multitool//tools/jscpd",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "golangci-lint",
+    actual = "@multitool//tools/golangci-lint",
     visibility = ["//visibility:public"],
 )
 

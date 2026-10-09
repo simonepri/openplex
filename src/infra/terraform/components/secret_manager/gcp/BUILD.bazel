@@ -8,7 +8,6 @@ tf_module(
     providers = [
         "google",
     ],
-    skip_validation = True,
     deps = [
         "//src/infra/terraform/components/secret_manager/_interface",
     ],

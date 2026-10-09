@@ -1,13 +1,24 @@
 # Declares input variables for S3 bucket prefixes, versioning rules, and encryption settings.
 
-variable "installation_name" {
-  description = "Installation identifier for resource naming."
+variable "cluster_name" {
+  description = "Name of the Kubernetes cluster."
   type        = string
 }
 
-variable "cell_name" {
-  description = "Cell identifier for resource naming."
+variable "account_id" {
+  description = "AWS account ID for globally unique bucket naming."
   type        = string
+}
+
+variable "kms_alias_prefix" {
+  description = "Prefix applied to KMS key alias names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.kms_alias_prefix) <= 16 && can(regex("^[a-z0-9-]*$", var.kms_alias_prefix))
+    error_message = "kms_alias_prefix must be at most 16 characters and contain only lowercase alphanumeric characters and hyphens."
+  }
 }
 
 variable "storage_tiers" {

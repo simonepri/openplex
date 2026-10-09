@@ -9,4 +9,5 @@ sh_test(
     name = "lfs_guard_test",
     srcs = ["lfs_guard_test.sh"],
     tags = ["no-sandbox"],
+    visibility = ["//visibility:public"],
 )

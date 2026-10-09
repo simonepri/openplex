@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import pathlib
+import re
 import subprocess
 import tempfile
 import time
@@ -19,6 +20,15 @@ def _b64(raw: bytes) -> str:
 
 
 def main() -> None:
+    if pathlib.Path("/home/buildbuddy").exists() or os.environ.get("BUILDBUDDY_INVOCATION_ID"):
+        try:
+            subprocess.run(["git", "config", "--unset-all", "buildbuddy.api-key"], check=False)
+            subprocess.run(
+                ["git", "config", "--global", "--unset-all", "buildbuddy.api-key"], check=False
+            )
+        except Exception:
+            pass
+
     app_id = os.environ.get("GITHUB_APP_ID", DEFAULT_GITHUB_APP_ID)
     inst_id = os.environ.get("GITHUB_APP_INSTALLATION_ID", DEFAULT_GITHUB_APP_INSTALLATION_ID)
     pem = os.environ.get("GITHUB_APP_PRIVATE_KEY")
@@ -72,17 +82,41 @@ def main() -> None:
         )
         netrc.chmod(0o600)
 
-    bb_api_key = os.environ.get("BUILDBUDDY_API_KEY")
     home_rc = pathlib.Path("~/.bazelrc").expanduser()
-    home_rc_lines = []
-    if bb_api_key:
-        home_rc_lines.append(f"common --remote_header=x-buildbuddy-api-key={bb_api_key}")
-    home_rc_lines.extend(["common --remote_executor=", "build --remote_executor="])
+    home_rc_lines = ["common --remote_executor=", "build --remote_executor="]
+
+    pr_number = os.environ.get("GIT_PR_NUMBER")
+    if token and pr_number:
+        try:
+            repo_proc = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                stdout=subprocess.PIPE,
+                text=True,
+                check=True,
+            )
+
+            repo_match = re.search(r"[:/]([^/]+/[^/]+?)(?:\.git)?$", repo_proc.stdout.strip())
+            if repo_match:
+                repo_slug = repo_match.group(1)
+                pr_req = urllib.request.Request(
+                    f"https://api.github.com/repos/{repo_slug}/pulls/{pr_number}",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/vnd.github+json",
+                        "User-Agent": "BuildBuddy-CI-Auth",
+                    },
+                )
+                with urllib.request.urlopen(pr_req) as resp:
+                    pr_data = json.loads(resp.read())
+                    pr_body = pr_data.get("body") or ""
+                    if re.search(r"\bNO_IFTTT\b", pr_body, re.IGNORECASE):
+                        print("Detected NO_IFTTT in pull request description; enabling NO_IFTTT=1")
+                        home_rc_lines.append("test --test_env=NO_IFTTT=1")
+        except Exception as exc:
+            print(f"Warning: Failed to fetch PR description: {exc}")
+
     home_rc.write_text("\n".join(home_rc_lines) + "\n", encoding="utf-8")
     home_rc.chmod(0o600)
-
-    if bb_api_key:
-        subprocess.run(["git", "config", "--global", "buildbuddy.api-key", bb_api_key], check=False)
 
 
 if __name__ == "__main__":

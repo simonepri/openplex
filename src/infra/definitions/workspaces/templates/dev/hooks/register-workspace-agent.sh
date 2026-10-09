@@ -14,7 +14,6 @@ set -eu
 : "${CODER_WORKSPACE_IS_PREBUILD_CLAIM:?Coder prebuild-claim state is required}"
 : "${WORKSPACE_MACHINE:?workspace machine name is required}"
 : "${CODER_WORKSPACE_OWNER_ID:?workspace owner ID is required}"
-: "${WORKSPACE_TEAM:?workspace team is required}"
 : "${CODER_WORKSPACE_ID:?workspace ID is required}"
 : "${WORKSPACE_LINEAGE:?workspace lineage is required}"
 : "${CODER_WORKSPACE_NAME:?workspace name is required}"
@@ -58,7 +57,6 @@ require_match 'workspace cell' "${WORKSPACE_CELL}" "${dns_label_pattern}"
 require_match 'cell incarnation' "${WORKSPACE_CELL_INCARNATION}" '^[a-z0-9][a-z0-9._-]{0,62}$'
 require_match 'workspace machine name' "${WORKSPACE_MACHINE}" "${dns_label_pattern}"
 require_match 'workspace owner ID' "${CODER_WORKSPACE_OWNER_ID}" "${uuid_pattern}"
-require_match 'workspace team' "${WORKSPACE_TEAM}" "${dns_label_pattern}"
 require_match 'workspace ID' "${CODER_WORKSPACE_ID}" "${uuid_pattern}"
 require_match 'workspace lineage' "${WORKSPACE_LINEAGE}" '^([0-9a-f-]{36}-[0-9]{10,}|[0-9a-f]{40})$'
 require_match 'workspace name' "${CODER_WORKSPACE_NAME}" "${dns_label_pattern}"
@@ -104,8 +102,8 @@ fi
 if [ -n "${WORKSPACE_PARENT_SNAPSHOT}" ]; then
   request_body=$(printf '%s,"parentSnapshot":"%s"' "${request_body}" "${WORKSPACE_PARENT_SNAPSHOT}")
 fi
-request_body=$(printf '%s,"machine":"%s","ownerId":"%s","team":"%s","workspaceId":"%s","workspaceName":"%s","workspaceVolume":"%s"}' \
-  "${request_body}" "${WORKSPACE_MACHINE}" "${CODER_WORKSPACE_OWNER_ID}" "${WORKSPACE_TEAM}" "${CODER_WORKSPACE_ID}" "${CODER_WORKSPACE_NAME}" "${workspace_volume}")
+request_body=$(printf '%s,"machine":"%s","ownerId":"%s","workspaceId":"%s","workspaceName":"%s","workspaceVolume":"%s"}' \
+  "${request_body}" "${WORKSPACE_MACHINE}" "${CODER_WORKSPACE_OWNER_ID}" "${CODER_WORKSPACE_ID}" "${CODER_WORKSPACE_NAME}" "${workspace_volume}")
 curl_request_body=$(printf '%s' "${request_body}" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
 request_registration() {

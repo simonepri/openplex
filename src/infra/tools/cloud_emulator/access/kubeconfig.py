@@ -13,8 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
-from infra.tools.cloud_emulator import runtime
+from infra.tools.cloud_emulator.engine import compose
 
 
 def project(root: Path) -> Path:
@@ -22,8 +21,8 @@ def project(root: Path) -> Path:
     root = root.resolve()
     deployment = root / "src/infra/terraform/deployments/local/deployment.yaml"
     clusters = yaml.safe_load(deployment.read_text(encoding="utf-8"))["clusters"]
-    fleet = runtime.configuration(root)
-    containers = runtime.owned_containers(fleet)
+    fleet = compose.configuration(root)
+    containers = compose.owned_containers(fleet)
     document: dict[str, Any] = {
         "apiVersion": "v1",
         "kind": "Config",

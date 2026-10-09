@@ -1,7 +1,9 @@
 # Configures integrated Coder workspace applications including VS Code Web, Paseo, Herdr, and direct SSH endpoints.
 
 locals {
-  ssh_hostname = "${local.workspace_machine}.${local.selected_cell}.tailnet.${var.access_alias_domain}"
+  ssh_wildcard_hostname = "ssh--${lower(data.coder_workspace.me.name)}--${local.owner_username}.${var.coder_app_domain}"
+  ssh_alias_hostname    = "${lower(data.coder_workspace.me.name)}.${local.owner_username}.${var.access_alias_domain}"
+  ssh_hostname          = local.ssh_alias_hostname
   # Inlined VS Code remote SSH authority & deep link (previously modules/vscode_remote_ssh)
   vscode_remote_ssh_authority = "${local.owner_username}@${local.ssh_hostname}"
   vscode_remote_ssh_url       = "vscode://vscode-remote/ssh-remote+${local.vscode_remote_ssh_authority}${var.checkout_path}"
@@ -138,16 +140,9 @@ resource "coder_app" "herdr" {
   tooltip      = "AI agent terminal workspace runtime and attention queue"
 }
 
-resource "coder_script" "ssh_instructions" {
-  count              = local.ssh_enabled ? 1 : 0
-  agent_id           = coder_agent.main.id
-  display_name       = "SSH"
-  run_on_start       = true
-  start_blocks_login = false
-  script             = "nohup python3 /etc/workspace/access/paseo_instructions.py </dev/null >/tmp/paseo-instructions.log 2>&1 &"
-}
-
-resource "coder_app" "ssh" {
+# The slug must not be "ssh": Coder serves subdomain apps at <slug>--<workspace>--<owner>
+# under the app domain, which is where the workspace SSH Service publishes its DNS name.
+resource "coder_app" "ssh_access" {
   count        = local.ssh_enabled ? 1 : 0
   agent_id     = coder_agent.main.id
   display_name = "SSH"
@@ -155,7 +150,7 @@ resource "coder_app" "ssh" {
   open_in      = "slim-window"
   order        = 40
   share        = "owner"
-  slug         = "ssh"
+  slug         = "ssh-access"
   subdomain    = true
   tooltip      = "SSH connection instructions and local IDE integration"
   url          = "http://localhost:19848/ssh"
@@ -167,6 +162,15 @@ resource "coder_app" "ssh" {
   }
 }
 
+resource "coder_script" "ssh_instructions" {
+  count              = local.ssh_enabled ? 1 : 0
+  agent_id           = coder_agent.main.id
+  display_name       = "SSH"
+  run_on_start       = true
+  start_blocks_login = false
+  script             = "nohup python3 /etc/workspace/access/paseo_instructions.py </dev/null >/tmp/paseo-instructions.log 2>&1 &"
+}
+
 resource "coder_app" "restore_snapshot" {
   agent_id     = coder_agent.main.id
   display_name = "Restore Snapshot..."
@@ -175,7 +179,7 @@ resource "coder_app" "restore_snapshot" {
   order        = 50
   slug         = "restore-snapshot"
   tooltip      = "Browse and restore verified snapshots for this workspace"
-  url          = "https://coder-snapshots.${var.access_alias_domain}?owner=${local.owner_username}&workspace=${data.coder_workspace.me.name}&lineage=${local.workspace_lineage}"
+  url          = "https://coder-snapshots.${var.access_alias_domain}/?owner=${local.owner_username}&workspace=${lower(data.coder_workspace.me.name)}&lineage=${local.workspace_lineage}"
 }
 
 resource "coder_script" "workspace_filebrowser" {

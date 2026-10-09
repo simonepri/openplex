@@ -108,12 +108,20 @@ resource "kubernetes_deployment_v1" "workspace" {
           ]
 
           env {
-            name  = "AWS_PROFILE"
-            value = "team-s3"
-          }
-          env {
             name  = "AWS_SHARED_CREDENTIALS_FILE"
             value = "/var/run/workspace/s3/credentials"
+          }
+          env {
+            name  = "WORKSPACE_S3_TEAMS"
+            value = join(",", local.workspace_s3_teams)
+          }
+          env {
+            name  = "AWS_REQUEST_CHECKSUM_CALCULATION"
+            value = "when_required"
+          }
+          env {
+            name  = "AWS_RESPONSE_CHECKSUM_VALIDATION"
+            value = "when_required"
           }
           env {
             name = "CODER_AGENT_TOKEN"
@@ -150,6 +158,10 @@ resource "kubernetes_deployment_v1" "workspace" {
             value = data.coder_workspace.me.name
           }
           env {
+            name  = "KUBECONFIG"
+            value = "/etc/workspace/kubernetes/kubeconfig"
+          }
+          env {
             name  = "XDG_RUNTIME_DIR"
             value = "/home/coder/.runtime"
           }
@@ -170,10 +182,6 @@ resource "kubernetes_deployment_v1" "workspace" {
                 name = local.runtime_secret_name
               }
             }
-          }
-          env {
-            name  = "KUBECONFIG"
-            value = "/etc/workspace/kubernetes/config"
           }
           env {
             name  = "MISE_GLOBAL_CONFIG_FILE"
@@ -240,8 +248,8 @@ resource "kubernetes_deployment_v1" "workspace" {
             }
           }
           env {
-            name  = "KOPIA_SNAPSHOT_BROKER_URL"
-            value = local.snapshot_broker_url
+            name  = "KOPIA_PASSWORD_FILE"
+            value = "/var/run/workspace/snapshot-repository/password"
           }
           env {
             name  = "WORKSPACE_IS_ROOT"
@@ -250,10 +258,6 @@ resource "kubernetes_deployment_v1" "workspace" {
           env {
             name  = "WORKSPACE_PARENT_SNAPSHOT"
             value = local.workspace_parent_snapshot
-          }
-          env {
-            name  = "WORKSPACE_TEAM"
-            value = var.team
           }
           env {
             name  = "WORKSPACE_USERNAME"
@@ -308,12 +312,6 @@ resource "kubernetes_deployment_v1" "workspace" {
           env {
             name  = "SSL_CERT_FILE"
             value = "/tmp/workspace-ca-bundle.crt"
-          }
-          env_from {
-            secret_ref {
-              name     = "team-dev-secrets"
-              optional = true
-            }
           }
 
           resources {
@@ -416,7 +414,12 @@ resource "kubernetes_deployment_v1" "workspace" {
           }
           volume_mount {
             mount_path = "/var/run/workspace/s3"
-            name       = "team-s3-credentials"
+            name       = "workspace-s3-credentials"
+            read_only  = true
+          }
+          volume_mount {
+            mount_path = "/var/run/workspace/snapshot-repository"
+            name       = "snapshot-repository"
             read_only  = true
           }
           volume_mount {
@@ -424,13 +427,6 @@ resource "kubernetes_deployment_v1" "workspace" {
             name       = "tailnet-state"
             read_only  = true
           }
-          # LINT.IfChange(coder-workspace-submitted-workload-access)
-          volume_mount {
-            mount_path = "/var/run/workspace/kubernetes"
-            name       = "workspace-kubernetes-identity"
-            read_only  = true
-          }
-          # LINT.ThenChange(//src/infra/argocd/components/team_namespace/helm/templates/coder-workspace.yaml:coder-workspace-submitted-workload-access)
           dynamic "volume_mount" {
             for_each = local.workload_origin_auth_mode == "web-identity" ? [local.workload_origin_token_file] : []
             content {
@@ -456,34 +452,102 @@ resource "kubernetes_deployment_v1" "workspace" {
             sub_path   = "local"
           }
           volume_mount {
-            mount_path = "/fs/s3/${local.selected_virtual_name}/home"
-            name       = "home"
+            mount_path = "/fs/s3/${local.selected_virtual_name}/home/legacy"
+            name       = "legacy"
             read_only  = false
           }
           volume_mount {
-            mount_path = "/fs/s3/${local.selected_virtual_name}/scratch"
-            name       = "scratch"
+            mount_path = "/fs/s3/aws-use1/home/legacy"
+            name       = "legacy-use1"
             read_only  = false
           }
-          volume_mount {
-            mount_path = "/fs/s3/${local.selected_virtual_name}/meta"
-            name       = "meta"
-            read_only  = true
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_teams
+            content {
+              mount_path = "/fs/s3/${local.selected_virtual_name}/home/${volume_mount.value}"
+              name       = "home-${volume_mount.value}"
+              read_only  = false
+            }
           }
-          volume_mount {
-            mount_path = "/fs/s3/global/home"
-            name       = "global"
-            read_only  = false
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_teams
+            content {
+              mount_path = "/fs/s3/${local.selected_virtual_name}/scratch/${volume_mount.value}"
+              name       = "scratch-${volume_mount.value}"
+              read_only  = false
+            }
           }
-          volume_mount {
-            mount_path = "/fs/s3/global/scratch"
-            name       = "global-scratch"
-            read_only  = false
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_global_teams
+            content {
+              mount_path = "/fs/s3/global/home/${volume_mount.value}"
+              name       = "global-home-${volume_mount.value}"
+              read_only  = false
+            }
           }
-          volume_mount {
-            mount_path = "/fs/s3/global/meta"
-            name       = "global-meta"
-            read_only  = true
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_global_teams
+            content {
+              mount_path = "/fs/s3/global/scratch/${volume_mount.value}"
+              name       = "global-scratch-${volume_mount.value}"
+              read_only  = false
+            }
+          }
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_global_teams
+            content {
+              mount_path = "/fs/s3/global/meta/${volume_mount.value}"
+              name       = "global-meta-${volume_mount.value}"
+              read_only  = false
+            }
+          }
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_reader_teams
+            content {
+              mount_path = "/fs/s3/${local.selected_virtual_name}/home/${volume_mount.value}"
+              name       = "home-${volume_mount.value}"
+              read_only  = true
+            }
+          }
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_reader_teams
+            content {
+              mount_path = "/fs/s3/${local.selected_virtual_name}/scratch/${volume_mount.value}"
+              name       = "scratch-${volume_mount.value}"
+              read_only  = true
+            }
+          }
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_reader_global_teams
+            content {
+              mount_path = "/fs/s3/global/home/${volume_mount.value}"
+              name       = "global-home-${volume_mount.value}"
+              read_only  = true
+            }
+          }
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_reader_global_teams
+            content {
+              mount_path = "/fs/s3/global/scratch/${volume_mount.value}"
+              name       = "global-scratch-${volume_mount.value}"
+              read_only  = true
+            }
+          }
+          dynamic "volume_mount" {
+            for_each = local.workspace_s3_reader_global_teams
+            content {
+              mount_path = "/fs/s3/global/meta/${volume_mount.value}"
+              name       = "global-meta-${volume_mount.value}"
+              read_only  = true
+            }
+          }
+          dynamic "volume_mount" {
+            for_each = length(local.workspace_s3_teams) > 0 ? ["meta"] : []
+            content {
+              mount_path = "/fs/s3/${local.selected_virtual_name}/meta"
+              name       = "meta"
+              read_only  = true
+            }
           }
           volume_mount {
             mount_path = "/etc/workspace/ca"
@@ -589,6 +653,8 @@ resource "kubernetes_deployment_v1" "workspace" {
             "127.0.0.1:19847",
             "--disable=PutStream",
             "--force-path-style",
+            # The gateway passes KMS ETags through as MD5s, so skip the VFS check after full reads.
+            "--no-checksum",
             "--vfs-cache-mode",
             "off",
             "owner:",
@@ -618,6 +684,11 @@ resource "kubernetes_deployment_v1" "workspace" {
             name  = "RCLONE_CONFIG_BACKEND_USE_MULTIPART_UPLOADS"
             value = "false"
           }
+          # SSE-KMS object ETags are not MD5 digests, so rclone's upload check rejects every write.
+          env {
+            name  = "RCLONE_IGNORE_CHECKSUM"
+            value = "true"
+          }
           # LINT.IfChange(dev-workspace-secret-projection)
           env {
             name = "RCLONE_CONFIG_BACKEND_ACCESS_KEY_ID"
@@ -637,17 +708,15 @@ resource "kubernetes_deployment_v1" "workspace" {
               }
             }
           }
-          # LINT.ThenChange(//src/infra/argocd/components/team_namespace/helm/templates/lane.yaml:dev-workspace-secret-projection,//src/infra/argocd/components/coder_workspace_secret_store/helm/templates/store.yaml:dev-workspace-secret-projection)
+          # LINT.ThenChange(//src/infra/argocd/components/coder_workspaces/helm/templates/workspace-backups.yaml:dev-workspace-secret-projection,//src/infra/argocd/components/kyverno/kustomize/dev-secrets-policy.yaml:dev-workspace-secret-projection)
           env {
             name  = "RCLONE_CONFIG_OWNER_TYPE"
             value = "combine"
           }
-          # LINT.IfChange(workspace-backup-proxy-directory-roots)
           env {
             name  = "RCLONE_CONFIG_OWNER_UPSTREAMS"
-            value = "repository=backend:${local.selected_virtual_name}/backups/dev/${var.team}/repos/${local.owner_id}/ claims=backend:${local.selected_virtual_name}/backups/dev/${var.team}/claims/${local.owner_id}/${local.is_cross_cell_restore ? " source=backend:${local.restore_source_virtual_name}/backups/dev/${var.team}/repos/${local.owner_id}/" : ""}"
+            value = "repository=backend:${local.selected_virtual_name}/backups/dev/users/${local.owner_id}/repos/ claims=backend:${local.selected_virtual_name}/backups/dev/users/${local.owner_id}/claims/${local.is_cross_cell_restore ? " source=backend:${local.restore_source_virtual_name}/backups/dev/users/${local.owner_id}/repos/" : ""}"
           }
-          # LINT.ThenChange(//src/infra/tools/workspace_backup_proxy/workspace-backup-proxy_boundary_test.sh:workspace-backup-proxy-directory-roots)
           env {
             name = "RCLONE_AUTH_KEY"
             value_from {
@@ -711,7 +780,8 @@ resource "kubernetes_deployment_v1" "workspace" {
             }
             sources {
               secret {
-                name = "workspace-buildbuddy-auth"
+                name     = "workspace-buildbuddy-auth"
+                optional = true
                 items {
                   key  = "credentials.bazelrc"
                   path = "credentials.bazelrc"
@@ -729,27 +799,6 @@ resource "kubernetes_deployment_v1" "workspace" {
           }
         }
 
-        volume {
-          name = "workspace-kubernetes-identity"
-          projected {
-            default_mode = "0440"
-            sources {
-              config_map {
-                name = "kube-root-ca.crt"
-                items {
-                  key  = "ca.crt"
-                  path = "ca.crt"
-                }
-              }
-            }
-            sources {
-              service_account_token {
-                expiration_seconds = 3600
-                path               = "token"
-              }
-            }
-          }
-        }
         dynamic "volume" {
           for_each = local.workload_origin_auth_mode == "web-identity" ? [local.workload_origin_token_audience] : []
           content {
@@ -814,19 +863,32 @@ resource "kubernetes_deployment_v1" "workspace" {
           }
         }
         volume {
-          name = "team-s3-credentials"
+          name = "snapshot-repository"
           secret {
             default_mode = "0400"
-            secret_name  = "team-s3"
+            secret_name  = local.snapshot_repository_secret_name
+          }
+        }
+        # LINT.IfChange(workspace-s3-credential-contract)
+        volume {
+          name = "workspace-s3-credentials"
+          secret {
+            default_mode = "0400"
+            secret_name  = local.workspace_s3_secret_name
+            items {
+              key  = "credentials"
+              path = "credentials"
+            }
           }
         }
         volume {
-          name = "home"
+          name = "legacy"
           csi {
             driver = "rclone.csi.veloxpack.io"
             volume_attributes = {
               gid              = "1000"
-              remote           = "home"
+              "no-checksum"    = "true"
+              remote           = "legacy"
               remotePath       = ""
               tpslimit         = "25"
               "tpslimit-burst" = "10"
@@ -834,16 +896,17 @@ resource "kubernetes_deployment_v1" "workspace" {
               umask            = "0022"
               "vfs-cache-mode" = "off"
             }
-            node_publish_secret_ref { name = "team-s3" }
+            node_publish_secret_ref { name = local.workspace_s3_secret_name }
           }
         }
         volume {
-          name = "scratch"
+          name = "legacy-use1"
           csi {
             driver = "rclone.csi.veloxpack.io"
             volume_attributes = {
               gid              = "1000"
-              remote           = "scratch"
+              "no-checksum"    = "true"
+              remote           = "legacy-use1"
               remotePath       = ""
               tpslimit         = "25"
               "tpslimit-burst" = "10"
@@ -851,77 +914,32 @@ resource "kubernetes_deployment_v1" "workspace" {
               umask            = "0022"
               "vfs-cache-mode" = "off"
             }
-            node_publish_secret_ref { name = "team-s3" }
+            node_publish_secret_ref { name = local.workspace_s3_secret_name }
           }
         }
-        volume {
-          name = "global"
-          csi {
-            driver = "rclone.csi.veloxpack.io"
-            volume_attributes = {
-              gid              = "1000"
-              remote           = "global"
-              remotePath       = ""
-              tpslimit         = "25"
-              "tpslimit-burst" = "10"
-              uid              = "1000"
-              umask            = "0022"
-              "vfs-cache-mode" = "off"
+        dynamic "volume" {
+          for_each = local.workspace_s3_volumes
+          content {
+            name = volume.key
+            csi {
+              driver    = "rclone.csi.veloxpack.io"
+              read_only = volume.value.read_only
+              volume_attributes = {
+                gid              = "1000"
+                "no-checksum"    = "true"
+                remote           = volume.value.remote
+                remotePath       = ""
+                tpslimit         = "25"
+                "tpslimit-burst" = "10"
+                uid              = "1000"
+                umask            = "0022"
+                "vfs-cache-mode" = "off"
+              }
+              node_publish_secret_ref { name = local.workspace_s3_secret_name }
             }
-            node_publish_secret_ref { name = "team-s3" }
           }
         }
-        volume {
-          name = "meta"
-          csi {
-            driver = "rclone.csi.veloxpack.io"
-            volume_attributes = {
-              gid              = "1000"
-              remote           = "meta"
-              remotePath       = ""
-              tpslimit         = "25"
-              "tpslimit-burst" = "10"
-              uid              = "1000"
-              umask            = "0022"
-              "vfs-cache-mode" = "off"
-            }
-            node_publish_secret_ref { name = "team-s3" }
-          }
-        }
-        volume {
-          name = "global-scratch"
-          csi {
-            driver = "rclone.csi.veloxpack.io"
-            volume_attributes = {
-              gid              = "1000"
-              remote           = "global-scratch"
-              remotePath       = ""
-              tpslimit         = "25"
-              "tpslimit-burst" = "10"
-              uid              = "1000"
-              umask            = "0022"
-              "vfs-cache-mode" = "off"
-            }
-            node_publish_secret_ref { name = "team-s3" }
-          }
-        }
-        volume {
-          name = "global-meta"
-          csi {
-            driver = "rclone.csi.veloxpack.io"
-            volume_attributes = {
-              gid              = "1000"
-              remote           = "global-meta"
-              remotePath       = ""
-              tpslimit         = "25"
-              "tpslimit-burst" = "10"
-              uid              = "1000"
-              umask            = "0022"
-              "vfs-cache-mode" = "off"
-            }
-            node_publish_secret_ref { name = "team-s3" }
-          }
-        }
+        # LINT.ThenChange(//src/infra/argocd/components/kyverno/kustomize/workspace-s3-grant-policy.yaml:workspace-s3-credential-contract)
         volume {
           name = "backup-proxy-tmp"
           empty_dir {
@@ -977,9 +995,11 @@ resource "kubernetes_deployment_v1" "workspace" {
     kubernetes_config_map_v1.access,
     kubernetes_config_map_v1.mise,
     kubernetes_config_map_v1.workspace_ca,
+    kubernetes_config_map_v1.workspace_kubeconfig,
+    kubernetes_manifest.workspace_s3_credentials,
+    kubernetes_secret_v1.snapshot_repository,
     kubernetes_secret_v1.workspace_runtime,
     module.coder_snapshots,
-    terraform_data.workspace_agent_registration,
   ]
 
   lifecycle {
@@ -987,18 +1007,9 @@ resource "kubernetes_deployment_v1" "workspace" {
 
     precondition {
       condition = (
-        startswith(data.coder_workspace.me.access_url, "https://") &&
-        local.coder_access_authority == local.coder_access_host &&
-        can(regex("^coder\\.[a-z0-9](?:[-a-z0-9.]*[a-z0-9])$", local.coder_access_host))
-      )
-      error_message = "Coder's workspace access URL must be one HTTPS coder.* DNS hostname without a port or path."
-    }
-
-    precondition {
-      condition = (
         local.template_preview ||
         (
-          can(regex("^[a-z0-9]+(?:-[a-z0-9]+)*$", data.coder_workspace.me.name)) &&
+          can(regex("^[a-z0-9]+(?:-[a-z0-9]+)*$", lower(data.coder_workspace.me.name))) &&
           can(regex("^[a-z0-9]+(?:-[a-z0-9]+)*$", local.coder_owner_name)) &&
           local.coder_app_label_length <= 63
         )
@@ -1043,6 +1054,11 @@ resource "kubernetes_deployment_v1" "workspace" {
       condition     = local.template_preview || can(regex("^[a-z][a-z0-9-]{0,31}$", local.owner_username))
       error_message = "The attested OIDC preferred_username must be a lowercase POSIX-safe and Coder-compatible login name of at most 32 characters."
     }
+
+    precondition {
+      condition     = local.template_preview || !contains(local.reserved_usernames, local.owner_username)
+      error_message = "The attested OIDC preferred_username matches a reserved system domain label."
+    }
   }
 }
 
@@ -1052,7 +1068,12 @@ resource "kubernetes_service_v1" "workspace_ssh" {
   metadata {
     name      = local.workspace_machine
     namespace = local.workspace_namespace
-    labels    = local.app_labels
+    labels = merge(local.app_labels, {
+      "app.kubernetes.io/component" = "external-dns-source"
+    })
+    annotations = {
+      "external-dns.kubernetes.io/hostname" = "${local.ssh_wildcard_hostname},${local.ssh_alias_hostname}"
+    }
   }
 
   spec {
@@ -1062,7 +1083,7 @@ resource "kubernetes_service_v1" "workspace_ssh" {
     port {
       name        = "ssh"
       port        = local.ssh_port
-      target_port = local.ssh_port
+      target_port = 2222
       protocol    = "TCP"
     }
   }

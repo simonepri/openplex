@@ -163,10 +163,30 @@ locals {
   workspace_storage      = local.selected_workspace_placement.storage_gib
   workspace_tmp_size_gib = try(local.selected_workspace_placement.tmp_storage_gib, 64)
   workspace_tmp_size     = "${local.workspace_tmp_size_gib}Gi"
+  is_ebs_storage         = var.storage_class_name == "general-expandable"
+  disk_throughput_mbps   = local.is_ebs_storage ? try(tonumber(one(data.coder_parameter.disk_throughput_mbps[*].value)), 500) : null
+  disk_iops              = local.is_ebs_storage ? try(tonumber(one(data.coder_parameter.disk_iops[*].value)), 8000) : null
 
-  workspace_namespace     = var.workspace_namespace
-  workspace_origin_object = try(one(data.kubernetes_resources.workspace_origin[0].objects), null)
-  workspace_origin_data   = try(local.workspace_origin_object.data, {})
+  workspace_namespace    = "workspaces"
+  workspace_origin_entry = try(data.kubernetes_config_map_v1.workspace_origin[0], null)
+  workspace_origin_name = try(
+    local.workspace_origin_entry.metadata.name,
+    local.workspace_origin_entry.metadata[0].name,
+    ""
+  )
+  workspace_origin_namespace = try(
+    local.workspace_origin_entry.metadata.namespace,
+    local.workspace_origin_entry.metadata[0].namespace,
+    ""
+  )
+  workspace_origin_object = (local.workspace_origin_name != "") ? {
+    metadata = {
+      name      = local.workspace_origin_name
+      namespace = local.workspace_origin_namespace
+    }
+    data = try(local.workspace_origin_entry.data, {})
+  } : null
+  workspace_origin_data = try(local.workspace_origin_object.data, {})
   selected_workload_origin = local.template_preview ? {
     authMode       = var.workload_origin_auth_mode
     cell           = var.cell
@@ -200,11 +220,11 @@ locals {
   } : {})
 
   # Machine naming derivation (inlined from workspace_machine)
-  readable_workspace_machine = "${local.owner_username}-${data.coder_workspace.me.name}"
+  readable_workspace_machine = "${local.owner_username}-${lower(data.coder_workspace.me.name)}"
   workspace_machine_is_readable = (
     local.owner_username != "ws" &&
     can(regex("^[a-z][a-z0-9]*$", local.owner_username)) &&
-    can(regex("^[a-z0-9]+(?:-[a-z0-9]+)*$", data.coder_workspace.me.name)) &&
+    can(regex("^[a-z0-9]+(?:-[a-z0-9]+)*$", lower(data.coder_workspace.me.name))) &&
     length(local.readable_workspace_machine) <= 63 &&
     can(regex("^[a-z][a-z0-9-]{1,61}[a-z0-9]$", local.readable_workspace_machine))
   )
@@ -214,20 +234,16 @@ locals {
     data.coder_workspace.me.id,
   ])), 0, 40)}"
 
-  ssh_port               = 2222
-  ssh_uri                = "ssh://${local.owner_username}@${local.ssh_hostname}:${local.ssh_port}"
-  ssh_enabled            = data.coder_parameter.ssh_enabled.value == "true" && data.coder_parameter.ssh_public_key.value != ""
-  active_ctrl_name       = try(regex("^https?://headscale\\.([^.]+)", var.headscale_url)[0], "")
-  coder_agent_url        = "https://coder.${var.access_alias_domain}"
-  coder_access_authority = split("/", replace(data.coder_workspace.me.access_url, "/^https?:\\/\\//", ""))[0]
-  coder_access_host      = split(":", local.coder_access_authority)[0]
-  coder_app_host_suffix  = ".${local.coder_access_host}"
-  coder_owner_name       = data.coder_workspace_owner.me.name
-  paseo_app_hostname     = "paseo--${data.coder_workspace.me.name}--${local.coder_owner_name}${local.coder_app_host_suffix}"
-  zasper_access_token    = sha256("${data.coder_workspace.me.id}:zasper")
+  ssh_port            = 22
+  ssh_uri             = "ssh://${local.owner_username}@${local.ssh_hostname}:${local.ssh_port}"
+  ssh_enabled         = data.coder_parameter.ssh_enabled.value == "true" && data.coder_parameter.ssh_public_key.value != ""
+  coder_agent_url     = "https://coder.${var.access_alias_domain}"
+  coder_owner_name    = lower(data.coder_workspace_owner.me.name)
+  paseo_app_hostname  = "paseo--${lower(data.coder_workspace.me.name)}--${local.coder_owner_name}.${var.coder_app_domain}"
+  zasper_access_token = sha256("${data.coder_workspace.me.id}:zasper")
   coder_app_label_length = length(join("--", [
     "vscode",
-    data.coder_workspace.me.name,
+    lower(data.coder_workspace.me.name),
     local.coder_owner_name,
   ]))
   coder_agent_init_script = replace(
@@ -257,6 +273,22 @@ locals {
     "tmp",
     "usr",
     "var",
+    # keep-sorted end
+  ]
+
+  reserved_usernames = [
+    # keep-sorted start
+    "argocd",
+    "atlantis",
+    "buildbuddy",
+    "coder",
+    "dex",
+    "grafana",
+    "headlamp",
+    "hooks",
+    "kube",
+    "s3",
+    "signoz",
     # keep-sorted end
   ]
 }

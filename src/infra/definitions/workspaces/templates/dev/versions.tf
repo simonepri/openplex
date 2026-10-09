@@ -6,7 +6,7 @@ terraform {
   required_providers {
     coder = {
       source  = "registry.terraform.io/coder/coder"
-      version = "2.18.0"
+      version = "2.19.0"
     }
     external = {
       source  = "registry.terraform.io/hashicorp/external"
@@ -14,7 +14,7 @@ terraform {
     }
     kubernetes = {
       source  = "registry.terraform.io/hashicorp/kubernetes"
-      version = "3.2.1"
+      version = "3.3.0"
     }
   }
 }

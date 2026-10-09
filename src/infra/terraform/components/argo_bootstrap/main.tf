@@ -183,17 +183,9 @@ resource "helm_release" "argocd" {
             }
           }
         }
+        # Argo CD signs in through the standalone Dex broker set in oidc.config.
         dex = {
-          resources = {
-            requests = {
-              cpu    = "25m"
-              memory = "64Mi"
-            }
-            limits = {
-              cpu    = "1000m"
-              memory = "512Mi"
-            }
-          }
+          enabled = false
         }
       })
     ],
@@ -301,6 +293,12 @@ resource "kubernetes_secret_v1" "control_registration" {
       } : {},
       try(length(trimspace(var.tailscale_oauth_key)) > 0, false) ? {
         "tailscale-oauth-key" = var.tailscale_oauth_key
+      } : {},
+      try(length(trimspace(var.atlantis_plan_role_arn)) > 0, false) ? {
+        "atlantis-plan-role-arn" = var.atlantis_plan_role_arn
+      } : {},
+      try(length(trimspace(var.atlantis_apply_role_arn)) > 0, false) ? {
+        "atlantis-apply-role-arn" = var.atlantis_apply_role_arn
       } : {}
     )
     labels = merge(

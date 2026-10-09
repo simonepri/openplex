@@ -20,6 +20,7 @@ if [[ ${1:-} == "--check" ]]; then
   test -f "${template_dir}/writer_inventory.tftest.hcl"
   test -f "${template_dir}/hooks/attest-owner.sh"
   test -f "${template_dir}/hooks/register-workspace-agent.sh"
+  test -f "${template_dir}/hooks/snapshot-repository-password.sh"
   test -f "${template_dir}/hooks/wait-for-admission.sh"
   test -f "${template_dir}/hooks/workspace-build-context.sh"
   test -f "${template_dir}/hooks/workspace-writer-inventory.sh"
@@ -133,6 +134,7 @@ materialize_template() {
   cp \
     "${template_dir}"/hooks/attest-owner.sh \
     "${template_dir}"/hooks/register-workspace-agent.sh \
+    "${template_dir}"/hooks/snapshot-repository-password.sh \
     "${template_dir}"/hooks/wait-for-admission.sh \
     "${template_dir}"/hooks/workspace-build-context.sh \
     "${template_dir}"/hooks/workspace-writer-inventory.sh \
@@ -158,13 +160,12 @@ if [[ -n ${prepare_dir} ]]; then
   exit 0
 fi
 
-: "${CODER_URL:?set CODER_URL to the team Coder endpoint}"
+: "${CODER_URL:?set CODER_URL to the Coder endpoint}"
 : "${CODER_TEMPLATE_PUBLISHER_TOKEN:?set CODER_TEMPLATE_PUBLISHER_TOKEN to the dedicated Coder automation-user token}"
 : "${CODER_TEMPLATE_IMAGE:?set CODER_TEMPLATE_IMAGE to the digest-pinned image}"
 : "${CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE:?set CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE to the digest-pinned backup proxy image}"
 : "${CODER_TEMPLATE_CELL:?set CODER_TEMPLATE_CELL to the target cell}"
 : "${CODER_TEMPLATE_STORAGE_CLASS:?set CODER_TEMPLATE_STORAGE_CLASS to the RWO home class}"
-: "${CODER_TEMPLATE_TEAM:?set CODER_TEMPLATE_TEAM to the owning team}"
 : "${CODER_TEMPLATE_WORKLOAD_REGISTRY:?set CODER_TEMPLATE_WORKLOAD_REGISTRY to the workload OCI origin root}"
 : "${CODER_TEMPLATE_WORKLOAD_REGISTRY_INSECURE:?set CODER_TEMPLATE_WORKLOAD_REGISTRY_INSECURE to false or true}"
 : "${CODER_TEMPLATE_WORKLOAD_ORIGIN_AUTH_MODE:?set CODER_TEMPLATE_WORKLOAD_ORIGIN_AUTH_MODE to the cell-owned credential mode}"
@@ -175,16 +176,18 @@ fi
 : "${CODER_TEMPLATE_WORKLOAD_ORIGIN_TOKEN_FILE:=}"
 : "${CODER_TEMPLATE_ARCH:?set CODER_TEMPLATE_ARCH to amd64 or arm64}"
 : "${CODER_TEMPLATE_CA_CONFIG_MAP:=}"
+: "${CODER_TEMPLATE_CELL_CA_INVENTORY:="{}"}"
 : "${CODER_TEMPLATE_CONTROL_PLANE_CA_BASE64:?set CODER_TEMPLATE_CONTROL_PLANE_CA_BASE64 to the base64-encoded control-plane CA}"
+: "${CODER_TEMPLATE_CONTROL_PLANE_NAME:?set CODER_TEMPLATE_CONTROL_PLANE_NAME to the control-plane cluster name}"
 : "${CODER_TEMPLATE_REPOSITORY_URL:?set CODER_TEMPLATE_REPOSITORY_URL to the administrator-owned Git repository}"
-: "${CODER_TEMPLATE_SERVICE_ACCOUNT:?set CODER_TEMPLATE_SERVICE_ACCOUNT to the team service account}"
-: "${CODER_TEMPLATE_WORKSPACE_NAMESPACE:?set CODER_TEMPLATE_WORKSPACE_NAMESPACE to the team workspaces namespace}"
+: "${CODER_TEMPLATE_SERVICE_ACCOUNT:?set CODER_TEMPLATE_SERVICE_ACCOUNT to the workspace service account}"
 : "${CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY:?set CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY to the canonical cluster incarnation JSON}"
 : "${CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY:?set CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY to the canonical cluster resource JSON}"
 : "${CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY:?set CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY to the canonical cluster virtual-name JSON}"
 : "${CODER_TEMPLATE_ACCESS_ALIAS_DOMAIN:?set CODER_TEMPLATE_ACCESS_ALIAS_DOMAIN to the k8s access domain}"
+: "${CODER_TEMPLATE_APP_DOMAIN:?set CODER_TEMPLATE_APP_DOMAIN to the Coder wildcard domain}"
 : "${CODER_TEMPLATE_DEPLOYMENT_DOMAIN:?set CODER_TEMPLATE_DEPLOYMENT_DOMAIN to the public deployment domain}"
-: "${CODER_TEMPLATE_HEADSCALE_URL:?set CODER_TEMPLATE_HEADSCALE_URL to the canonical Headscale HTTPS URL}"
+: "${CODER_TEMPLATE_HEADSCALE_URL:=}"
 
 tmp_dir=
 if [[ -z ${publish_dir} ]]; then
@@ -194,22 +197,25 @@ if [[ -z ${publish_dir} ]]; then
   materialize_template "${publish_dir}"
 fi
 export CODER_SESSION_TOKEN="${CODER_TEMPLATE_PUBLISHER_TOKEN}"
+cell_ca_inventory_csv="${CODER_TEMPLATE_CELL_CA_INVENTORY//\"/\"\"}"
 workspace_incarnation_inventory_csv="${CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY//\"/\"\"}"
 workspace_placement_inventory_csv="${CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY//\"/\"\"}"
 workspace_virtual_name_inventory_csv="${CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY//\"/\"\"}"
 coder templates push "${template_name}" \
   --directory "${publish_dir}" \
   --variable "access_alias_domain=${CODER_TEMPLATE_ACCESS_ALIAS_DOMAIN}" \
+  --variable "coder_app_domain=${CODER_TEMPLATE_APP_DOMAIN}" \
   --variable "deployment_domain=${CODER_TEMPLATE_DEPLOYMENT_DOMAIN}" \
   --variable "workspace_image=${CODER_TEMPLATE_IMAGE}" \
   --variable "workspace_backup_proxy_image=${CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE}" \
   --variable "ca_config_map_name=${CODER_TEMPLATE_CA_CONFIG_MAP}" \
   --variable "cell=${CODER_TEMPLATE_CELL}" \
+  --variable "\"cell_ca_inventory=${cell_ca_inventory_csv}\"" \
   --variable "control_plane_ca_base64=${CODER_TEMPLATE_CONTROL_PLANE_CA_BASE64}" \
+  --variable "control_plane_name=${CODER_TEMPLATE_CONTROL_PLANE_NAME}" \
   --variable "headscale_url=${CODER_TEMPLATE_HEADSCALE_URL}" \
   --variable "repository_url=${CODER_TEMPLATE_REPOSITORY_URL}" \
   --variable "storage_class_name=${CODER_TEMPLATE_STORAGE_CLASS}" \
-  --variable "team=${CODER_TEMPLATE_TEAM}" \
   --variable "workload_registry=${CODER_TEMPLATE_WORKLOAD_REGISTRY}" \
   --variable "workload_registry_insecure=${CODER_TEMPLATE_WORKLOAD_REGISTRY_INSECURE}" \
   --variable "workload_origin_auth_mode=${CODER_TEMPLATE_WORKLOAD_ORIGIN_AUTH_MODE}" \
@@ -219,7 +225,6 @@ coder templates push "${template_name}" \
   --variable "workload_origin_token_audience=${CODER_TEMPLATE_WORKLOAD_ORIGIN_TOKEN_AUDIENCE}" \
   --variable "workload_origin_token_file=${CODER_TEMPLATE_WORKLOAD_ORIGIN_TOKEN_FILE}" \
   --variable "workspace_arch=${CODER_TEMPLATE_ARCH}" \
-  --variable "workspace_namespace=${CODER_TEMPLATE_WORKSPACE_NAMESPACE}" \
   --variable "\"workspace_incarnation_inventory=${workspace_incarnation_inventory_csv}\"" \
   --variable "\"workspace_placement_inventory=${workspace_placement_inventory_csv}\"" \
   --variable "\"workspace_virtual_name_inventory=${workspace_virtual_name_inventory_csv}\"" \

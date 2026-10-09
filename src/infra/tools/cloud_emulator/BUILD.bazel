@@ -1,12 +1,5 @@
 """Builds local emulator lifecycle, persistent runtime, and EKS authentication targets."""
 
-# gazelle:resolve py infra.tools.cloud_emulator.runtime //src/infra/tools/cloud_emulator:runtime
-# gazelle:resolve py infra.tools.cloud_emulator //src/infra/tools/cloud_emulator:runtime
-# gazelle:resolve_regexp py ^infra\.tools\.cloud_emulator\.engine\.([^.]+)(\..*)?$ //src/infra/tools/cloud_emulator/engine:$1
-# gazelle:resolve py yaml @dev_python_deps//pyyaml
-
-load("@rules_python//python:defs.bzl", "py_library", "py_test")
-
 alias(
     name = "eks_token",
     actual = "//src/infra/tools/cloud_emulator/auth:eks_token",
@@ -17,34 +10,4 @@ alias(
     name = "headscale_keys",
     actual = "//src/infra/tools/cloud_emulator/auth:headscale_keys",
     visibility = ["//visibility:public"],
-)
-
-py_library(
-    name = "runtime",
-    srcs = ["runtime.py"],
-    data = [
-        "compose.yaml",
-        "//src/infra/tools/cloud_emulator/stack:compose.yaml",
-    ],
-    imports = ["../../.."],
-    visibility = [
-        "//src/infra/terraform/lifecycle:__pkg__",
-        "//src/infra/tools/cloud_emulator:__subpackages__",
-    ],
-    deps = [
-        "//src/infra/tools/cloud_emulator/engine:compose",
-        "//src/infra/tools/cloud_emulator/engine:docker",
-        "//src/infra/tools/cloud_emulator/engine:readiness",
-        "//src/infra/tools/cloud_emulator/engine:storage",
-    ],
-)
-
-py_test(
-    name = "runtime_test",
-    srcs = ["runtime_test.py"],
-    imports = ["../../.."],
-    deps = [
-        "//src/infra/tools/cloud_emulator:runtime",
-        "@dev_python_deps//pyyaml",
-    ],
 )

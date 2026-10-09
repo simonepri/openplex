@@ -75,7 +75,7 @@ tailscale up
 
 <a href="assets/flows/home.png"><img align="right" src="assets/flows/home.png" alt="Service Catalog" width="400" hspace="24" style="margin-left: 24px;" /></a>
 
-Once connected, open your browser to the central service catalog at `https://home.c.corp.<domain>`, providing a unified landing page linking directly to all development workspaces, telemetry, and compute tools.
+Once connected, open your browser to the central service catalog at `https://home.<cluster_domain>`, providing a unified landing page linking directly to all development workspaces, telemetry, and compute tools.
 
 <br clear="right"/>
 
@@ -111,8 +111,31 @@ Every workspace comes with integrated tools and web applications pre-installed a
 | <a href="assets/flows/devpod.png"><img src="assets/flows/devpod.png" alt="Dev Pod Workspace Overview" width="100%" /></a><br/>Central workspace overview displaying active resource utilization, build logs, and pre-installed app launcher cards. | <a href="assets/flows/paseo.gif"><img src="assets/flows/paseo.gif" alt="Paseo UI AI Workspace" width="100%" /></a><br/>Browser UI workspace and local orchestrator for AI agents, accessible via browser or companion mobile app over Tailscale. | <a href="assets/flows/herdr.gif"><img src="assets/flows/herdr.gif" alt="Herdr TUI AI Workspace" width="100%" /></a><br/>Terminal-native TUI workspace runtime to manage AI agent tasks directly from the shell. |
 | [VS Code](https://github.com/microsoft/vscode) (Browser & Desktop) | **[Zasper](https://github.com/zasper-io/zasper) (Notebooks)** | **[Zellij](https://github.com/zellij-org/zellij) (Terminal Multiplexer)** |
 | <a href="assets/flows/vscode.gif"><img src="assets/flows/vscode.gif" alt="VS Code IDE" width="100%" /></a><br/>Full code-server in your browser or via Desktop VS Code. | <a href="assets/flows/zesper.gif"><img src="assets/flows/zesper.gif" alt="Zasper Interactive Notebooks" width="100%" /></a><br/>Interactive notebook and exploratory data analysis environment preconfigured with Python 3. | <a href="assets/flows/zellij.gif"><img src="assets/flows/zellij.gif" alt="Zellij Terminal Multiplexer" width="100%" /></a><br/>Persistent terminal multiplexer preserving sessions across browser refreshes and machine restarts. |
-| **[File Browser](https://github.com/filebrowser/filebrowser)** | **Direct SSH Connectivity** | **[Workspace Snapshots](#workspace-snapshots)** |
-| <a href="assets/flows/filebrowser.gif"><img src="assets/flows/filebrowser.gif" alt="File Browser" width="100%" /></a><br/>Browse, inspect, upload, and download workspace files directly through a web interface. | <a href="assets/flows/ssh.gif"><img src="assets/flows/ssh.gif" alt="Direct SSH Connectivity" width="100%" /></a><br/>Connect local IDEs ([Cursor](https://www.cursor.com), JetBrains) or CLI terminals via Tailscale SSH. | <a href="assets/flows/snapshots.gif"><img src="assets/flows/snapshots.gif" alt="Workspace Snapshots" width="100%" /></a><br/>Browse and restore verified point-in-time snapshots and manage workspace lineages. |
+| **[File Browser](https://github.com/filebrowser/filebrowser)** | **[Direct SSH Access](#direct-ssh-access)** | **[Workspace Snapshots](#workspace-snapshots)** |
+| <a href="assets/flows/filebrowser.gif"><img src="assets/flows/filebrowser.gif" alt="File Browser" width="100%" /></a><br/>Browse, inspect, upload, and download workspace files directly through a web interface. | <a href="assets/flows/ssh.gif"><img src="assets/flows/ssh.gif" alt="Direct SSH Connectivity" width="100%" /></a><br/>Connect local IDEs ([Cursor](https://www.cursor.com), JetBrains) or CLI terminals via Tailscale SSH. | <a href="assets/flows/snapshots.gif"><img src="assets/flows/snapshots.gif" alt="Workspace Snapshots" width="100%" /></a><br/>Browse and restore verified point-in-time snapshots across registered backup buckets. |
+
+### Direct SSH Access
+
+Every workspace provides an authenticated OpenSSH server on standard port 22 reachable across the private Tailscale network.
+
+Connect directly from your terminal or configure local IDEs (Cursor, VS Code, JetBrains) using the user command:
+
+```bash
+ssh <user>@<ws>.<user>.<access domain>
+```
+
+For example, to connect to workspace `devpod` owned by user `alice` under access domain `c.corp.example.com`:
+
+```bash
+ssh alice@devpod.alice.c.corp.example.com
+```
+
+- **Hostname Resolution**: ExternalDNS automatically publishes two DNS names for the workspace SSH Service:
+  - `<workspace>.<user>.<access_domain>`: Canonical human-friendly hostname for terminal and IDE access.
+  - `ssh--<workspace>--<user>.<coder_app_domain>`: Wildcard application hostname routed under the Coder template domain.
+- **Port Mapping**: The service listens on standard port 22 externally and forwards traffic to container port 2222.
+- **Authentication**: Authenticate using the personal ed25519 SSH public key configured during workspace provisioning.
+- **Reserved Usernames**: Workspace owner usernames cannot match platform service names published directly under `<access_domain>` (such as `coder`, `dex`, `hooks`, `s3`, `kube`, `argocd`, `headlamp`, `signoz`, `grafana`, `atlantis`, or `buildbuddy`) to prevent domain routing conflicts.
 
 ### Dev Filesystem Layout
 
@@ -123,9 +146,7 @@ Workspaces structure all disks and storage under the unified `/fs/` hierarchy:
 - **Monorepo (`/fs/depot`)**: The monorepo is mounted directly at `/fs/depot`, ready for immediate editing, building, and testing without manual cloning or repository setup.
 - **Local Data Storage (`/fs/local`)**: Fast persistent local volume storage for datasets, working directories, intermediate build outputs, and caches.
 - **Ephemeral Scratch (`/tmp`)**: High-speed node-local temporary scratch storage for transient runtime files and short-lived operations.
-- **Object Storage (`/fs/s3`)**: Compatibility mount granting direct filesystem access to object buckets:
-  - **Cell-Local Buckets (`/fs/s3/<cell>/...`)**: High-throughput, zero-egress storage colocated within the same region and cloud provider as your workspace worker cell. Use `/fs/s3/<cell>/scratch` for short-lived intermediate build/training artifacts and `/fs/s3/<cell>/home` for durable cell-scoped team datasets.
-  - **Global Buckets (`/fs/s3/global/...`)**: Replicated multi-region storage accessible uniformly across all worker cells and regions. Use `/fs/s3/global/home` for cross-region shared configurations, foundational checkpoints, and team assets that must be available everywhere.
+- **Global Object Storage (`/fs/s3/global/`)**: Global multi-cloud object storage backed by Cloudflare R2 without egress fees. Mounted via Rclone CSI under `/fs/s3/global/home`, `/fs/s3/global/scratch` (30-day retention), and `/fs/s3/global/meta` (read-only), providing direct filesystem access to shared datasets, checkpoints, and team assets across all clusters.
 - **User Home (`~`)**: Your persistent home directory (`/home/coder`), shell configurations, and personal environment state persist across stops, restarts, and pod replacements.
 
 <br clear="right"/>
@@ -136,9 +157,11 @@ Workspaces structure all disks and storage under the unified `/fs/` hierarchy:
 
 The persistent disk attached to your pod (storing your home directory `~` and `/fs/local`) is automatically snapshotted in the background every 30 minutes and right before workspace shutdown. Snapshots use content-defined deduplication and compression via [Kopia](https://github.com/kopia/kopia) to stream only modified blocks into object storage (`s3://`) with minimal bandwidth and storage overhead.
 
+Snapshots operate completely brokerless: the workspace pod connects directly to the regional backup S3 bucket using Kopia. The repository encryption password is derived deterministically from the cluster root key per workspace owner and injected into the workspace pod via a per-workspace Kubernetes Secret (`KOPIA_PASSWORD_FILE`), removing any central snapshot broker or proxy from the data path.
+
 You can use snapshots to roll back after accidental changes, recover deleted work, or create a second dev pod from an earlier snapshot whenever you want two identical setups running in parallel:
 
-1. **Open the Snapshot Catalog**: Click the **"Restore Snapshot..."** action in your Coder workspace app bar, or navigate to `https://coder-snapshots.<ctrl>.<public_domain>`.
+1. **Open the Snapshot Catalog**: Click the **"Restore Snapshot..."** action in your Coder workspace app bar, or navigate to `https://coder-snapshots.<access_domain>`. The portal connects to backup buckets across all registered cells (`S3_BUCKETS`), providing a unified catalog across the fleet.
 2. **Inspect Lineage & History**:
    - **Lineage Graph**: The interactive graph visually maps parent-child relationships and active workspace branches (such as `unicorn | 2026-09-22T23:00:30Z (Active)`). Clicking a node filters the history to that exact lineage.
    - **Timeline**: View all verified snapshots, including UTC capture timestamp, relative age, file count, and deduplication efficiency (for example, 280 GiB logical data deduplicated to 2.7 GiB physical storage on S3).
@@ -147,7 +170,6 @@ You can use snapshots to roll back after accidental changes, recover deleted wor
 5. **Apply Restoration in Coder**:
    - **Launch an Identical Second Dev Pod**: Click **"Or create a brand-new workspace with this backup"** in the modal to launch a brand-new workspace initialized with that exact snapshot state.
    - **Roll Back Existing Workspace**: Return to your Coder workspace parameters, paste the selector ID into the **"Restore from backup"** field, and restart the workspace.
-6. **Anti-Split-Brain Guard**: Restored workspaces branch cleanly into their own lineage. The snapshot engine prevents multiple active workspaces from writing to the same lineage simultaneously, guaranteeing data integrity.
 
 <br clear="right"/>
 
@@ -165,12 +187,12 @@ Every project pairs application code with build and deployment metadata:
 
 ```text
 src/<team>/<project>/
-├── main.py                 # Application source code
-├── BUILD.bazel             # Build rules and container image definition
-└── deployment/
-    ├── <project>.k8s.yaml  # Kubernetes workload manifest (Deployment, RayJob, CronJob)
-    ├── kustomization.yaml  # Manifest bundle entry point referencing k8s resources
-    └── project.yaml        # Delivery model declaration (submitted vs promoted)
+|-- main.py                 # Application source code
+|-- BUILD.bazel             # Build rules and container image definition
+\-- deployment/
+    |-- <project>.k8s.yaml  # Kubernetes workload manifest (Deployment, RayJob, CronJob)
+    |-- kustomization.yaml  # Manifest bundle entry point referencing k8s resources
+    \-- project.yaml        # Delivery model declaration (submitted vs promoted)
 ```
 
 <!-- TODO(simonepri): Provide workload templating or scaffolding for deployment manifests so projects do not have to duplicate Kubernetes boilerplate. -->
@@ -183,10 +205,20 @@ Projects can be authored in any programming language supported by Bazel, includi
 
 Workloads have native access to storage systems and datastores, supporting both cell-local high-throughput I/O and global cross-cluster access:
 
-- **Object Storage (`s3://`)**: Datasets, model checkpoints, and shared artifacts reside in unified, S3-compatible object storage addressed via virtual bucket coordinates:
-  - `s3://global/home/<team>/...`: Durable, team-scoped datasets and production checkpoints, accessible across clusters (cross-cluster access is rate-limited to control WAN egress costs).
-  - `s3://aws-usw2/scratch/...`: Cell-local, high-throughput temporary scratch storage for intermediate runs.
-  - **Fast Inventory Searches (`s3i`)**: Buckets produce daily Parquet-based storage inventories. Developer workspaces and workload pods query petabyte-scale metadata locally using the `s3i` CLI tool (such as `s3i find "*.safetensors"`, `s3i ls`, `s3i du`, or custom SQL via [DuckDB](https://github.com/duckdb/duckdb)) with zero network list overhead. Because inventories generate periodically, `s3i` queries reflect state delayed by up to 24 hours. Direct recursive S3 bucket scans (`s3:ListObjectsV2`) incur financial cost and are rate-limited to a fixed quota per day per pod.
+- **Object Storage (`s3://` and `/fs/s3/`)**: Datasets, model checkpoints, and shared artifacts reside in unified, S3-compatible object storage addressed via virtual bucket coordinates or mounted directly into containers via CSI:
+
+  | Storage Tier | Virtual S3 Coordinate | Filesystem Mount Path | Physical Backend | Retention & Lifecycle | Usage Profile |
+  | :--- | :--- | :--- | :--- | :--- | :--- |
+  | **Global Home** | `s3://global/home/<team>/...` | `/fs/s3/global/home` | Cloudflare R2 (`<ctrl-cluster>-global-<team>-<aws-account-id>`) | Permanent (Indefinite) | Team-scoped durable datasets, code assets, and production checkpoints shared across clusters without cloud egress fees. |
+  | **Global Scratch** | `s3://global/scratch/<team>/...` | `/fs/s3/global/scratch` | Cloudflare R2 (`<ctrl-cluster>-global-<team>-<aws-account-id>`) | 30-day automatic expiration | Cross-cluster intermediate artifacts and temporary run outputs without egress fees. |
+  | **Global Metadata** | `s3://global/meta/...` | `/fs/s3/global/meta` | Cloudflare R2 (`<ctrl-cluster>-global-<team>-<aws-account-id>`) | Permanent | Team catalogs, schemas, and indexes. |
+  | **Cell-Local Scratch** | `s3://aws-usw2/scratch/<team>/...` | `/fs/s3/aws-usw2/scratch` | Regional S3 bucket of the cell | Cell-scoped | In-region high-throughput staging, training caches, and intermediate files. |
+
+  - **Resource Naming Conventions**: Cloud object names follow strict ownership rules: every cloud object name starts with its owning cluster's full name (`<cluster>-<purpose>[-<qualifier>]`, lowercase, digits, and single hyphens, at most 48 characters). Map keys that become name segments use the same hyphenated form. Objects serving the entire deployment are owned by the control plane cluster (`ctrl-aws-usw2-...`), never generic installation, tenant, or deployment words. Names in namespaces shared beyond one cloud account (such as Cloudflare R2 and S3 buckets) append the cloud account ID (`${cluster}-${class}-${account_id}`, for example `ctrl-aws-usw2-global-<team>-400920695547` or `cell-aws-usw2-home-400920695547`). Container image repositories are named by their source code path in the repository (such as `src/infra/tools/coder_snapshot_portal`) and carry no cluster prefix.
+  - **Compliance Variables & Tagging**: When authoring infrastructure components or workspace definitions, cloud resources adhere to customer compliance inputs: `iam_name_prefix` (prepended to IAM roles, policies, users, and instance profiles), `kms_alias_prefix` (prepended to KMS aliases), each at most 16 characters matching `^[a-z0-9-]*$`, and `iam_permissions_boundary` (attached to IAM roles). Deployments declare a unified `tags` map with lowercase kebab-case keys (such as `environment = "research"`), which OpenTofu applies as provider default tags and passes to Kubernetes cluster registrations via `resource-tags = jsonencode(tags)`. Dynamic runtime controllers (Karpenter node provisioners via `spec.tags`, AWS Load Balancer Controller via `defaultTags`, and EBS CSI volume provisioners) automatically attach these tags to dynamically provisioned cloud resources.
+  - **Direct R2 Credentials (`team-s3`)**: High-throughput distributed pipelines (such as PyTorch distributed training or Ray jobs) can bypass in-cluster gateways and connect directly to Cloudflare R2. In each `team-<team>-workloads` namespace, the `team-s3` Kubernetes Secret provides direct R2 S3-compatible credentials and endpoints (`global_access_key_id`, `global_secret_access_key`, `global_endpoint`, and `global_bucket`).
+  - **Fast Inventory Searches (`s3i`)**: Buckets produce daily Parquet-based storage inventories. Workload pods query petabyte-scale metadata locally using the `s3i` CLI tool (such as `s3i find "*.safetensors"`, `s3i ls`, `s3i du`, or custom SQL via [DuckDB](https://github.com/duckdb/duckdb)) with zero network list overhead. Because inventories generate periodically, `s3i` queries reflect state delayed by up to 24 hours. Direct recursive S3 bucket scans (`s3:ListObjectsV2`) incur financial cost and are rate-limited to a fixed quota per day per pod.
+  - **S3 Mount Checksum Configuration**: Rclone CSI volumes for S3 (configured in workspace templates and team storage mounts) specify `volumeAttribute "no-checksum" = "true"`. Writes are covered by node-plugin RCLONE_IGNORE_CHECKSUM + RCLONE_STREAMING_UPLOAD_CUTOFF=0 (Content-MD5 on every multipart part, verified by the gateway); reads skip the ETag comparison via no-checksum. Workspace environments also set `AWS_REQUEST_CHECKSUM_CALCULATION=when_required` and `AWS_RESPONSE_CHECKSUM_VALIDATION=when_required`, ensuring that AWS SDKs and CLI tools calculate or validate checksums only when the service API explicitly mandates it, preventing streaming errors and reducing client overhead on mounted S3 paths.
 - **[PostgreSQL](https://github.com/postgres/postgres)**: Relational database for transactional application state and structured relational queries. Applications connect using standard connection strings (see reference configuration in [`src/examples/svelte_web`](../../examples/svelte_web)).
 - **[ClickHouse](https://github.com/ClickHouse/ClickHouse)**: Columnar analytics database engineered for petabyte-scale SQL queries over event streams, time-series data, and telemetry.
 - **[Valkey](https://github.com/valkey-io/valkey)**: In-memory, Redis-compatible key-value store for low-latency caching, rate limiting, and shared PyTorch compile caches.
@@ -217,7 +249,7 @@ The repository coordinates AI coding assistants and developers through distribut
 - **Global & Domain Rules**: Global architecture, coding, testing, security, documentation, and writing standards live in root [`agents/*.rules.rulesync.md`](../../../agents). Domain-specific rules live colocated directly beside the code they govern in nested `agents/` directories (such as [`src/infra/agents/infra.rules.rulesync.md`](../agents/infra.rules.rulesync.md), [`src/infra/argocd/agents/argocd.rules.rulesync.md`](../argocd/agents/argocd.rules.rulesync.md), and [`src/examples/agents/examples.rules.rulesync.md`](../../examples/agents/examples.rules.rulesync.md)).
 - **Standardized Four-Part Taxonomy**: Every rule file structures guidance into `Context`, `Principles`, `Decisions`, and `Best Practices`, with bold contract names and clear, enforceable constraints.
 - **Auto-Scoped & Lazy-Loaded by Models**: Rules are never dumped into one monolithic prompt. Models and coding assistants (such as Claude Code, Antigravity, or Codex) auto-scope rules based on parent directory boundaries and frontmatter `globs:` (such as `globs: ["**/*.py"]` or `globs: ["**/*.md"]`). When a model reads, writes, or edits a file, only the rules matching that active file path load into the model's context window. This prevents token bloat, eliminates noise, and avoids conflicting instructions across domains.
-- **Rule Synchronization**: Running `mise run //:agent-generate` parses all RuleSync sources and compiles native agent rule files into `.agents/rules/`, `.claude/rules/`, and supported IDE extensions.
+- **Rule Synchronization**: Running `mise run fix` parses all RuleSync sources and compiles native agent rule files into `.agents/rules/`, `.claude/rules/`, and supported IDE extensions.
 
 ---
 
@@ -233,10 +265,7 @@ Run linters, formatters, and tests directly from your workspace terminal. Throug
 # Format code and regenerate build files automatically
 mise run fix
 
-# Run repository checks and linters on affected targets
-mise run check
-
-# Run automated tests on affected targets
+# Run automated tests and checks on affected targets
 mise run test
 
 # Run all checks, tests, and builds on affected targets
@@ -250,6 +279,7 @@ Bazel builds leverage remote execution and distributed caching via [BuildBuddy](
 - **Distributed Remote Cache**: Actions, compiled object files, and test outputs are cached globally across the fleet. When a colleague or CI has already built a target or run a test on identical inputs, your build downloads the cached artifact in milliseconds rather than recompiling from source.
 - **Remote Execution (RBE)**: Bazel offloads parallel compilation, linting, and test runs to remote worker pools, drastically speeding up large builds while freeing local workspace CPU and memory.
 - **Terminal Invocation Links & Analytics**: Every `mise run` or `bazel` invocation emits a clickable BuildBuddy link in your terminal. Open the link to inspect granular build timing waterfalls, target dependency graphs, complete stdout/stderr test logs, cache hit rates, and per-action resource consumption.
+- **Personal BuildBuddy API key**: Workspaces in cloud mode use per-user BuildBuddy credentials. The first interactive terminal without a valid key offers to run `bb login` in the depot checkout, which stores the key as `buildbuddy.api-key` in the checkout's `.git/config`. The browser link that `bb login` prints cannot reach a workspace, because its callback goes to `localhost` on your laptop; instead open `https://app.buildbuddy.io/settings/cli-login` and paste the key shown there at the `bb login` prompt. Without a key, Bazel commands still run locally.
 
 ### Infrastructure Conformance & Integration Testing (Chainsaw & Floci)
 
@@ -283,7 +313,7 @@ The infrastructure separates central control plane management from regional exec
 
 ### On-Demand Jobs (`delivery: submitted`)
 
-Run interactive compute jobs directly from your workspace terminal:
+Run interactive compute jobs on demand. Workspaces cannot submit jobs into team lanes yet; that returns once job submission runs through your own identity instead of a team.
 
 ```bash
 # Run multi-node Ray training on demand
@@ -324,6 +354,8 @@ When submitting compute jobs under fair-share borrowing:
 kubectl get workloads -n <team>-workloads
 ```
 
+The workspace kubeconfig has one context per cluster: your workspace's cell (the current context), every other registered cell, and the control plane. Each context reaches that cluster's own kube-oidc-proxy with your Dex identity, so `kubectl --context <cluster> ...` needs no extra login.
+
 #### Ray Autoscaling & Kueue Considerations
 
 Distributed Ray workloads (such as Ray Data in [`src/examples/ray_data`](../../examples/ray_data)) interact with Kueue through gang-scheduling:
@@ -361,7 +393,7 @@ bazel run //src/examples/batch_cron:run
 
 ## 6. Review & Merge Pull Requests
 
-Every modification targeting the repository—whether application features, reference examples, documentation, or cloud foundations—progresses through automated pull request gating before landing on `main`.
+Every modification targeting the repository, whether application features, reference examples, documentation, or cloud foundations, progresses through automated pull request gating before landing on `main`.
 
 ### Automated Pull Request Reviews (ML Reviewer)
 
@@ -377,7 +409,7 @@ When you open a pull request, an automated agentic code review pipeline ([`src/i
 <br clear="right"/>
 
 - **Verdict Outcomes**:
-  - `LGTM`: All rules satisfied and no blockers or improvements found. Non-blocking items (🔵 Nit, 🟣 Question, ⚪ Existing) do not block merges.
+  - `LGTM`: All rules satisfied and no blockers or improvements found. Non-blocking items (Nit, Question, Existing) do not block merges.
   - `CHANGES REQUESTED`: Concrete improvement findings must be addressed before approval.
   - `DO NOT MERGE`: Critical blockers or invariant violations detected.
 - **Emergency Overrides**: If a pull request must merge despite findings, authors can supply an explicit justification in the pull request description (`NO_LGTM=<reason>`), which is recorded in the audit trail.
@@ -386,9 +418,14 @@ When you open a pull request, an automated agentic code review pipeline ([`src/i
 
 For changes modifying cloud foundations or OpenTofu configurations under `src/infra/terraform/`:
 
-- **Automated Planning**: Opening or updating a pull request triggers [Atlantis](https://github.com/runatlantis/atlantis) to run non-destructive execution plans (`tofu plan`) within the affected deployment directory, posting the exact diff plan as a pull request comment.
-- **Directory-Scoped State Locking**: Atlantis acquires an exclusive lock on the deployment directory (such as `src/infra/terraform/deployments/ctrl-aws-usw2`), preventing concurrent pull requests from applying conflicting infrastructure states.
-- **Controlled Apply**: Cloud modifications are never executed from local developer machines. Once the pull request receives team approval and the ML reviewer passes, running `atlantis apply` in the pull request comment thread applies the changes to cloud infrastructure. Merging the pull request releases the directory lock.
+- **Autoplan per Project**: Opening or updating a pull request triggers [Atlantis](https://github.com/runatlantis/atlantis) to run non-destructive execution plans (`tofu plan`) per affected project (`dns`, `research`) based on modified files and declared dependencies, posting each plan diff as a pull request comment. Local environments (`local`) are tested locally and excluded from Atlantis automation.
+- **Directory-Scoped State Locking**: Atlantis acquires an exclusive lock on each affected deployment directory (such as `src/infra/terraform/deployments/research` or `src/infra/terraform/deployments/dns`), preventing concurrent pull requests from applying conflicting infrastructure states.
+- **Apply Requirements**: Applying plans requires pull request approval, a mergeable pull request state, and an undiverged branch (`[approved, mergeable, undiverged]`). Any newly generated plan automatically discards prior approvals.
+- **Controlled Apply**: Cloud modifications are never executed from local developer machines. Because apply-all is disabled, running `atlantis apply -d <dir>` (such as `atlantis apply -d src/infra/terraform/deployments/research`) in the pull request comment thread applies changes once requirements are met.
+- **Automerge**: After all planned projects are successfully applied, Atlantis automatically merges the pull request into the target branch and releases all directory locks.
+- **Plan and Apply Role Separation**:
+  - **Least-Privilege Execution**: Atlantis runs plans and applies under separate IAM roles. The `*-atlantis-plan` role grants read-only metadata permissions and cluster-level view access (`AmazonEKSAdminViewPolicy`), preventing unapproved pull requests from mutating infrastructure. The `*-atlantis-apply` role grants provisioning permissions and cluster-level administrative access (`AmazonEKSClusterAdminPolicy`).
+  - **Credential Isolation via `AWS_PROFILE`**: OpenTofu serializes variables and provider settings into the plan file. To prevent `apply` from reusing plan-stage credentials, Atlantis switches roles externally through the server-side `fleet` workflow by setting `AWS_PROFILE=atlantis-plan` for `tofu plan` and `AWS_PROFILE=atlantis-apply` for `tofu apply` against a shared AWS configuration (`/etc/atlantis-aws/config`).
 
 ---
 
@@ -405,6 +442,7 @@ Open [SigNoz](https://github.com/signoz/signoz) from your service catalog to mon
 - **Distributed Tracing**: Follow request lifecycles across microservices, HTTP handlers, and distributed Ray tasks with automatic OpenTelemetry context propagation. Inspect latency waterfalls to identify slow database queries, network calls, or serialized computation steps.
 - **Structured Log Search & Live Tailing**: Query and live-tail container logs across the entire fleet. Filter by team, environment, pod name, service, or correlation trace ID without needing SSH or `kubectl logs`.
 - **Real-Time Metrics**: Track container and host metrics including CPU utilization, memory consumption, swap disk usage, and network throughput. Accelerators expose detailed GPU metrics (temperature, memory allocation, and tensor core utilization) via NVIDIA DCGM collectors.
+- **Cloud Infrastructure Telemetry**: The dedicated `cloud-telemetry` collector sends AWS CloudTrail events, EKS control-plane audit and authenticator logs, Route 53 Resolver DNS queries, and VPC flow logs from the control plane and each AWS cell to SigNoz, after dropping routine noise. Records carry `service.name = cloud-telemetry`, `k8s.cluster.name`, and a `log.source` of `cloudtrail`, `kubernetes-audit`, `dns-query`, or `network-flow`. A GCP Pub/Sub path exists in code but is not deployed.
 
 <br clear="right"/>
 
@@ -412,10 +450,34 @@ Open [SigNoz](https://github.com/signoz/signoz) from your service catalog to mon
 
 Observability across the fleet follows GitOps: dashboards, alerting rules, and saved explorer views are authored declaratively as code under [`src/infra/definitions/observability/`](../definitions/observability) and synchronized across clusters by Argo CD:
 
-- **Dashboards as Code ([`src/infra/definitions/observability/dashboards/`](../definitions/observability/dashboards))**: Declared as `dashboard.resources.signoz.io` custom resources. Teams can track fleet health, storage rollups, and compute saturation, including the **Team Workloads** dashboard displaying real-time H200/L4 allocations, active GPU compute and tensor core utilization (`DCGM_FI_DEV_GPU_UTIL`), VRAM usage and headroom (`DCGM_FI_DEV_FB_USED`), CPU and RAM usage rates against cluster allocatable capacities, container requests and limits, and Kueue queue states.
+- **Dashboards as Code ([`src/infra/definitions/observability/dashboards/`](../definitions/observability/dashboards))**: Declared as `dashboard.resources.signoz.io` custom resources. Teams can track fleet health, storage rollups, and compute saturation, including the **Team Workloads** dashboard displaying real-time H200/L4 allocations, active GPU compute and tensor core utilization (`DCGM_FI_DEV_GPU_UTIL`), VRAM usage and headroom (`DCGM_FI_DEV_FB_USED`), CPU and RAM usage rates against cluster allocatable capacities, container requests and limits, and Kueue queue states. The **Security** (`fleet-security`) dashboard provides unified visibility into runtime threats from Falco eBPF, admission denials from Kyverno, VPC flow rejections over time, top rejected VPC destination ports, Route 53 Resolver external DNS queries, CloudTrail high-risk mutations, and EKS control-plane privilege actions.
 - **Alert Rules as Code ([`src/infra/definitions/observability/rules/`](../definitions/observability/rules))**: Declared as `rule.resources.signoz.io` custom resources. Define proactive threshold and PromQL alerts for node memory pressure, GPU hardware errors (`nvidia-gpu-health`), container crash loops, or p99 latency regressions.
-- **Saved Views as Code ([`src/infra/definitions/observability/views/`](../definitions/observability/views))**: Declared as `savedview.resources.signoz.io` custom resources for shared trace waterfall filters, error queries, and audit logs.
+- **Saved Views as Code ([`src/infra/definitions/observability/views/`](../definitions/observability/views))**: Declared as `savedview.resources.signoz.io` custom resources for shared trace waterfall filters, error queries, and audit logs. The **Security Incidents** (`security-incidents`) view aggregates high-priority security logs across Falco kernel detections, Kyverno admission denials, Envoy edge rejections, and `service.name = 'cloud-telemetry'` cloud audit events in a single real-time stream.
 - **Notification Channels**: Route alert triggers to team communication channels including Slack, email, PagerDuty, or custom webhooks.
+
+### Querying Cloud Audit Logs, VPC Flow Logs & External DNS in SigNoz
+
+Open the SigNoz **Logs** explorer and filter by `service.name = 'cloud-telemetry'`. Narrow by `log.source`, and by `k8s.cluster.name` for one cluster. The resource attribute `cloudwatch.log.group.name` identifies the log group. The raw record is in the body.
+
+- **CloudTrail** (`log.source = 'cloud-audit'`): attributes `aws.event_name`, `aws.event_source`, `aws.read_only`, `aws.error_code`, `aws.principal_arn`, `aws.source_ip`, and `aws.bucket_name`. For authorization failures, filter `aws.error_code IN ('AccessDenied', 'AccessDeniedException', 'UnauthorizedOperation', 'Client.UnauthorizedOperation')`.
+- **Kubernetes audit** (`log.source = 'kubernetes-audit'`): attributes `k8s.audit.verb`, `k8s.audit.user`, `k8s.audit.resource`, `k8s.audit.subresource`, `k8s.audit.namespace`, and `k8s.audit.name`. For interactive sessions, filter `k8s.audit.subresource IN ('exec', 'attach')`. The collector drops routine `get`, `list`, and `watch` calls from control-plane and system service accounts, but keeps secret reads.
+- **VPC flow logs** (`log.source = 'network-flow'`): attributes `flow_srcaddr`, `flow_dstaddr`, `flow_srcport`, `flow_dstport`, `flow_protocol`, `flow_action`, `flow_log_status`, and others. For rejected connections, filter `flow_action = 'REJECT'`. The collector drops `NODATA` records and `ACCEPT` flows between private (RFC 1918) addresses, so accepted flows in SigNoz involve a public address.
+- **DNS** (`log.source = 'dns-query'`): attributes `dns.query_name`, `dns.query_type`, and `dns.rcode`. The collector drops lookups of internal names (cluster and intranet domains, `localhost`, and cloud provider API and resolver names), so the **External DNS queries from Route 53 Resolver** panel shows only external names.
+- **Dashboard and view**: The **Security** (`fleet-security`) dashboard has the panels **CloudTrail high-risk API mutations**, **EKS control-plane privilege actions**, **VPC flow log rejections over time**, **Top rejected VPC destination ports**, and **External DNS queries from Route 53 Resolver**. The **Security Incidents** (`security-incidents`) saved view combines these records with the other security feeds.
+
+### Querying ClickHouse Telemetry for Dashboard Development
+
+When testing queries or exploring tables for dashboards and views, do not use `kubectl exec` into ClickHouse pods. Instead, execute read-only queries against ClickHouse using the repository query tool:
+
+```bash
+# Execute a read-only query using the mise task alias
+mise run //src/infra:clickhouse-query -- "SELECT count() FROM signoz_logs.distributed_logs_v2 WHERE ts_bucket_start > now() - INTERVAL 1 HOUR"
+
+# Pass custom options or formats
+mise run //src/infra:clickhouse-query -- --format JSONEachRow "SELECT * FROM signoz_metrics.distributed_time_series_v4 LIMIT 5"
+```
+
+The tool authenticates with credentials from the Kubernetes secret (`signoz-clickhouse` in namespace `signoz`), connects via a port-forward session to `svc/clickhouse-coordinator`, and enforces read-only mode server-side (`readonly=1`).
 
 ### Continuous Profiling in Parca
 

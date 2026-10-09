@@ -46,8 +46,8 @@ esac
 
 # If a local broker endpoint is supplied and reachable, try it; otherwise use native Coder identity.
 owner_id="${CODER_WORKSPACE_OWNER_ID}"
-owner_name="${CODER_WORKSPACE_OWNER_NAME:-dev}"
-owner_email="${CODER_WORKSPACE_OWNER_EMAIL:-${owner_name}@corp.local.internal}"
+owner_username="${CODER_WORKSPACE_OWNER:-dev}"
+owner_email="${CODER_WORKSPACE_OWNER_EMAIL:-${owner_username}@corp.local.internal}"
 
 if [ -n "${binding_url}" ] && [ -n "${CODER_WORKSPACE_OWNER_SESSION_TOKEN:-}" ]; then
   resolve_url=${binding_url%/bind}/resolve
@@ -74,4 +74,4 @@ fi
 
 # Fallback: Native Coder verified owner
 printf '{"attested":"true","email":"%s","id":"%s","preferred_username":"%s","preview":"false","principal_id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}\n' \
-  "${owner_email}" "${owner_id}" "${owner_name}"
+  "${owner_email}" "${owner_id}" "${owner_username}"

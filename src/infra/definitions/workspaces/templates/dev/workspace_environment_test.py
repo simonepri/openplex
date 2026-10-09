@@ -30,7 +30,7 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
             in self.main
         )
 
-    def test_workspace_consumes_team_ha_quota(self) -> None:
+    def test_workspace_consumes_dev_queue_quota(self) -> None:
         assert "non-borrowing queue" not in self.parameters
         assert "queued capacity" not in self.parameters
         for field, value in {
@@ -73,6 +73,8 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
         memory = self.parameters.index('data "coder_parameter" "memory_gib"')
         memory_burst = self.parameters.index('data "coder_parameter" "memory_burst_gib"')
         storage = self.parameters.index('data "coder_parameter" "home_disk_gib"')
+        throughput = self.parameters.index('data "coder_parameter" "disk_throughput_mbps"')
+        iops = self.parameters.index('data "coder_parameter" "disk_iops"')
         assert cluster < accelerator
         assert accelerator < accelerator_count
         assert accelerator_count < cpu
@@ -80,6 +82,8 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
         assert cpu_burst < memory
         assert memory < memory_burst
         assert memory_burst < storage
+        assert storage < throughput
+        assert throughput < iops
         assert "sort(keys(local.workspace_placement_inventory))" in self.parameters
         assert 'display_name = "Accelerators"' in self.parameters
         assert 'name  = "None"' in self.parameters
@@ -99,7 +103,7 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
             "length(data.coder_parameter.accelerator_count) == (local.accelerator_count_configurable ? 1 : 0)"
             in self.main
         )
-        for order in range(20, 30):
+        for order in range(20, 32):
             assert f"order        = {order}" in self.parameters
         for message in (
             "selected cluster must be present in the published workspace placement inventory",
@@ -191,8 +195,8 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
             assert re.search(selector_pattern, accepted)
         for rejected in ("_not-the-legacy-sentinel", "owner/manifest", "a" * 129):
             assert not re.search(selector_pattern, rejected)
-        assert (
-            "restore_selector            = data.coder_parameter.restore_selector.value" in self.main
+        assert re.search(
+            r"restore_selector\s+=\s+data\.coder_parameter\.restore_selector\.value", self.main
         )
         assert "snapshot_selector_pattern = " in self.main
 
@@ -299,29 +303,21 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
             self.main,
         )
 
-    def test_registration_endpoint_reaches_the_provisioner(self) -> None:
-        registration = self.main.split(
-            'resource "terraform_data" "workspace_agent_registration" {', 1
-        )[1].split('resource "coder_script" "workspace_start" {', 1)[0]
-        for name, value in {
-            "CODER_WORKSPACE_AGENT_REGISTRATION_TOKEN_FILE": (
-                "/var/run/cluster/workspace-agent-registration/token"
-            ),
-            "CODER_WORKSPACE_AGENT_REGISTRATION_URL": (
-                "https://headscale-workspace-registration.headscale.svc.cluster.local:8443/"
-                "v1/workspace-agents/register"
-            ),
-        }.items():
-            assert re.search(rf'(?m)^\s+{name}\s+= "{re.escape(value)}"$', registration)
-
-    def test_team_workspaces_namespace_owns_template_resources(self) -> None:
+    def test_shared_workspaces_namespace_owns_template_resources(self) -> None:
         assert 'data "coder_parameter" "project"' not in self.parameters
         assert "WORKSPACE_PROJECT" not in self.main
-        assert "workspace_namespace     = var.workspace_namespace" in self.main
-        assert 'local.workspace_namespace == "team-${var.team}-workspaces"' in self.main
+        assert re.search(r'workspace_namespace\s+=\s+"workspaces"', self.main)
+        assert 'variable "workspace_namespace"' not in self.main
+        assert 'variable "team"' not in self.main
+        assert "WORKSPACE_TEAM" not in self.main
+
+    def test_accelerator_offers_exclude_spot_capacity(self) -> None:
+        """Dev workspaces must never expose or use spot capacity."""
+        assert 'if offer.capacity_type != "spot"' in self.accelerators
+        assert "disabled = length(local.available_accelerator_offers) == 0" in self.parameters
 
     def test_periodic_workspace_backup_contract(self) -> None:
-        assert 'snapshot_interval           = "0 */30 * * * *"' in self.main
+        assert re.search(r'snapshot_interval\s+=\s+"0 \*/30 \* \* \* \*\"', self.main)
         assert 'module "coder_snapshots"' in self.main
         workspace_snapshots = (
             pathlib.Path(__file__).parent / "container" / "init" / "workspace-snapshots.sh"
@@ -329,6 +325,124 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
         assert (
             'policy set "${workspace_volume}" --keep-latest 3 --keep-hourly 12 --keep-daily 7 --keep-weekly 4 --keep-monthly 0 --keep-annual 0'
             in workspace_snapshots
+        )
+
+    def test_workspace_mounts_shared_cell_s3_storage(self) -> None:
+        assert 'name  = "AWS_PROFILE"' not in self.main
+        assert 'name  = "AWS_SHARED_CREDENTIALS_FILE"' in self.main
+        assert 'value = "/var/run/workspace/s3/credentials"' in self.main
+        assert 'mount_path = "/fs/s3/${local.selected_virtual_name}/home/legacy"' in self.main
+        assert 'mount_path = "/fs/s3/aws-use1/home/legacy"' in self.main
+        assert 'name       = "legacy"' in self.main
+        assert 'name       = "legacy-use1"' in self.main
+        node_publish_refs = re.findall(r"node_publish_secret_ref\s*\{[^}]*\}", self.main)
+        assert len(node_publish_refs) > 0
+        for ref in node_publish_refs:
+            assert "name = local.workspace_s3_secret_name" in ref
+        assert 'secret_name  = "workspace-s3"' not in self.main
+        assert '"workspace-s3"' not in self.main
+        assert 'driver = "rclone.csi.veloxpack.io"' in self.main
+        assert 'name = "workspace-s3-credentials"' in self.main
+        for volume_name in ("legacy", "legacy-use1"):
+            assert re.search(
+                rf'volume\s*\{{\s*name\s*=\s*"{volume_name}"\s*csi\s*\{{\s*driver\s*=\s*"rclone\.csi\.veloxpack\.io"\s*volume_attributes\s*=\s*\{{\s*gid\s*=\s*"1000"\s*"no-checksum"\s*=\s*"true"\s*remote\s*=\s*"{volume_name}"\s*remotePath\s*=\s*""\s*tpslimit\s*=\s*"25"\s*"tpslimit-burst"\s*=\s*"10"\s*uid\s*=\s*"1000"\s*umask\s*=\s*"0022"\s*"vfs-cache-mode"\s*=\s*"off"\s*\}}',
+                self.main,
+            )
+
+    def test_workspace_mounts_snapshot_repository_secret_and_password_file(self) -> None:
+        assert 'name  = "KOPIA_PASSWORD_FILE"' in self.main
+        assert 'value = "/var/run/workspace/snapshot-repository/password"' in self.main
+        assert "KOPIA_SNAPSHOT_BROKER_URL" not in self.main
+        assert 'mount_path = "/var/run/workspace/snapshot-repository"' in self.main
+        assert "secret_name  = local.snapshot_repository_secret_name" in self.main
+
+    def test_workspace_sets_aws_checksum_calculation_and_validation(self) -> None:
+        assert 'name  = "AWS_REQUEST_CHECKSUM_CALCULATION"' in self.main
+        assert 'name  = "AWS_RESPONSE_CHECKSUM_VALIDATION"' in self.main
+        for env_name in ("AWS_REQUEST_CHECKSUM_CALCULATION", "AWS_RESPONSE_CHECKSUM_VALIDATION"):
+            assert re.search(
+                rf'env\s*\{{\s*name\s*=\s*"{env_name}"\s*value\s*=\s*"when_required"\s*\}}',
+                self.main,
+            )
+
+    def test_rclone_csi_s3_volumes_no_checksum(self) -> None:
+        rclone_volume_count = len(
+            re.findall(r'driver\s+=\s+"rclone\.csi\.veloxpack\.io"', self.main)
+        )
+        no_checksum_count = len(re.findall(r'"no-checksum"\s+=\s+"true"', self.main))
+        assert rclone_volume_count > 0
+        assert rclone_volume_count == no_checksum_count
+        assert '"ignore-checksum"' not in self.main
+
+    def test_workspace_disk_performance_parameters(self) -> None:
+        assert re.search(
+            r'data "coder_parameter" "disk_throughput_mbps" \{[\s\S]*?'
+            r"count\s+= local\.is_ebs_storage \? 1 : 0[\s\S]*?"
+            r'display_name\s+= "Disk sequential throughput \(MB/s\)"[\s\S]*?'
+            r'default\s+= "500"[\s\S]*?'
+            r'form_type\s+= "slider"[\s\S]*?'
+            r"mutable\s+= true[\s\S]*?"
+            r"order\s+= 27[\s\S]*?"
+            r"min\s+= 125[\s\S]*?"
+            r"max\s+= 1000",
+            self.parameters,
+        )
+        assert re.search(
+            r'data "coder_parameter" "disk_iops" \{[\s\S]*?'
+            r"count\s+= local\.is_ebs_storage \? 1 : 0[\s\S]*?"
+            r'display_name\s+= "Disk random 4K IOPS"[\s\S]*?'
+            r'default\s+= "8000"[\s\S]*?'
+            r'form_type\s+= "slider"[\s\S]*?'
+            r"mutable\s+= true[\s\S]*?"
+            r"order\s+= 28[\s\S]*?"
+            r"min\s+= 3000[\s\S]*?"
+            r"max\s+= 16000",
+            self.parameters,
+        )
+        assert re.search(
+            r'module "coder_snapshots" \{[\s\S]*?'
+            r"disk_iops\s+= local\.disk_iops[\s\S]*?"
+            r"disk_throughput_mbps\s+= local\.disk_throughput_mbps",
+            self.main,
+        )
+        assert (
+            'is_ebs_storage         = var.storage_class_name == "general-expandable"' in self.main
+        )
+
+    def test_workspace_rejects_reserved_owner_usernames(self) -> None:
+        for reserved in (
+            "argocd",
+            "atlantis",
+            "buildbuddy",
+            "coder",
+            "dex",
+            "grafana",
+            "headlamp",
+            "hooks",
+            "kube",
+            "s3",
+            "signoz",
+        ):
+            assert f'"{reserved}"' in self.main
+        assert "!contains(local.reserved_usernames, local.owner_username)" in self.main
+
+    def test_ssh_button_does_not_claim_the_ssh_dns_name(self) -> None:
+        # A subdomain app slug "ssh" would be served at ssh--<ws>--<owner>, the SSH Service's name.
+        assert 'resource "coder_app" "ssh_access"' in self.main
+        assert 'slug         = "ssh-access"' in self.main
+        assert not re.search(r'slug\s*=\s*"ssh"', self.main)
+
+    def test_workspace_ssh_service_and_routing_contract(self) -> None:
+        assert (
+            '"external-dns.kubernetes.io/hostname" = "${local.ssh_wildcard_hostname},${local.ssh_alias_hostname}"'
+            in self.main
+        )
+        assert 'variable "coder_app_domain"' in self.main
+        assert re.search(
+            r'resource\s+"kubernetes_service_v1"\s+"workspace_ssh"\s*\{[\s\S]*?'
+            r"port\s*\{[\s\S]*?port\s*=\s*local\.ssh_port[\s\S]*?"
+            r"target_port\s*=\s*2222",
+            self.main,
         )
 
 

@@ -2,6 +2,7 @@
 
 # gazelle:resolve py infra.terraform.lifecycle.cluster_common //src/infra/terraform/lifecycle:cluster_common
 # gazelle:resolve_regexp py ^infra\.tools\.cloud_emulator\.access\.([^.]+)(\..*)?$ //src/infra/tools/cloud_emulator/access:$1
+# gazelle:resolve_regexp py ^infra\.tools\.cloud_emulator\.engine\.([^.]+)(\..*)?$ //src/infra/tools/cloud_emulator/engine:$1
 
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
@@ -95,7 +96,7 @@ py_library(
         "//src/infra/tools/cloud_emulator/access:__pkg__",
     ],
     deps = [
-        "//src/infra/tools/cloud_emulator:runtime",
-        "@dev_python_deps//pyyaml",
+        "//src/infra/tools/cloud_emulator/engine:compose",
+        "@python_deps//pyyaml",
     ],
 )

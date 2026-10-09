@@ -18,15 +18,10 @@ flowchart TD
     S3["S3 Storage (Direct or S3 Gateway)"]
   end
 
-  subgraph ControlPlane ["Control Plane Services"]
-    Broker["Snapshot Broker (Token Verification)"]
-  end
-
   WorkspaceStart["workspace-start.sh"] -->|Invokes| RestoreScript
   Agent -->|Schedules| SyncScript
   RestoreScript -->|Pulls Snapshot| S3
   SyncScript -->|Pushes Snapshot| S3
-  SyncScript -->|Signs Manifest Claim| Broker
   Volume --- PVC
 ```
 
@@ -38,15 +33,14 @@ Workspaces maintain a stable PersistentVolumeClaim (`coder-${workspace_id}-home`
 - **In-Place Atomic Restore**: Snapshot restores pull snapshot archives into staging and perform an atomic cutover within `/var/lib/workspace` while preserving directory inodes, ensuring zero storage detachment latency or orphaned volumes.
 - **Restore Generation Tracking**: Restoring a snapshot calculates a deterministic generation identifier (`substr(sha256(restore_selector), 0, 8)`), tracked in `terraform_data.restore_generation` and keyed by `terraform_data.applied_restore_selector` to ensure restores execute idempotently.
 
-### Workspace Lineage & Single-Writer Guard
+### Workspace Lineage
 
 Each workspace derives an immutable 40-character lineage token:
 
-$$\text{Lineage} = \text{sha256}(\text{"workspace-lineage"} \parallel \text{owner\_id} \parallel \text{workspace\_id})[0:40]$$
+`Lineage = sha256("workspace-lineage" ‖ owner_id ‖ workspace_id)[0:40]`
 
 This lineage token establishes cryptographic provenance across forks and restarts:
 
-- When `single_writer_guard_enabled` is true, the infrastructure ensures that only one active workspace instance can mutate a given lineage at any time, preventing repository split-brain or data corruption.
 - Restores cross-check the snapshot manifest's lineage against the active or parent lineage claim before applying changes to the filesystem.
 
 ### Multi-Cloud S3 Compatibility
@@ -77,6 +71,8 @@ The module registers three `coder_script` resources on the target `coder_agent`:
 | :--- | :--- | :--- | :--- |
 | `agent_id` | `string` | n/a | Coder agent ID to attach snapshot and restore scripts to. |
 | `app_labels` | `map(string)` | `{}` | Labels applied to Kubernetes resources. |
+| `disk_iops` | `number` | `null` | Provisioned IOPS for an EBS-backed home PVC, or null to keep the storage class default. |
+| `disk_throughput_mbps` | `number` | `null` | Provisioned throughput in MB/s for an EBS-backed home PVC, or null to keep the storage class default. |
 | `home_disk_gib` | `number` | n/a | Home disk size in GiB for the PersistentVolumeClaim. |
 | `kopia_repository_bucket` | `string` | `""` | S3 bucket name for the Kopia repository and manifests. |
 | `max_bandwidth_mbps` | `number` | `0` | Client-side bandwidth limit in Mbps for Kopia (0 = unlimited). |
@@ -84,10 +80,8 @@ The module registers three `coder_script` resources on the target `coder_agent`:
 | `owner_username` | `string` | n/a | Coder owner username. |
 | `restore_selector` | `string` | `""` | Selected snapshot ID to restore (or empty). |
 | `s3_endpoint` | `string` | `""` | Optional custom S3 endpoint URL (e.g. `http://s3-gateway.s3-system.svc:8080`). |
-| `single_writer_guard_enabled` | `bool` | `true` | Whether to guard against concurrent writers to the same lineage. |
 | `snapshot_interval` | `string` | `"0 */30 * * * *"` | Cron expression for periodic workspace backup snapshots. |
 | `storage_class_name` | `string` | `null` | Storage class name for the home PersistentVolumeClaim. |
-| `team` | `string` | n/a | Team name for attributable snapshot metadata. |
 | `workspace_id` | `string` | n/a | Unique identifier of the Coder workspace. |
 | `workspace_name` | `string` | n/a | Human-readable name of the Coder workspace. |
 | `workspace_namespace` | `string` | n/a | Kubernetes namespace hosting the workspace resources. |
@@ -100,6 +94,7 @@ The module registers three `coder_script` resources on the target `coder_agent`:
 | :--- | :--- | :--- |
 | `active_restore_generation` | `string` | Active restore generation identifier (`0` for fresh, 8-character hash for restores). |
 | `environment_variables` | `map(string)` | Map of environment variables to inject into the workspace container. |
+| `home_volume_claim_annotations` | `map(string)` | Annotations applied to the Kubernetes PersistentVolumeClaim created for the home volume. |
 | `home_volume_claim_name` | `string` | Name of the Kubernetes PersistentVolumeClaim created for the home volume. |
 | `restore_requested` | `bool` | Whether a snapshot restore has been requested. |
 | `restore_selector` | `string` | Snapshot selector ID stripped of source cell prefix. |
@@ -122,13 +117,11 @@ module "snapshots" {
   owner_username              = data.coder_workspace.me.owner
   restore_selector            = data.coder_parameter.restore_selector.value
   s3_endpoint                 = "http://s3-gateway.s3-system.svc:8080"
-  single_writer_guard_enabled = true
   snapshot_interval           = "0 */30 * * * *"
   storage_class_name          = "standard"
-  team                        = "platform"
   workspace_id                = data.coder_workspace.me.id
   workspace_name              = data.coder_workspace.me.name
-  workspace_namespace         = "coder-workspaces"
+  workspace_namespace         = "workspaces"
 }
 
 # Mount the generation-scoped PersistentVolumeClaim in the workspace Pod / Deployment:

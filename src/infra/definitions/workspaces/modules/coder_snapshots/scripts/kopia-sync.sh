@@ -3,6 +3,15 @@
 
 set -euo pipefail
 
+password_file="${KOPIA_PASSWORD_FILE:-/var/run/workspace/snapshot-repository/password}"
+if [[ ! -f ${password_file} ]]; then
+  exit 0
+fi
+
+# Kopia reads the repository password only from KOPIA_PASSWORD.
+KOPIA_PASSWORD="$(<"${password_file}")"
+export KOPIA_PASSWORD
+
 workspace_volume="${1:-${TARGET_DIR:-}}"
 if [[ -z ${workspace_volume} ]]; then
   if [[ -d /var/lib/workspace ]]; then
@@ -103,9 +112,6 @@ fi
 sync_config_dir=""
 if [[ -z ${KOPIA_CONFIG_PATH:-} && -f /tmp/workspace-kopia/repository.config ]]; then
   export KOPIA_CONFIG_PATH=/tmp/workspace-kopia/repository.config
-  if [[ -z ${KOPIA_PASSWORD:-} && -z ${KOPIA_PASSWORD_FILE:-} && -f /tmp/workspace-kopia/repository.config.kopia-password ]]; then
-    export KOPIA_PASSWORD_FILE=/tmp/workspace-kopia/repository.config.kopia-password
-  fi
 fi
 
 if [[ ${KOPIA_CONFIG_PATH:-} == "/tmp/workspace-kopia/repository.config" ]]; then
@@ -191,9 +197,6 @@ create_args=(
 )
 if [[ -n ${workspace_cell_incarnation} ]]; then
   create_args+=(--tags "incarnation:${workspace_cell_incarnation}")
-fi
-if [[ -n ${WORKSPACE_TEAM:-} ]]; then
-  create_args+=(--tags "team:${WORKSPACE_TEAM}")
 fi
 create_args+=("${workspace_volume}")
 
@@ -303,7 +306,10 @@ if [[ ${has_aws} == "true" ]]; then
     fi
     aws_args+=(--endpoint-url "${aws_endpoint}")
   fi
-  aws "${aws_args[@]}" >&2
+  # The upload uses the repository keys from the environment; the owner's own AWS
+  # config and profile must not change or break it.
+  env -u AWS_PROFILE AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null \
+    aws "${aws_args[@]}" >&2
 elif command -v curl >/dev/null 2>&1; then
   endpoint="${s3_endpoint:-https://s3.amazonaws.com}"
   if [[ ${endpoint} != http* ]]; then

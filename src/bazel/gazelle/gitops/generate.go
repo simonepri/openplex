@@ -65,58 +65,10 @@ func (l *gitopsLang) generateAppsRules(args language.GenerateArgs) language.Gene
 		"projects.yaml",
 		"teams.yaml",
 	})
-	profilesTest := rule.NewRule("py_test", "profiles_test")
-	profilesTest.SetAttr("srcs", []string{"profiles_test.py"})
-	profilesTest.SetAttr("args", []string{
-		"$(locations @rules_helm//helm:current_toolchain)",
-		"$(location //src/infra/argocd/components/dragonfly_peer:helm/client-image.yaml)",
-		"$(location //src/infra/argocd/components/dragonfly_manager:vendor-helm-render)",
-		"$(location //src/infra/argocd/components/dragonfly_peer:vendor-helm-render)",
-		"$(location //src/infra/images:infrastructure-images.json)",
-		"$(location //src/infra/argocd/components/clickhouse:base_render)",
-		"$(location //src/infra/argocd/components/local_runtime_tls:helm_render)",
-		"$(location //src/infra/argocd/components/vpa:helm/values.yaml)",
-		"$(location @vendor_helm_vpa//:vertical-pod-autoscaler)",
-		"$(location //src/infra/argocd/components/routing_registry:helm_render-local-cell)",
-		"$(location //src/examples/svelte_web:manifest)",
-		"$(locations @rules_gitops//kustomize:resolved_toolchain)",
-		"$(location profiles.yaml)",
-		"$(location ctrl.yaml)",
-		"$(location cells.yaml)",
-	})
-	profilesTest.SetAttr("data", []string{
-		"cells.yaml",
-		"ctrl.yaml",
-		"profiles.yaml",
-		"teams.yaml",
-		"//src/infra/argocd/components/clickhouse:base_render",
-		"//src/infra/argocd/components/local_runtime_tls:helm_render",
-		"//src/infra/argocd/components/vpa:helm/values.yaml",
-		"@vendor_helm_vpa//:vertical-pod-autoscaler",
-		"//src/infra/argocd/components/routing_registry:helm_render-local-cell",
-		"//src/examples/svelte_web:manifest",
-		"//src/infra/argocd/components/dragonfly_peer:helm/client-image.yaml",
-		"//src/infra/argocd/components/dragonfly_manager:vendor-helm-render",
-		"//src/infra/argocd/components/dragonfly_peer:vendor-helm-render",
-		"//src/infra/images:infrastructure-images.json",
-		"@rules_gitops//kustomize:resolved_toolchain",
-		"@rules_helm//helm:current_toolchain",
-	})
-	profilesTest.SetAttr("deps", []string{"@dev_python_deps//pyyaml"})
-	// Python's merger preserves authored args and data; this integration test
-	// derives both from the dispatcher inputs and resolved rendering tools.
-	if args.File != nil {
-		for _, existing := range args.File.Rules {
-			if existing.Kind() == "py_test" && existing.Name() == profilesTest.Name() {
-				existing.SetAttr("args", profilesTest.AttrStrings("args"))
-				existing.SetAttr("data", profilesTest.AttrStrings("data"))
-			}
-		}
-	}
 
 	return language.GenerateResult{
-		Gen:     []*rule.Rule{appTemplates, ps, profilesTest},
-		Imports: []interface{}{nil, nil, python.ResolvedDependencies(profilesTest.AttrStrings("deps"))},
+		Gen:     []*rule.Rule{appTemplates, ps},
+		Imports: []interface{}{nil, nil},
 	}
 }
 
@@ -505,6 +457,11 @@ func generatePyTestRule(componentName, dir, pt string, pySources []string) *rule
 		ptRule.SetAttr("data", []string{":base_render", ":vendor-helm-render"})
 		ptRule.SetAttr("deps", []string{"@dev_python_deps//pyyaml"})
 	}
+	if componentName == "kueue_admission" && stem == "dev_queue_test" {
+		ptRule.SetAttr("args", []string{"$(location :helm_render)", "$(location :helm_render-dev-queue-disabled)"})
+		ptRule.SetAttr("data", []string{":helm_render", ":helm_render-dev-queue-disabled"})
+		ptRule.SetAttr("deps", []string{"@dev_python_deps//pyyaml"})
+	}
 	if componentName == "valkey_operator" && stem == "cache_scheduling_test" {
 		ptRule.SetAttr("args", []string{"$(location :base_render)", "$(location //src/infra/argocd/components/torch_compile_cache:base_render)"})
 		ptRule.SetAttr("data", []string{":base_render", "//src/infra/argocd/components/torch_compile_cache:base_render"})
@@ -544,6 +501,10 @@ func generatePyTestRule(componentName, dir, pt string, pySources []string) *rule
 	}
 	if componentName == "node_problem_detector" && stem == "node_problem_detector_test" {
 		ptRule.SetAttr("data", rule.GlobValue{Patterns: []string{"kustomize/**"}})
+		ptRule.SetAttr("deps", []string{"@dev_python_deps//pyyaml"})
+	}
+	if componentName == "cloud_telemetry" && stem == "pipeline_test" {
+		ptRule.SetAttr("data", []string{"helm/values.yaml"})
 		ptRule.SetAttr("deps", []string{"@dev_python_deps//pyyaml"})
 	}
 	return ptRule

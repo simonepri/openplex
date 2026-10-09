@@ -16,6 +16,18 @@ variable "app_labels" {
   default     = {}
 }
 
+variable "disk_iops" {
+  description = "Provisioned IOPS for an EBS-backed home PVC, or null to keep the storage class default."
+  type        = number
+  default     = null
+}
+
+variable "disk_throughput_mbps" {
+  description = "Provisioned throughput in MB/s for an EBS-backed home PVC, or null to keep the storage class default."
+  type        = number
+  default     = null
+}
+
 variable "home_disk_gib" {
   description = "Home disk size in GiB."
   type        = number
@@ -82,12 +94,6 @@ variable "s3_endpoint" {
   default     = ""
 }
 
-# tflint-ignore: terraform_unused_declarations
-variable "single_writer_guard_enabled" {
-  description = "Whether to guard against concurrent writers to the same lineage."
-  type        = bool
-  default     = true
-}
 
 variable "snapshot_interval" {
   description = "Cron expression for periodic snapshot."
@@ -99,17 +105,6 @@ variable "storage_class_name" {
   description = "Storage class for the home PVC."
   type        = string
   default     = null
-}
-
-# tflint-ignore: terraform_unused_declarations
-variable "team" {
-  description = "Team name."
-  type        = string
-
-  validation {
-    condition     = length(trimspace(var.team)) > 0
-    error_message = "team must not be empty."
-  }
 }
 
 variable "workspace_id" {

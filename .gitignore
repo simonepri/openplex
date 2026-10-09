@@ -4,6 +4,8 @@
 .mise.toml
 .agents/
 .claude/
+.cloudflare/
+.worktrees/
 .agy-acp/attachments/
 **/.$*.bkp
 

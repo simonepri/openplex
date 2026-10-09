@@ -30,22 +30,22 @@ To navigate the blueprint effectively, identify the **5 structural domains** and
 
 #### 1. Structural Domains (Boxes)
 
-- ⬜ **Dev Laptop (Slate Grey, Left)**: Client workstation environment where developers write code, manage sessions, and open private VPN tunnels into the platform.
-- 🟫 **Fleet-Wide Daemons (Cream / Grey, Outer Box)**: Background controllers running uniformly across *all* enrolled clusters (both control plane and cells) to enforce node elasticity, pod right-sizing, volume expansion, and automated hygiene.
-- 🟪 **Controller Cluster (`ctrl`, Lavender, Center Left)**: The centralized management plane hosting fleet-wide coordination services: GitOps sync, image promotion, telemetry aggregation, identity federation, and PromQL translation. Never runs batch jobs or developer workloads.
-- 🟩 **Worker Cells (`cell`, Mint Green, Center Right)**: Autonomous regional compute fabrics hosting interactive developer pods, batch queues, distributed ML runtimes, and local S3 caching proxies. Engineered to continue serving uninterrupted if the control plane becomes unreachable.
-- 🟧 **Cloud Foundations (Warm Amber, Right)**: Underlying cloud provider IaaS primitives (VPCs, managed Kubernetes, object storage, and cloud IAM) provisioned via Infrastructure as Code.
+- **Dev Laptop (Slate Grey, Left)**: Client workstation environment where developers write code, manage sessions, and open private VPN tunnels into the platform.
+- **Fleet-Wide Daemons (Cream / Grey, Outer Box)**: Background controllers running uniformly across *all* enrolled clusters (both control plane and cells) to enforce node elasticity, pod right-sizing, volume expansion, and automated hygiene.
+- **Controller Cluster (`ctrl`, Lavender, Center Left)**: The centralized management plane hosting fleet-wide coordination services: GitOps sync, image promotion, telemetry aggregation, identity federation, and PromQL translation. Never runs batch jobs or developer workloads.
+- **Worker Cells (`cell`, Mint Green, Center Right)**: Autonomous regional compute fabrics hosting interactive developer pods, batch queues, distributed ML runtimes, and local S3 caching proxies. Engineered to continue serving uninterrupted if the control plane becomes unreachable.
+- **Cloud Foundations (Warm Amber, Right)**: Underlying cloud provider IaaS primitives (VPCs, managed Kubernetes, object storage, and cloud IAM) provisioned via Infrastructure as Code.
 
 #### 2. Color-Coded Interaction Flows (Edges)
 
 | Flow & Color | Operational Role & Mechanism |
 | :--- | :--- |
-| 🔵 **Blue** (Access & Ingress) | Encrypted user access, private browser routing, and terminal multiplexing over Tailscale. |
-| 🟣 **Purple** (Delivery & GitOps) | Declarative state synchronization, automated image promotion, and P2P layer distribution. |
-| 🟢 **Green** (Elasticity & Lifecycle) | Just-in-time node provisioning, pod right-sizing, PVC expansion, and garbage collection. |
-| 🟠 **Orange** (Storage & Data Plane) | High-speed in-region object storage, S3i DuckDB metadata queries, and rate-limited cross-region sync. |
-| 🔴 **Red** (Security Posture) | Pre-admission validation, continuous CVE scanning, and real-time kernel anomaly detection. |
-| 🌸 **Magenta** (Telemetry & Bridging) | Unified OTLP pipeline ingestion, columnar storage, and PromQL-to-ClickHouse SQL translation. |
+| **Blue** (Access & Ingress) | Encrypted user access, private browser routing, and terminal multiplexing over Tailscale. |
+| **Purple** (Delivery & GitOps) | Declarative state synchronization, automated image promotion, and P2P layer distribution. |
+| **Green** (Elasticity & Lifecycle) | Just-in-time node provisioning, pod right-sizing, PVC expansion, and garbage collection. |
+| **Orange** (Storage & Data Plane) | High-speed in-region object storage, S3i DuckDB metadata queries, and zero-egress Cloudflare R2 global storage. |
+| **Red** (Security Posture) | Pre-admission validation, continuous CVE scanning, and real-time kernel anomaly detection. |
+| **Magenta** (Telemetry & Bridging) | Unified OTLP pipeline ingestion, columnar storage, and PromQL-to-ClickHouse SQL translation. |
 
 The numbered sections below deconstruct each of these interaction flows with detailed architectural contracts and recovery procedures.
 
@@ -121,7 +121,7 @@ All cloud infrastructure outside the Kubernetes API is codified in [OpenTofu](ht
 
 1. **Tier 1: Components (`src/infra/terraform/components/`)**: Self-contained, reusable building blocks (e.g. `vpc`, `eks`, `gke`, `iam_roles`, `kms_keys`, `s3_bucket`) adhering to strict protocol-first input/output interfaces (`_interface/` and `record.tf`).
 2. **Tier 2: Topologies (`src/infra/terraform/topologies/`)**: Cloud-specific composition layers wiring components together into cohesive regional architectures (e.g. AWS EKS cell topology, GCP GKE cell topology).
-3. **Tier 3: Deployments (`src/infra/terraform/deployments/`)**: Concrete environment instantiations (`ctrl-aws-usw2`, `cell-aws-usw2`, `cell-gcp-euw4`) defining precise CIDR allocations, compute instance families, and cloud regions.
+3. **Tier 3: Deployments (`src/infra/terraform/deployments/`)**: Concrete environment instantiations (`dns`, `research`, `local`) defining precise CIDR allocations, compute instance families, and cloud regions.
 
 ### 1.2 Physical Substrates & VPC Subnet Tiering
 
@@ -135,12 +135,20 @@ Cloud infrastructure provisions tiered VPC networks via provider-neutral [OpenTo
 
 Infrastructure changes follow an automated pull-request workflow:
 
-- **Automated Planning**: Opening a pull request triggers Atlantis to generate non-destructive execution plans (`tofu plan`) and post the plan output directly as a comment in the pull request thread.
-- **Directory-Scoped Locking**: Atlantis locks the target deployment directory (`src/infra/terraform/deployments/<target>`), preventing concurrent conflicting modifications.
-- **Controlled Apply**: Merging or executing `atlantis apply` inside the pull request applies the changes directly to cloud foundations, ensuring zero out-of-band state drifts.
+- **Autoplan per Project**: Opening or updating a pull request triggers Atlantis to run non-destructive execution plans (`tofu plan`) per affected project (`dns`, `research`) based on modified files and declared dependencies, posting plan diffs directly as pull request comments. The local environment (`local`) runs on local workstations and is excluded from Atlantis automation.
+- **Directory-Scoped Locking**: Atlantis locks each affected deployment directory (`src/infra/terraform/deployments/dns`, `src/infra/terraform/deployments/research`), preventing concurrent pull requests from applying conflicting infrastructure states.
+- **Apply Requirements**: Applying plans requires pull request approval, a mergeable pull request state, and an undiverged branch (`[approved, mergeable, undiverged]`). Any newly generated plan automatically discards prior approvals.
+- **Controlled Apply**: Cloud modifications are never executed from local developer machines. Because apply-all is disabled on the server, operators apply each planned project individually by running `atlantis apply -d <dir>` (for example, `atlantis apply -d src/infra/terraform/deployments/research`) in the pull request comment thread once requirements are met.
+- **Automerge**: Once all planned projects are applied successfully, Atlantis automatically merges the pull request into the target branch and releases all directory locks.
 - **Dual-Surface Split Architecture**:
-  - **Private Web UI (`atlantis.corp.<domain>`)**: The interactive dashboard, plan inspector, and lock manager are completely private, accessible only across the Tailscale mesh and guarded by Dex OIDC authentication.
+  - **Private Web UI (`atlantis.<cluster_domain>`)**: The interactive dashboard, plan inspector, and lock manager are completely private, accessible only across the Tailscale mesh and guarded by Dex OIDC authentication.
   - **Hardened Webhook Ingress (`https://hooks.<domain>/github/atlantis`)**: Webhook deliveries from GitHub enter through the single public ingress entry point protected by IP CIDR allowlists and HMAC validation (detailed in Section 2.6).
+- **Plan and Apply Least-Privilege IAM Split**:
+  - **Pod Identity Role**: The pod runs with an ambient IAM role (`atlantis`) bound to ServiceAccount `atlantis/atlantis-apply`. This base role holds no direct infrastructure permissions. Its policy permits only `sts:AssumeRole` and `sts:TagSession` on the two scoped workflow roles.
+  - **Plan Role (`*-atlantis-plan`)**: The plan role grants read-only metadata discovery (Get, List, and Describe actions across EC2, EKS, IAM, KMS, Route 53, and S3) and access to read fleet secrets and decrypt values needed for planning. It denies all resource mutations (no Create, Update, Delete, Tag, RunInstances, or PassRole). On EKS clusters (`ctrl` and `cell`), an EKS access entry grants cluster-scoped `AmazonEKSAdminViewPolicy`.
+  - **Apply Role (`*-atlantis-apply`)**: The apply role grants the full administrative and provisioning permissions required to create, update, tag, and delete cloud resources. On EKS clusters, an EKS access entry grants cluster-scoped `AmazonEKSClusterAdminPolicy`. Both roles trust exclusively the Atlantis pod-identity role.
+  - **Dynamic Role Switching via `AWS_PROFILE`**: OpenTofu saves provider configurations and resolved input variables directly into the serialized plan file (`tfplan`). Configuring credentials directly in OpenTofu provider blocks would cause `tofu apply` to deserialize and reuse plan-phase credentials. Instead, Atlantis mounts an AWS configuration file (`/etc/atlantis-aws/config`) populated from cluster annotations with `[profile atlantis-plan]` and `[profile atlantis-apply]`. The server-side `fleet` workflow sets `AWS_PROFILE=atlantis-plan` before running `init` and `plan`, and sets `AWS_PROFILE=atlantis-apply` before running `apply`. This ensures complete credential separation between planning and execution without hardcoding credentials into plan artifacts.
+- **Private Kubernetes API Egress**: Atlantis reaches the fleet's private Kubernetes API endpoints through the `atlantis-cluster-api` NetworkPolicy built from the `network-cidrs` annotation.
 
 ### 1.4 Day-1 Bootstrap Contract
 
@@ -154,19 +162,19 @@ The handoff between OpenTofu and GitOps is deterministic:
 # Verify infrastructure plans locally before submitting pull requests
 tofu plan
 
-# Atlantis automatically executes tofu plan upon opening a pull request
-# Approvals trigger automated apply runs directly within the pull request thread:
-atlantis apply -d src/infra/terraform/deployments/ctrl-aws-usw2
+# Atlantis automatically executes tofu plan per project upon opening a pull request
+# Once approved, mergeable, and undiverged, apply per deployment (apply-all is disabled):
+atlantis apply -d src/infra/terraform/deployments/research
 ```
 
 ### 1.5 Deployment Inputs & Provider Credentials
 
 OpenTofu reads every provider credential from AWS Secrets Manager in account `400920695547` (`us-west-2`), never from a personal token. Load each value into the environment for one command at a time; never write it to disk or print it.
 
-| Deployment | Inputs | Credentials (Secrets Manager secret → OpenTofu input) |
+| Deployment | Inputs | Credentials (Secrets Manager secret -> OpenTofu input) |
 |---|---|---|
-| `research` | `main.tf` decodes `deployment.yaml` itself; flags such as `enable_cloud_cost` default in `variables.tf`. | `ctrl-aws-usw2-tailscale-terraform-oauth` (JSON `client_id`, `client_secret`) → `TF_VAR_tailscale_oauth_client_id`, `TF_VAR_tailscale_oauth_client_secret`; `ctrl-aws-usw2-mesh-router-tailscale-auth-key` (plain string) → `TF_VAR_tailnet_auth_key`. |
-| `dns` | `main.tf` decodes `deployment.yaml` itself; flags default in `variables.tf`. | `ctrl-aws-usw2-cloudflare-api-token` (plain string) → `CLOUDFLARE_API_TOKEN`. |
+| `research` | `main.tf` decodes `deployment.yaml` itself; flags such as `enable_cloud_cost` default in `variables.tf`. | `ctrl-aws-usw2-tailscale-terraform-oauth` (JSON `client_id`, `client_secret`) -> `TF_VAR_tailscale_oauth_client_id`, `TF_VAR_tailscale_oauth_client_secret`; `ctrl-aws-usw2-mesh-router-tailscale-auth-key` (plain string) -> `TF_VAR_tailnet_auth_key`. |
+| `dns` | `main.tf` decodes `deployment.yaml` itself; flags default in `variables.tf`. | `api_token` of `ctrl-aws-usw2-cloudflare-terraform-token` (JSON) -> `CLOUDFLARE_API_TOKEN`. |
 
 The Tailscale credential is the tailnet-owned OAuth client "OpenTofu IaC provisioner", with scopes `auth_keys`, `devices:core` and `oauth_keys` and tags `tag:k8s-operator` and `tag:subnet-router`. These scopes and tags must cover the operator OAuth client that OpenTofu creates, because Tailscale only lets a client create clients with a subset of its own scopes and tags. Do not substitute a personal API access token: it belongs to one user and expires within 90 days. The provisioner needs no `policy_file` scope while `manage_tailscale_acl` is `false`.
 
@@ -202,11 +210,11 @@ aws iam create-access-key \
   --secret-string file:///dev/stdin
 ```
 
-Local applies authenticate with `aws sso login --profile openplex-production-admin`; OpenTofu needs a live SSO session for the state backend, not only cached CLI credentials.
+Local applies authenticate with `aws sso login --profile openplex-admin`; OpenTofu needs a live SSO session for the state backend, not only cached CLI credentials.
 
 ```bash
 # research
-export AWS_PROFILE=openplex-production-admin
+export AWS_PROFILE=openplex-admin
 oauth="$(aws secretsmanager get-secret-value --region us-west-2 --secret-id ctrl-aws-usw2-tailscale-terraform-oauth --query SecretString --output text)"
 export TF_VAR_tailscale_oauth_client_id="$(jq -r .client_id <<<"${oauth}")"
 export TF_VAR_tailscale_oauth_client_secret="$(jq -r .client_secret <<<"${oauth}")"
@@ -215,16 +223,43 @@ export TF_VAR_tailnet_auth_key="$(aws secretsmanager get-secret-value --region u
 tofu -chdir=src/infra/terraform/deployments/research plan -out=research.planfile
 
 # dns
-export CLOUDFLARE_API_TOKEN="$(aws secretsmanager get-secret-value --region us-west-2 --secret-id ctrl-aws-usw2-cloudflare-api-token --query SecretString --output text)"
+export CLOUDFLARE_API_TOKEN="$(aws secretsmanager get-secret-value --region us-west-2 --secret-id ctrl-aws-usw2-cloudflare-terraform-token --query SecretString --output text | jq -r .api_token)"
 tofu -chdir=src/infra/terraform/deployments/dns plan -out=dns.planfile
 
 # renovate
-export AWS_PROFILE=openplex-production-admin
+export AWS_PROFILE=openplex-admin
 ecr_creds="$(aws secretsmanager get-secret-value --region us-west-2 --secret-id ctrl-aws-usw2-renovate-ecr-read --query SecretString --output text)"
 export AWS_ACCESS_KEY_ID="$(jq -r .access_key_id <<<"${ecr_creds}")"
 export AWS_SECRET_ACCESS_KEY="$(jq -r .secret_access_key <<<"${ecr_creds}")"
 unset ecr_creds
 ```
+
+### 1.6 Cloud Resource Naming, Compliance Variables & Tagging Architecture
+
+Cloud infrastructure enforces unified conventions across resource naming, customer IAM compliance, and resource tagging:
+
+- **Cloud Resource Naming**:
+  - **Cluster Prefix**: Every cloud object name starts with its owning cluster name: `<cluster>-<purpose>[-<qualifier>]` using lowercase letters, digits, and single hyphens, with no repeated adjacent words, in at most 48 characters.
+  - **Workload Purpose**: The purpose names the workload in at most three plain words without repeating its parent system. Terraform map keys that become name segments use the same hyphenated form.
+  - **KMS Key Aliases**: Every KMS key receives an alias `alias/${kms_alias_prefix}${cluster}-${purpose}` (or `alias/${kms_alias_prefix}${secret_name}` for secret manager keys), ensuring no key is identified solely by its generated ID.
+  - **Cross-Account Namespaces**: Names in globally shared or cross-account namespaces suffix the owning cloud account ID. Storage and cloud cost buckets follow `${cluster}-${class}-${account_id}` (such as `cell-aws-usw2-home-400920695547`).
+  - **Control Plane Ownership for Shared Resources**: Objects shared across an entire deployment (such as operator credentials or global Cloudflare R2 storage buckets) take the control plane cluster name as their prefix (`ctrl-aws-usw2-...`), never a generic tenant, installation, or deployment word.
+  - **Container Image Repositories**: Container repositories are named after the repository source path of the component they are built from (such as `src/infra/tools/coder_snapshot_portal`). They belong to the deployment registry rather than an individual cluster, carrying no cluster prefix.
+  - **Deployment Isolation & `name_prefix`**: Deployments are isolated by cloud account, DNS domain, and tailnet. Deployments sharing a cloud account set `name_prefix` (default `""`), which prepends strictly to cluster names.
+- **Customer Compliance Variables**:
+  - Every OpenTofu module creating IAM roles, policies, users, instance profiles, or KMS aliases accepts standardized customer compliance variables:
+    - `iam_name_prefix`: string, default `""`, validated to length <= 16 and pattern `^[a-z0-9-]*$`. Prepended verbatim before the cluster name of every IAM role, policy, user, and instance profile (`${iam_name_prefix}${cluster}-${purpose}`).
+    - `kms_alias_prefix`: string, default `""`, validated to length <= 16 and pattern `^[a-z0-9-]*$`. Prepended verbatim before the cluster name of every KMS alias (`alias/${kms_alias_prefix}${cluster}-${purpose}`).
+    - `iam_permissions_boundary`: string ARN, default `null`. Attached directly to every IAM role via `permissions_boundary`.
+    - All three default to empty/null and apply exclusively to IAM objects and KMS aliases.
+- **Unified Tagging Architecture**:
+  - **Deployment Tag Map**: Each deployment declares a single `tags` map variable with lowercase kebab-case keys (such as `environment = "research"` or `environment = "local"`).
+  - **Provider Default Tags**: Applied globally across all OpenTofu-managed resources through cloud provider `default_tags`.
+  - **Cluster Registration Projection**: Passed downstream into Kubernetes cluster registrations via the annotation `resource-tags = jsonencode(tags)`.
+  - **Runtime Controller Propagation**: In-cluster controllers that provision cloud resources dynamically consume this annotation:
+    - Karpenter `EC2NodeClass` projects the tags onto EC2 worker instances via `spec.tags`.
+    - AWS Load Balancer Controller applies the tags to Elastic Load Balancers via `defaultTags`.
+    - EBS CSI Driver applies volume tags to provisioned EBS persistent volumes via the cluster component `tags` input.
 
 ---
 
@@ -247,7 +282,7 @@ flowchart TD
         KubeRouterCtrl["Managed Kubernetes API Router<br/>(TCP/443 svc:kube-api-ctrl)"]
         SubnetRouterCtrl["Tailscale Subnet Router<br/>(Advertises Service CIDR: 172.31.0.0/16)"]
         CtrlGateway["Envoy Gateway (private-access)<br/>ClusterIP: 172.31.0.11"]
-        CoreDNSCtrl["CoreDNS Split-Horizon<br/>(c.corp.example.internal)"]
+        CoreDNSCtrl["CoreDNS Split-Horizon<br/>(c.internal.example.org)"]
         ArgoServer["Argo CD Controller"]
         SigNoz["SigNoz & ClickHouse"]
     end
@@ -303,9 +338,9 @@ The fleet adopts the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) 
 - **ClusterIP Private Ingress Contract**: The primary Gateway instance (`private-access` in namespace `envoy-gateway-system`) binds to a private `ClusterIP` with a deterministic IPv4 address (e.g. `172.31.0.11`) rather than creating expensive, internet-facing cloud load balancers. Because the Subnet Router advertises the Service CIDR, remote clusters dial Service IPs directly over WireGuard.
 - **Canonical Door Routing**: Gateway instances author specialized listeners:
   - `coder-apps-https`: Listens on port `443` for `*.coder.<base-domain>`, routing to the Coder control plane with wildcard TLS termination.
-  - `s3-http` & `s3-https`: Dedicated endpoints for the virtual S3 Storage Gateway on port `8080`. Routes use AWS SigV4 header matching to inspect authorization signatures, enforce team path boundaries, and proxy cross-region write operations to the active writer cell.
+  - `s3-http` & `s3-https`: Dedicated endpoints for the virtual S3 Storage Gateway on port `8080`. Routes use AWS SigV4 header matching to inspect authorization signatures, enforce team path boundaries, and route requests directly to regional cloud storage or Cloudflare R2 global buckets.
   - `kube-oidc-tls`: A `TLSRoute` on port `443` providing TLS Passthrough for `kube-oidc-proxy`, allowing the in-cluster proxy to present its own CA and validate client OIDC tokens directly.
-- **Service Catalog Discovery**: The [Homer](https://github.com/bastienwirtz/homer) dashboard serves as the central private catalog at `https://home.c.corp.<domain>`, linking directly to cluster UIs ([Headlamp](https://github.com/headlamp-k8s/headlamp)), GitOps ([Argo CD](https://github.com/argoproj/argo-cd)), telemetry dashboards ([SigNoz](https://github.com/signoz/signoz)), profiling ([Parca](https://github.com/parca-dev/parca)), and developer workspaces ([Coder](https://github.com/coder/coder)).
+- **Service Catalog Discovery**: The [Homer](https://github.com/bastienwirtz/homer) dashboard serves as the central private catalog at `https://home.<cluster_domain>`, linking directly to cluster UIs ([Headlamp](https://github.com/headlamp-k8s/headlamp)), GitOps ([Argo CD](https://github.com/argoproj/argo-cd)), telemetry dashboards ([SigNoz](https://github.com/signoz/signoz)), profiling ([Parca](https://github.com/parca-dev/parca)), and developer workspaces ([Coder](https://github.com/coder/coder)).
 
 ### 2.4 Split-Horizon DNS Architecture
 
@@ -313,9 +348,9 @@ DNS resolution is deterministic, private, and split-horizon across in-cluster po
 
 - **Domain Hierarchy Derivation**: All internal hostnames derive from `public_domain`:
   - `public_domain`: Root identity (e.g. `example.com` or `local.internal`).
-  - `intranet_domain`: Derived as `corp.<public_domain>` (e.g. `corp.example.com`).
-  - `cluster_domain`: Derived as `c.<intranet_domain>` (e.g. `c.corp.example.com`).
-  - Per-Cluster Domain: `<cluster-name>.<cluster_domain>` (e.g. `ctrl-aws-usw2.c.corp.example.com`).
+  - `intranet_domain`: Internal identity domain (e.g. `internal.<public_domain>` or `<public_domain>`).
+  - `cluster_domain`: Derived as `c.<intranet_domain>` (e.g. `c.internal.example.com`).
+  - Per-Cluster Domain: `<cluster-name>.<cluster_domain>` (e.g. `ctrl-aws-usw2.c.internal.example.com`).
 - **In-Cluster Resolution ([CoreDNS](https://github.com/coredns/coredns))**: CoreDNS registers custom server blocks mapping all service names directly to the private Envoy Gateway ClusterIP (`172.31.0.11`). It maintains static rewrite rules for remote cell storage doors (`s3-gateway.<cell>.<domain>`) and remote identity proxies (`kube-oidc-proxy.<cell>.<domain>`).
 - **Route Synchronization ([ExternalDNS](https://github.com/kubernetes-sigs/external-dns))**: ExternalDNS watches Gateway API `HTTPRoute` resources carrying `app.kubernetes.io/component=external-dns-source` and synchronizes hostnames into private cloud DNS zones (AWS Route53 Private Hosted Zones or GCP Cloud DNS Private Zones) without manual DNS intervention.
 
@@ -325,7 +360,10 @@ Internal cluster endpoints are encrypted using x509 certificates issued by in-cl
 
 - **Private CA Hierarchy ([cert-manager](https://github.com/cert-manager/cert-manager))**: The root `cluster-local-ca` certificate backs the cluster-wide `ClusterIssuer/cluster-local-ca`. Envoy Gateway instances request wildcards (`*.ctrl.<domain>` and `*.coder.<domain>`) directly from this private issuer.
 - **CA Bundle Distribution ([trust-manager](https://github.com/cert-manager/trust-manager))**: The `trust-manager` operator projects the root CA bundle as a standard `ca.crt` ConfigMap into all namespaces, ensuring in-cluster workloads trust internal fleet doors without altering container images.
-- **The Certificate Transparency (CT) Protection Invariant**: Private internal hostnames must **never** request certificates from public ACME providers (such as Let's Encrypt). Public certificate authorities publish every issued certificate to immutable, searchable [Certificate Transparency logs](https://www.certkit.io/tools/ct-logs/). If an internal hostname (such as `database.team-alpha.cell-aws-usw2.c.<domain>`) requests a public certificate, the platform's internal topology, naming conventions, and team definitions are permanently leaked to external adversaries. Public ACME issuance is strictly restricted to true external ingress hostnames (such as `hooks.<domain>`).[^dns-tls-boundary]
+- **Cross-Cluster CA Publication & Federation**: For cross-cluster mTLS and federated OIDC/gRPC peering (e.g. Headlamp accessing cell Kubernetes APIs, Dragonfly manager-to-peer peering, SigNoz observability forwarding, Velero UI OIDC), each cluster publishes its own public root CA certificate via a dedicated `trust-manager` Bundle (`cluster-published-ca`) projecting into ConfigMap `cert-manager-system/cluster-published-ca`. OpenTofu reads only this public ConfigMap (guaranteeing private keys never enter Terraform state) and annotates Argo CD cluster secrets (`control-cluster-ca` on cells and `<cell>-cluster-ca` on the control plane).
+- **Inline Scoped Trust Bundles**: Workload trust bundles (`headlamp-cluster-ca`, `dragonfly-grpc-ca-bundle`, `prometheus-api-bridge-control-ca`, `velero-ui-control-ca`, `kube-oidc-proxy-control-ca`, `otel-collector-control-ca`) are dynamically patched with `inLine` sources populated from these Argo cluster annotations, avoiding fleet-wide CA cross-contamination while maintaining cloud-agnostic portability.
+- **ISRG Trust Rule for Public ACME Endpoints**: Workloads on cell clusters reaching control cluster endpoints terminated with public Let's Encrypt certificates (e.g. Dex OIDC and SigNoz telemetry doors under `*.corp.<domain>`) mount trust bundles containing public root certificates inline. To withstand cross-sign deprecation and future root transitions, these bundles inline both **ISRG Root X1** and **ISRG Root YR**.
+- **The Certificate Transparency (CT) Protection Invariant**: Private internal hostnames must **never** request certificates from public ACME providers (such as Let's Encrypt). Public certificate authorities publish every issued certificate to immutable, searchable [Certificate Transparency logs](https://www.certkit.io/tools/ct-logs/). If an internal hostname (such as `database.team-alpha.cell-aws-usw2.c.<domain>`) requests a public certificate, the platform's internal topology, naming conventions, and team definitions are permanently leaked to external adversaries. Public ACME issuance is strictly restricted to true external ingress hostnames (such as `hooks.<domain>`) and to each private-access gateway's cluster wildcard (such as `*.cell-aws-usw2.c.<domain>`), which browsers must trust and which names only the cluster.[^dns-tls-boundary]
 
 [^dns-tls-boundary]: Actively enforced. Platform manifests strictly divide internal certificates to `cluster-local-ca` and external to `public-acme`, and the `acme-domain-protection` Kyverno admission policy actively denies public ACME certificate requests for internal domain patterns.
 
@@ -375,7 +413,7 @@ GitOps continuous delivery operates on a two-tier synchronization pipeline:
 
 To confirm that GitHub push and pull request events reach the platform:
 
-1. In GitHub, navigate to repository **Settings** → **Webhooks** (or the corresponding GitHub App settings under **Developer settings** → **GitHub Apps**).
+1. In GitHub, navigate to repository **Settings** -> **Webhooks** (or the corresponding GitHub App settings under **Developer settings** -> **GitHub Apps**).
 2. Select the webhook configured for `https://hooks.<publicDomain>/github/argocd` or `https://hooks.<publicDomain>/github/atlantis`.
 3. Open the **Recent Deliveries** tab.
 4. Inspect recent deliveries:
@@ -399,6 +437,9 @@ To confirm that GitHub push and pull request events reach the platform:
 - **Atlantis Webhook Secret**:
   - **Cloud Clusters (`ctrl-aws-usw2`)**: In AWS Secrets Manager under `ctrl-aws-usw2-atlantis-github-app` (properties `private_key` and `webhook_secret`). External Secrets Operator fetches directly from `aws-secrets-manager` into `atlantis/atlantis-github-app` (`key.pem` and `github_secret`).
   - **Local Clusters (Floci)**: In Kubernetes namespace `secret-records`, Secret `atlantis-github-app` via `local-secret-records`.
+- **Atlantis Plan Credentials**:
+  - **Cloud Clusters (`ctrl-aws-usw2`)**: In AWS Secrets Manager under `<cluster>-cloudflare-terraform-token` (property `api_token`), `<cluster>-tailscale-terraform-oauth` (properties `client_id` and `client_secret`), and `<cluster>-mesh-router-tailscale-auth-key` (plain string). External Secrets Operator fetches directly from `aws-secrets-manager` into `atlantis/atlantis-plan-credentials` (`CLOUDFLARE_API_TOKEN`, `TF_VAR_tailscale_oauth_client_id`, `TF_VAR_tailscale_oauth_client_secret`, and `TF_VAR_tailnet_auth_key`) for OpenTofu planning.
+  - **Local Clusters (Floci)**: In Kubernetes namespace `secret-records`, Secrets `cloudflare-terraform-token`, `tailscale-terraform-oauth`, and `mesh-router-tailscale-auth-key` via `local-secret-records`.
 - **Argo CD Webhook Secret**:
   - **Cloud Clusters (`ctrl-aws-usw2`)**: In AWS Secrets Manager under `ctrl-aws-usw2-argocd-github-webhook` (property `webhook_secret`). External Secrets Operator fetches directly from `aws-secrets-manager` ClusterSecretStore into `argocd/argocd-secret` (`webhook.github.secret`).
   - **Local Clusters (Floci)**: In Kubernetes namespace `secret-records`, Secret `argocd-github-webhook` (property `webhook_secret`) via `local-secret-records`.
@@ -406,7 +447,7 @@ To confirm that GitHub push and pull request events reach the platform:
   - **Cloud Clusters (`ctrl-aws-usw2`)**: In AWS Secrets Manager under `ctrl-aws-usw2-coder-automation-token` (property `token`). External Secrets Operator fetches directly from `aws-secrets-manager` ClusterSecretStore into `coder/coder-automation-token` (`token`) for `workspace-healer` and template reconciliation.
   - **Local Clusters (Floci)**: In Kubernetes namespace `secret-records`, Secret `coder-automation-token` (property `token`) via `local-secret-records`.
 - **Cloudflare DNS-01 API Token**:
-  - **Cloud Clusters (`ctrl-aws-usw2`)**: In AWS Secrets Manager under `ctrl-aws-usw2-cloudflare-api-token` (plain string). External Secrets Operator fetches directly from `aws-secrets-manager` ClusterSecretStore into `cert-manager-system/cloudflare-api-token` (`api-token`) for ACME wildcard certificate issuance.
+  - **Cloud Clusters (`ctrl-aws-usw2`, `cell-aws-usw2`)**: In AWS Secrets Manager under `<cluster>-cloudflare-cert-manager-token` (JSON key `api_token`; a Cloudflare token limited to DNS Write and Zone Read on the ACME zones). External Secrets Operator fetches directly from `aws-secrets-manager` ClusterSecretStore into `cert-manager-system/cloudflare-api-token` (`api-token`) for ACME wildcard certificate issuance.
   - **Local Clusters (Floci)**: Bypassed via local self-signed CA.
 - **Tailscale Operator OAuth Credentials**:
   - **Cloud Clusters (`ctrl-aws-usw2`)**: In AWS Secrets Manager under `ctrl-aws-usw2-tailscale-operator-oauth` (properties `client_id` and `client_secret`).
@@ -531,7 +572,7 @@ The platform partitions authentication and authorization into three distinct arc
 flowchart TD
     subgraph Upstream["Enterprise Identity Providers"]
         Google["Google Workspace OIDC<br/>(accounts.google.com)"]
-        Okta["Okta OIDC<br/>(corp.okta.com)"]
+        Okta["Okta OIDC<br/>(auth.okta.com)"]
     end
 
     subgraph Plane1["Plane 1: Human Cloud IaaS SSO"]
@@ -546,7 +587,7 @@ flowchart TD
     end
 
     subgraph Plane2["Plane 2: In-Cluster Platform SSO (ctrl)"]
-        Dex["Dex Identity Broker<br/>(issuer: https://dex.corp.internal)"]
+        Dex["Dex Identity Broker<br/>(issuer: https://dex.internal)"]
         OAuthProxy["oauth2-proxy"]
         Coder["Coder Workspaces"]
         Headlamp["Headlamp UI"]
@@ -591,13 +632,13 @@ Direct access to underlying cloud management surfaces (AWS Management Console, G
 
 Web-based developer portals, operational dashboards, and cluster APIs share an in-cluster federated identity broker: [Dex](https://github.com/dexidp/dex), operating in sync wave 20 within the `dex` namespace of `ctrl`:
 
-- **The Single Federated OIDC Broker Model**: Dex acts as the single authoritative OIDC broker fronting upstream corporate identity providers (Google Workspace OIDC, Okta OIDC) in cloud clusters, and synthetic credentials (`ops@local.internal`, `dev@local.internal`) via an internal password database in local development. Downstream platform services point exclusively to Dex (`https://dex.<access_domain>`), ensuring that migrating from Okta to Google Workspace requires zero configuration changes across platform portals or RBAC bindings.
+- **The Single Federated OIDC Broker Model**: Dex acts as the single authoritative OIDC broker fronting upstream enterprise identity providers (Google Workspace OIDC, Okta OIDC) in cloud clusters, and synthetic credentials (`ops@local.internal`, `dev@local.internal`) via an internal password database in local development. Downstream platform services point exclusively to Dex (`https://dex.<access_domain>`), ensuring that migrating from Okta to Google Workspace requires zero configuration changes across platform portals or RBAC bindings.
 - **Transparent Downstream OAuth Proxy Delegation**: [oauth2-proxy](https://github.com/oauth2-proxy/oauth2-proxy) guards internal web consoles that lack native multi-user OIDC integration (such as [Parca](https://github.com/parca-dev/parca), [Ray](https://github.com/ray-project/ray) Dashboard, [Velero](https://github.com/vmware-tanzu/velero) UI, and [OpenCost](https://github.com/opencost/opencost)). It inspects normalized `email` and `groups` claims injected into upstream request headers (`X-Auth-Request-Email`, `X-Auth-Request-Groups`) to enforce route-level authorization.
 - **The `application-oidc` Shared Secret Contract**: Platform applications do not communicate directly with cloud secret managers. Instead, an authoritative secret record named `application-oidc` in namespace `application-identity` is maintained and projected by External Secrets Operator into target namespaces (`argocd-secret`, `coder-oidc`, `headlamp-oidc`, `signoz-oidc`), completely decoupling Helm release manifests from secret values.
 - **SigNoz Dual-Mode Authentication**:
   - *Community / OSS Edition*: Operates via Two-Layer Gateway Impersonation. Envoy Gateway verifies user identity against Dex via `auth: oidc-gateway`, and SigNoz impersonates the shared root identity (`signoz@`), enabling team access without commercial license restrictions.[^signoz-trusted-header]
   - *Enterprise OIDC Mode*: Switching the routing contract in `routes.yaml` to `auth: oidc-native` connects SigNoz directly to native OIDC authentication for per-user audit logging and individual dashboard ownership.
-- **Native Kubernetes RBAC via `kube-oidc-proxy`**: Managed cloud Kubernetes services (EKS / GKE) restrict custom `--oidc-*` API flags. The platform deploys [kube-oidc-proxy](https://github.com/TremoloSecurity/kube-oidc-proxy) in `kube-system`. It validates Dex OIDC tokens and proxies requests to the upstream Kubernetes API using Kubernetes 1.36 constrained impersonation headers (`Impersonate-User: cluster:user:<username>`, `Impersonate-Group: cluster:group:<group>`). Impersonation of `system:masters` is unconditionally rejected, and identity derives exclusively from verified OIDC tokens.
+- **Native Kubernetes RBAC via `kube-oidc-proxy`**: Managed cloud Kubernetes services (EKS / GKE) restrict custom `--oidc-*` API flags. The platform deploys [kube-oidc-proxy](https://github.com/TremoloSecurity/kube-oidc-proxy) in `kube-system`. It validates Dex OIDC tokens and proxies requests to the upstream Kubernetes API using Kubernetes 1.36 constrained impersonation headers (`Impersonate-User: cluster:user:<username>`, `Impersonate-Group: cluster:group:<group>`). Impersonation of `system:masters` is unconditionally rejected, and identity derives exclusively from verified OIDC tokens. Every cluster runs its own proxy, so a workspace reaches any cluster with the same Dex token: the workspace kubeconfig lists one context per registered cluster, the workspace trust bundle holds every cluster's CA, and the research deployment derives the mesh routes and the workspace HTTPS egress (`private-https-cidrs`) from the set of registered clusters.
 
 <!-- TODO(simonepri): Migrate SigNoz Community Edition from impersonation mode to trusted-header authentication once upstream PR https://github.com/SigNoz/signoz/pull/12379 is merged -->
 [^signoz-trusted-header]: Intended capability. Upstream PR [#12379](https://github.com/SigNoz/signoz/pull/12379) implements a `trusted_header` `IdentN` provider with verified proxy provenance. Once merged upstream and released, the fleet will migrate from shared root impersonation to trusted header authentication, restoring individual user attribution in Community Edition.
@@ -683,7 +724,7 @@ Within each individual application boundary, fine-grained numeric waves (`argocd
 | **Wave 1** | Batch & Schedulers | [Kueue](https://github.com/kubernetes-sigs/kueue), [KubeRay](https://github.com/ray-project/kuberay), [Coder](https://github.com/coder/coder) | Initializes gang scheduling queues, Ray operator runtimes, and developer workspace templates. |
 | **Wave 2** | Team Perimeters | Team Namespaces, Dev Secrets | Projects team quotas, default service accounts, and developer credentials from team definitions. |
 | **Wave 3** | Workloads & DevPods | Team Jobs, Dev Workspaces | End-user machine learning pipelines, batch inference services, and active developer containers. |
-| **Wave 5** | Auditing & Compliance | [Trivy](https://github.com/aquasecurity/trivy), [Kubescape](https://github.com/kubescape/kubescape), [Prowler](https://github.com/prowler-cloud/prowler) | Periodic security scanners that audit running containers and cloud configurations without blocking deployments. |
+| **Wave 5** | Auditing & Compliance | [Trivy](https://github.com/aquasecurity/trivy), [Prowler](https://github.com/prowler-cloud/prowler) | Periodic security scanners that audit running containers and cloud configurations without blocking deployments. |
 
 ### 4.3 Continuous Image Promotion & Remote Caching
 
@@ -709,10 +750,12 @@ The administrative control plane (`ctrl`) implements a dual-tier compute model s
     - **Karpenter**: Dynamic compute provisioner and autoscaling engine.
     - **Kyverno**: Admission controller and policy enforcement engine.
     - **Argo CD**: Root GitOps controller and ApplicationSet synchronizer.
+    - **OpenTelemetry collector agent**: The node-local log and metrics DaemonSet also tolerates the taint so system-node controllers keep shipping logs.
   - **Native Node Auto-Repair**: Backed by AWS EKS native auto-repair (`node_repair_config`), which continuously monitors instance health checks and kubelet heartbeats, automatically replacing unhealthy instances without manual operator intervention.
 - **Elastic Control Workload Provisioning (`control` NodePool)**:
-  - All other control-plane applications and platform services—including Dex (identity federation), Coder (workspace management), SigNoz and ClickHouse (observability and telemetry storage), Atlantis (Terraform/OpenTofu PR automation), Parca (continuous profiling), OpenCost, and Velero (backup controllers)—scale elastically onto on-demand compute managed by Karpenter's on-demand `control` NodePool.
+  - All other control-plane applications and platform services, including Dex (identity federation), Coder (workspace management), SigNoz and ClickHouse (observability and telemetry storage), Atlantis (Terraform/OpenTofu PR automation), Parca (continuous profiling), OpenCost, and Velero (backup controllers), scale elastically onto on-demand compute managed by Karpenter's on-demand `control` NodePool.
   - Karpenter provisions instances just-in-time based directly on container CPU and memory requests and consolidates underutilized nodes when workloads scale down. This prevents auxiliary management services from starving core cluster daemons while eliminating the cost of static, over-provisioned control worker pools.
+  - Consolidation drains nodes at any time, so every CloudNativePG database (Coder, SigNoz, BuildBuddy, the BuildBuddy cache, and the Dragonfly manager) runs a primary and a standby on separate nodes behind a PodDisruptionBudget; CloudNativePG switches the primary over before the drain evicts it. The minimal profile runs one instance.
 
 ### 5.2 Dynamic Worker Cell Provisioning with Karpenter
 
@@ -755,6 +798,18 @@ Multi-team batch jobs and distributed Ray clusters are governed by [Kueue](https
 - **Cohort Quota Borrowing**: Team quotas are declared in `src/teams/`. When a team has idle quota, other teams in the cohort can borrow excess CPU and GPU capacity. When the owning team submits work, borrowed resources are preempted gracefully.
 - **Gang Scheduling**: Kueue ensures distributed training runs (such as multi-node PyTorch or Ray jobs) schedule atomically: all worker pods provision simultaneously, preventing cluster deadlocks where partial allocations hold idle GPUs while waiting for remaining pods.
 
+### 5.6 Workload Defragmentation & Descheduling Architecture
+
+To maximize node binpacking and prevent non-preemptible workloads from anchoring underutilized physical or reserved instances, the cluster combines online admission steering with background defragmentation:
+
+- **Soft Pod Affinity by Availability Class**: At admission time, the `team-scheduling-defaults` mutating admission policy injects `preferredDuringSchedulingIgnoredDuringExecution` pod affinity matching `availability-class` onto `kubernetes.io/hostname`, alongside soft anti-affinity for `ha` pods against elastic `wa` and `be` workloads. This guides `kube-scheduler` to binpack like-with-like when free slots exist without rejecting workloads during capacity spikes.
+- **Continuous Descheduler Controller**: Deployed as an HA controller deployment (`descheduler-system`) in cell clusters running with a conservative sweep interval (`deschedulingInterval: 10m`) powered by [Descheduler](https://github.com/kubernetes-sigs/descheduler).
+  - **Priority Guardrails**: Configured with `priorityThreshold: 30`, ensuring mission-critical `ha` (41–42) and `ma` (31–32) workloads are structurally immune to descheduling eviction.
+  - **Eviction Strategies**: Uses `RemovePodsViolatingInterPodAntiAffinity` and `LowNodeUtilization` to evict scattered elastic `wa` and `be` workloads from nodes holding `ha` workloads or underutilized instances.
+  - **PDB and Safety Limits**: Enforces `node-fit: true` (only evicts if another node can admit the pod), respects PodDisruptionBudgets, and bounds eviction churn via `max-pods-to-evict-per-node: 2`.
+- **Reserved GPU Pool Coordination (Kueue TAS)**: On static, reserved accelerator pools (such as 512-GPU training clusters), Kueue Topology-Aware Scheduling (TAS) couples topology-aware admission with atomic gang preemption. High-priority distributed runs preempt elastic scavengers across contiguous nodes at admission, while the Descheduler periodically compacts fragmented low-priority workloads during quiet windows.
+- **Karpenter Consolidation**: As Descheduler clears elastic pods from underutilized or mixed nodes, Karpenter's `WhenEmptyOrUnderutilized` policy consolidates remaining PDB-protected workloads and terminates unneeded instances.
+
 ---
 
 ## 6. Developer Workspace Infrastructure (DevPods)
@@ -780,7 +835,19 @@ Developer workspaces run `tailscaled` as an unprivileged user process (`UID 1000
 - **Why Direct Workspace-to-Workspace Access Is Blocked**: Cross-developer connections to a workspace's private DNS are hard-blocked by Tailnet ACLs (`dst: autogroup:self`). Unauthenticated development servers (Vite, Next.js, Flask debug mode) frequently expose interactive debug consoles allowing arbitrary remote code execution (RCE). Blocking peer-to-peer workspace access prevents an adversary who compromises one workspace from scanning or laterally pivoting into other engineers' development environments.
 - **How Temporary Apps Are Shared (Coder Subdomain Routing)**: When engineers must share running web apps or APIs with teammates, Coder generates an authenticated wildcard subdomain (`https://<port>--<workspace>--<user>.coder.<domain>`). Traffic routes through Envoy Gateway, which validates the teammate's session against Dex OIDC before proxying HTTP traffic down the active Coder agent reverse tunnel into the workspace localhost.
 
-### 6.3 Workspace Suite & Developer Tooling
+### 6.3 Workspace SSH Connectivity & Hostname Architecture
+
+Developer workspaces expose an authenticated OpenSSH service on standard port 22 reachable across the private Tailscale network:
+
+- **Service Port Mapping**: The Kubernetes Service for SSH listens on port 22 with `targetPort: 2222`, routing incoming connections directly to the OpenSSH server daemon running inside the workspace container.
+- **ExternalDNS Hostname Publication**: ExternalDNS discovers the workspace SSH Service and provisions two DNS names from the comma-separated `external-dns.kubernetes.io/hostname` annotation; the deployed ExternalDNS ignores the legacy `alpha` prefix, and publishes ClusterIP Services because `--publish-internal-services` is enabled:
+  1. `${workspace_name}.${owner_username}.${access_alias_domain}`: The user-facing canonical SSH hostname.
+  2. `ssh--${workspace_name}--${owner_username}.${coder_app_domain}`: The Coder application wildcard routing hostname, where `coder_app_domain` is derived by the template reconciler as `coder.<ctrl_cluster>.<access_domain>`.
+- **User Connection Command**: Users connect to their workspace directly using standard SSH: `ssh <user>@<ws>.<user>.<access domain>`.
+- **Reserved Username Guards**: Workspace templates reject owner usernames matching first labels published directly under the access domain (including `coder`, `dex`, `hooks`, `s3`, `kube`, `argocd`, `headlamp`, `signoz`, `grafana`, `atlantis`, and `buildbuddy`) to avoid hostname collisions. Workspace template tests reject any Coder application slug named `ssh`.
+- **Tailscale Access Controls**: Tailscale ACLs explicitly grant developers access to workspace SSH ports across worker cells via `{src: "autogroup:member", dst: ["<cell service CIDRs>"], ip: "tcp:22"}`.
+
+### 6.4 Workspace Suite & Developer Tooling
 
 - **Web IDEs**: [VS Code](https://github.com/coder/code-server) in-browser or local desktop VS Code connected over SSH via the Coder CLI (`coder ssh <workspace>`).
 - **AI Execution Agents**: [Paseo](https://github.com/paseo-ai/paseo) runtime environment hosting automated developer coding agents.
@@ -812,6 +879,7 @@ flowchart TD
         BarmanObj["Barman WAL Archives"]
         VeleroObj["Velero Cluster Backups"]
         KopiaObj["Kopia Workspace Snapshots"]
+        R2Bucket["Global R2 Buckets<br/>(Cloudflare R2 / Zero Egress)"]
     end
 
     Workload -->|read/write SQL| PG
@@ -823,7 +891,7 @@ flowchart TD
     PG -->|continuous WAL streaming| BarmanObj
     CH -->|backups to| S3Bucket
     S3G -->|in-region access| S3Bucket
-    S3G -.->|rclone cross-region sync| S3Bucket
+    S3G -->|global storage access| R2Bucket
 
     classDef app fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#1e40af;
     classDef store fill:#faf5ff,stroke:#9333ea,stroke-width:1.5px,color:#581c87;
@@ -831,7 +899,7 @@ flowchart TD
 
     class Workload,DevPod app;
     class PG,CH,VK,S3G store;
-    class S3Bucket,BarmanObj,VeleroObj,KopiaObj cloud;
+    class S3Bucket,BarmanObj,VeleroObj,KopiaObj,R2Bucket cloud;
 ```
 
 ### 7.1 3-Tier In-Cluster Datastore Architecture
@@ -840,11 +908,13 @@ flowchart TD
 2. **Columnar OLAP Telemetry ([ClickHouse](https://github.com/ClickHouse/ClickHouse))**: Distributed analytics engine managed by the [Altinity ClickHouse Operator](https://github.com/Altinity/clickhouse-operator) for high-throughput telemetry logs, traces, DCGM GPU metrics, and daily storage inventories, coordinated by ClickHouse Keeper Raft consensus.
 3. **In-Memory Key-Value Caching ([Valkey](https://github.com/valkey-io/valkey))**: Ephemeral, Redis-compatible caching engine managed by the official [Valkey Operator](https://github.com/valkey-io/valkey-operator). Valkey runs as lightweight, zero-PVC deployments backed by `emptyDir` and LRU eviction, serving as disposable compile caches for [PyTorch](https://github.com/pytorch/pytorch) (`torch.compile`) and metadata buffers for Dragonfly.
 
-### 7.2 Virtual S3 Object Gateway & Dataset Indexing
+### 7.2 Virtual S3 Object Gateway & Global Cloudflare R2 Storage
 
-- **Virtual S3 Protocol**: Workloads access object storage using canonical coordinates (`s3://aws-usw2/home/...` or `s3://global/backups/...`). An internal Envoy S3 gateway translates virtual coordinates into regional cloud endpoints, injecting authentication headers dynamically.
-- **Cross-Region Replication**: Cross-region transfers are scheduled via [rclone](https://github.com/rclone/rclone) daemon jobs with built-in bandwidth throttling to prevent egress cost spikes.
-- **S3 Inventory Indexing (`s3i`)**: Object storage buckets generate daily Parquet-based inventories. Workloads and developer pods query petabyte-scale storage metadata instantly using [DuckDB](https://github.com/duckdb/duckdb) via the `s3i` CLI tool without issuing slow, expensive `s3:ListObjects` API calls. Because inventories generate periodically, `s3i` queries reflect object state delayed by up to 24 hours. Direct recursive S3 bucket scans incur financial cost and are rate-limited to a fixed quota per day per pod.
+- **Virtual S3 Protocol & Global R2 Architecture**: Workloads access object storage using canonical virtual coordinates (`s3://aws-usw2/home/<team>/...` for cell-local datasets, or `s3://global/home/<team>/...`, `s3://global/scratch/<team>/...`, and `s3://global/meta/...` for global storage). An internal Envoy S3 gateway translates virtual coordinates into concrete regional or global endpoints, injecting authentication headers dynamically. Global storage is backed by Cloudflare R2 with zero egress fees, using per-team buckets named `<ctrl-cluster>-global-<team>-<aws-account-id>` (such as `ctrl-aws-usw2-global-<team>-400920695547`, with location hint `wnam`). Every cloud object name starts with its owning cluster's full name (`<cluster>-<purpose>[-<qualifier>]`, lowercase, hyphens only). Resources belonging to the whole installation are owned by the control plane cluster (`ctrl`), and objects in namespaces shared beyond one AWS account (such as S3 and R2 buckets) end with the AWS account ID. Every cell mounts the global buckets uniformly via Rclone CSI under `/fs/s3/global/{home,scratch,meta}` or accesses them via the gateway and direct R2 S3 credentials (`team-s3`).
+- **Cloudflare Credential for OpenTofu**: OpenTofu provisions and reconciles the global R2 buckets and credentials using a Cloudflare API token stored in AWS Secrets Manager (`<ctrl-cluster>-cloudflare-terraform-token`, such as `ctrl-aws-usw2-cloudflare-terraform-token`, in the deployment's AWS account and region). The secret payload contains JSON `{"api_token": "<token>", "account_id": "<account_id>"}` from an account-owned Cloudflare API token with `Workers R2 Storage: Edit` and `Account API Tokens: Edit`. OpenTofu provisions per-team R2 buckets and creates one account-owned API token per team, scoped to read and write that team's bucket. The derived S3 access credentials (`access_key_id = token.id`, `secret_access_key = sha256(token.value)`) are stored in `<cluster>-s3-gateway-config` and `<cluster>-s3-team-<team>` Secrets Manager records for gateway routing and workload secret projection.
+- **Bucket Lifecycle Rules**: Global buckets enforce automated retention rules: objects under the `scratch/` prefix expire automatically after 30 days, and incomplete multipart uploads abort after 7 days. OpenTofu manages lifecycle policies declaratively via the Cloudflare provider resource `cloudflare_r2_bucket_lifecycle`, preventing unbounded storage growth on temporary artifacts without requiring manual cleanup cron jobs.
+- **S3 Inventory Indexing (`s3i`)**: AWS cells publish daily S3 Inventory reports and GCP cells publish daily Cloud Storage Storage Insights reports, both as flat Parquet shards with completion manifests in each cell's `meta` bucket. Coder workspaces query mounted reports locally with `s3i` and [DuckDB](https://duckdb.org/), without listing source buckets; results can lag object changes by about a day. The ClickHouse rollup reads AWS and GCS reports through each cell's S3 gateway, then aggregates each object into its parent folders up to 50 levels below `s3/<cell>`, with global and legacy namespaces represented as folders beneath the cell. Large groupings spill to a bounded temporary volume; the rollup reads AWS control-plane reports through the dedicated storage-stats identity. Cloudflare R2 global buckets do not publish object-level inventory reports, so the current `s3i` index does not cover global storage. R2 bucket-level storage counts and bytes are available through Cloudflare's analytics API, but object-level search needs a separately generated inventory.
+- **S3 CSI Mount Checksum Policy**: Rclone CSI volumes mounting S3 storage across workspace templates and team workloads configure `volumeAttribute "no-checksum" = "true"`. Writes are covered by node-plugin RCLONE_IGNORE_CHECKSUM + RCLONE_STREAMING_UPLOAD_CUTOFF=0 (Content-MD5 on every multipart part, verified by the gateway); reads skip the ETag comparison via no-checksum. Kyverno client admission policies (`s3_gateway/kustomize/client-policy.yaml`) explicitly authorize this additional attribute for storage mounts. Workspaces and workloads configure `AWS_REQUEST_CHECKSUM_CALCULATION=when_required` and `AWS_RESPONSE_CHECKSUM_VALIDATION=when_required` to prevent unnecessary checksum recalculations and avoid upload/download payload errors when streaming through CSI volume mounts.
 
 ### 7.3 P2P Container Distribution & Lazy Loading
 
@@ -870,6 +940,7 @@ flowchart LR
     subgraph collection["Collection Layer"]
         OTelDaemon["OTel Collector DaemonSet"]
         ParcaAgent["Parca eBPF Profiler Agent"]
+        OBIDaemon["OBI eBPF Agent"]
         OTelGate["OTel Collector Gateway"]
     end
 
@@ -887,10 +958,12 @@ flowchart LR
     end
 
     Pods -->|OTLP Traces & Logs| OTelDaemon
+    Pods -->|eBPF Network Flows| OBIDaemon
     Nodes -->|System Metrics| OTelDaemon
     GPU -->|DCGM Metrics| OTelDaemon
     Nodes -->|eBPF CPU Profiles| ParcaAgent
 
+    OBIDaemon -->|OTLP Network Flows| OTelDaemon
     OTelDaemon -->|OTLP| OTelGate
     ParcaAgent -->|gRPC Profiles| ParcaServer
     OTelGate -->|OTLP| SigNozApp
@@ -908,7 +981,7 @@ flowchart LR
     classDef consumer fill:#f5f3ff,stroke:#7c3aed,stroke-width:1.5px,color:#5b21b6;
 
     class Pods,Nodes,GPU source;
-    class OTelDaemon,ParcaAgent,OTelGate collect;
+    class OTelDaemon,ParcaAgent,OBIDaemon,OTelGate collect;
     class SigNozApp,ClickHouseDB,ParcaServer,Bridge core;
     class HeadlampApp,OpenCostApp,KedaApp consumer;
 ```
@@ -918,6 +991,7 @@ flowchart LR
 - **Unified Ingestion**: Every node runs an [OpenTelemetry Collector](https://github.com/open-telemetry/opentelemetry-collector) daemonset collecting container stdout logs, host system metrics, and application traces. Daemonsets route telemetry to the central collector gateway on `ctrl`.
 - **SigNoz & ClickHouse Backend**: SigNoz aggregates and indexes all traces, logs, and metrics directly in ClickHouse columnar storage, enabling millisecond search across billions of telemetry records without running separate Elasticsearch or Loki stacks.
 - **Continuous Profiling**: [Parca](https://github.com/parca-dev/parca) agents leverage kernel eBPF to continuously sample CPU and memory call stacks across all running containers with less than 1% overhead, pinpointing performance bottlenecks down to the source line.
+- **Kernel eBPF Flow Telemetry & Service Mapping**: [OpenTelemetry eBPF Instrumentation (OBI)](https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation) DaemonSets run across all nodes to capture workload-to-workload network flows for every pod with zero application code changes, routing telemetry to the local OpenTelemetry Collector over OTLP.
 
 ### 8.2 Prometheus API Bridge
 
@@ -933,7 +1007,98 @@ The platform standardizes on [OpenCost](https://github.com/opencost/opencost) de
 
 - **Usage-Based Cost Attribution**: OpenCost measures real container resource requests, usage, and node provisioning costs against cloud list pricing and negotiated enterprise discounts. It queries metrics directly through the Prometheus API Bridge.
 - **Unified 3-Dimension Cost Taxonomy**: Every infrastructure resource is tagged with three canonical dimensions: `cost-center`, `environment`, and `team`. Kyverno admission policies ensure all namespaces and pods declare these labels, while OpenTofu provider default tags propagate them to cloud infrastructure.
+- **Cloud Cost Table**: The `cloud_cost` component delivers hourly Parquet CUR data to the billing bucket and runs a daily Glue crawler (`<cluster>-cur`) that creates the Athena table OpenCost queries (named after the Glue database, with `year`/`month` partitions). The table does not exist until the crawler first runs: after the first apply, wait for the first report delivery (up to 24 hours), then start the crawler once (`aws glue start-crawler --name <cluster>-cur`, with the explicit `AWS_PROFILE`) instead of waiting for the schedule.
 - **Cost Discovery**: The central OpenCost UI is accessible via the Homer catalog, and Headlamp embeds the OpenCost catalog plugin to present live spend metrics directly to developers.
+
+### 8.4 Cloud Telemetry & Audit Ingestion
+
+A dedicated OpenTelemetry Collector (`cloud-telemetry`) reads cloud audit, DNS, and network logs, drops the noisy records, and exports the rest to SigNoz.
+
+#### 8.4.1 Architecture & Collector Topology
+
+- **Deployment**: The collector runs as the single-replica Deployment `cloud-telemetry-opentelemetry-collector` in `otel-system`, managed by Argo CD from [`src/infra/argocd/components/cloud_telemetry/`](../argocd/components/cloud_telemetry). It runs as non-root user 10001 with a read-only root filesystem, all capabilities dropped, and the `RuntimeDefault` seccomp profile. A NetworkPolicy limits egress to cluster DNS, the cloud identity endpoints, HTTPS to public addresses, and the SigNoz collector on port 4318.
+- **Recreate rollout**: The receiver locks its checkpoint file, so a new pod cannot start while the old one runs. The rollout strategy is `Recreate`, which stops the old pod first.
+- **Checkpoints**: A 1 GiB `ReadWriteOnce` PVC named `cloud-telemetry-storage` is mounted at `/var/lib/otelcol/file_storage`. The `file_storage` extension keeps the receiver's read position there across restarts.
+- **Receiver injection**: The collector config in [`helm/values.yaml`](../argocd/components/cloud_telemetry/helm/values.yaml) has no receiver. The `cloud-telemetry` block in [`src/infra/argocd/apps/ctrl.yaml`](../argocd/apps/ctrl.yaml) adds it for each cluster, together with the `K8S_CLUSTER_NAME` and `INTERNAL_DNS_SUFFIXES` environment variables.
+- **AWS (`awscloudwatch`)**: The receiver polls every minute and starts each log group 15 minutes back on first start (`initial_lookback: 15m`). The ctrl cluster collects `/aws/cloudtrail/<cluster>`, plus these groups for itself and for every registered `cell-aws-*` cell: `/aws/eks/<cell>/cluster` (only streams prefixed `kube-apiserver-audit` and `authenticator`), `/aws/vpc/<cell>-vpc/flow-logs`, and `/aws/route53/resolver-queries/<cell>-vpc`. The render fails if the cluster has no `aws-region` annotation.
+- **GCP (`googlecloudpubsub`)**: The receiver pulls from the subscription named in the `telemetry-pubsub-subscription` annotation. Terraform creates a Log Router sink (Cloud Audit activity and data access, VPC flow, and Cloud DNS query logs) that publishes to a Pub/Sub topic with a pull subscription. The `googlecloudlogentry_encoding` extension decodes each Log Router entry. This path exists in code only and is not deployed.
+- **Export**: The collector sends logs over OTLP/HTTP to `http://signoz-otel-collector.signoz.svc.cluster.local:4318`. Batches hold at most 1024 records (5 s timeout), because larger batches exceed the SigNoz request body limit.
+
+#### 8.4.2 Cloud Identity & Authentication
+
+The collector uses no static credentials.
+
+- **AWS**: EKS Pod Identity binds the `cloud-telemetry` ServiceAccount in `otel-system` to an IAM role. Terraform ([`policies.tf`](../terraform/components/identity/aws/policies.tf)) grants it:
+  - `logs:DescribeLogGroups`, `logs:DescribeLogStreams`, `logs:GetLogEvents`, and `logs:FilterLogEvents` on all resources.
+  - `s3:GetObject` and `s3:ListBucket` on the `<cluster>-logs-<account>` and `<cluster>-billing-access-logs-<account>` buckets. The collector configuration does not read from S3.
+  - `kms:Decrypt` and `kms:DescribeKey` on all resources.
+- **GCP**: Workload Identity binds the `otel-system/cloud-telemetry` ServiceAccount to a Google service account with `roles/pubsub.subscriber`, `roles/monitoring.metricWriter`, `roles/cloudtrace.agent`, and `roles/logging.logWriter`.
+
+#### 8.4.3 Record Format & Ingestion Filtering
+
+Every record carries `service.name = cloud-telemetry` and `k8s.cluster.name`. AWS records carry the resource attribute `cloudwatch.log.group.name`, and the `transform/parse` processor sets `log.source` from it and lifts fields out of the JSON or flow-log text. Google Cloud records carry the scope attribute `encoding.format` set by the LogEntry encoding, and the processor maps it to the same `log.source` values: `gcp.auditlog` to `cloud-audit` (`kubernetes-audit` for the `k8s_cluster` resource type), `gcp.dns` to `dns-query` with `dns.query_name`, `dns.query_type` and `dns.rcode`, and `gcp.vpcflow` to `network-flow` with `flow_srcaddr`, `flow_dstaddr`, `flow_srcport`, `flow_dstport` and `flow_action = ACCEPT`, since Google Cloud flow logs record only allowed connections. The AWS-specific `aws.*` and `k8s.audit.*` fields are not set for Google Cloud records. The raw record stays in the body.
+
+| `log.source` | Log group prefix | Attributes |
+| --- | --- | --- |
+| `cloud-audit` | `/aws/cloudtrail/` | `aws.event_name`, `aws.event_source`, `aws.read_only`, `aws.error_code`, `aws.principal_arn`, `aws.source_ip`, `aws.bucket_name` |
+| `kubernetes-audit` | `/aws/eks/` | `k8s.audit.verb`, `k8s.audit.user`, `k8s.audit.resource`, `k8s.audit.subresource`, `k8s.audit.namespace`, `k8s.audit.name` |
+| `dns-query` | `/aws/route53/` | `dns.query_name`, `dns.query_type`, `dns.rcode` |
+| `network-flow` | `/aws/vpc/` | `flow_srcaddr`, `flow_dstaddr`, `flow_srcport`, `flow_dstport`, `flow_protocol`, `flow_action`, `flow_log_status`, and the other default flow-log fields (`flow_version`, `flow_account_id`, `flow_interface_id`, `flow_packets`, `flow_bytes`, `flow_start`, `flow_end`) |
+
+The `filter/noise` processor drops these records before export:
+
+- **Routine Kubernetes reads**: `get`, `list`, and `watch` verbs from `system:node:*`, `system:kube-controller-manager`, `system:kube-scheduler`, `system:apiserver`, `eks:*`, and the service accounts in `kube-system`, `argocd`, `kyverno`, `external-secrets-system`, and `cert-manager-system`. Reads of `secrets` are kept.
+- **Internal DNS lookups**: queries whose name equals or ends in one of the internal suffixes. Ctrl.yaml builds the list from `localhost`, `cluster.local`, the intranet and cluster domains from the cluster annotations, and the hosted domains. It adds `amazonaws.com` and `compute.internal` on AWS, or `googleapis.com` and `internal` on GCP.
+- **Empty flow windows**: flow records with `flow_log_status = NODATA`.
+- **Private accepted flows**: `ACCEPT` flows where both addresses are in `10.0.0.0/8`, `172.16.0.0/12`, or `192.168.0.0/16`. Rejected flows and flows with a public address are kept.
+
+#### 8.4.4 Storage Recursion Prevention
+
+S3 server access logging writes a log object for each request, so a logging bucket that logs to itself would grow without bound. The storage module ([`src/infra/terraform/components/storage/aws/main.tf`](../terraform/components/storage/aws/main.tf)) enables access logging only for tiers other than `logs`, and delivers it to the `logs` bucket:
+
+```hcl
+resource "aws_s3_bucket_logging" "this" {
+  for_each = contains(var.storage_tiers, "logs") ? toset([for t in var.storage_tiers : t if t != "logs"]) : toset([])
+
+  bucket        = aws_s3_bucket.this[each.key].id
+  target_bucket = aws_s3_bucket.this["logs"].id
+  target_prefix = "s3-access-logs/${each.key}/"
+}
+```
+
+#### 8.4.5 Operator Runbook: Checkpoints, Log Groups & Alert Response
+
+##### Troubleshooting Collector Checkpoints & Log Groups
+
+- **Collector health**: Read the logs with `kubectl -n otel-system logs deployment/cloud-telemetry-opentelemetry-collector`. The health check extension listens on port `13133`.
+- **Resetting checkpoints**: If the receiver is stuck or its checkpoint is corrupt, scale the Deployment to 0, delete the PVC `cloud-telemetry-storage`, and let Argo CD recreate it, then scale back to 1. On the next start each log group is read from 15 minutes back, so records older than that are not replayed.
+- **Checking log groups**: Confirm the groups exist with `aws logs describe-log-groups --log-group-name-prefix /aws/` (with the explicit `AWS_PROFILE`). Flow logs are kept for 7 days in CloudWatch.
+- **Querying**: Group by `k8s.cluster.name` to separate clusters, and by the resource attribute `cloudwatch.log.group.name` to separate log groups.
+
+##### Alert Response Playbook for Cloud Telemetry Rules
+
+Five rules in [`src/infra/definitions/observability/rules/`](../definitions/observability/rules) evaluate over a rolling 5 minute window every minute. Each fires when the count of matching records exceeds the threshold.
+
+1. **`cloudtrail-unauthorized-api` (Warning)**:
+   - **Trigger**: More than 0 records with `log.source = 'cloud-audit'` and `aws.error_code` in `AccessDenied`, `AccessDeniedException`, `UnauthorizedOperation`, or `Client.UnauthorizedOperation`. Renotifies hourly.
+   - **Triage**: Read `aws.principal_arn`, `aws.source_ip`, `aws.event_source`, and `aws.event_name` on the matching records.
+   - **Action**: Decide whether a workload's IAM role lacks a permission after a deployment or an unknown principal is probing. If the access is not legitimate, revoke the session credentials, rotate affected keys, and review CloudTrail for further activity from the same principal.
+2. **`s3-backup-deletion` (Critical)**:
+   - **Trigger**: More than 0 CloudTrail records with `aws.event_source = 's3.amazonaws.com'`, `aws.event_name` in `DeleteObject`, `DeleteObjects`, or `DeleteBucket`, and `aws.bucket_name` matching `*-backups-*`, made by a principal other than the backup writer roles (`<cluster>-*-backups`, `<cluster>-kopia`, `<cluster>-velero`, `<cluster>-clickhouse`). Those roles delete routinely during retention and Kopia maintenance. Renotifies hourly. Object-level deletes appear only when the bucket is listed in `s3_data_event_bucket_arns` for the CloudTrail trail.
+   - **Triage**: Identify `aws.principal_arn` and `aws.source_ip`, and check whether a lifecycle rule or a planned recovery test explains the deletion.
+   - **Action**: If it was not expected, add an explicit `Deny` on `s3:Delete*` for the bucket, confirm versioning is intact, and check whether data must be restored from another copy.
+3. **`eks-suspicious-exec` (Warning)**:
+   - **Trigger**: More than 0 records with `log.source = 'kubernetes-audit'`, `k8s.audit.subresource` in `exec` or `attach`, and `k8s.audit.namespace` in `kube-system` or `signoz`. Renotifies every 2 hours.
+   - **Triage**: Read `k8s.audit.user`, `k8s.audit.name` (the pod), and the body for the client address.
+   - **Action**: Check for an approved incident or debugging ticket. If there is none, end the session, delete the pod, rotate the user's credentials, and review which RBAC bindings grant `pods/exec`.
+4. **`vpc-rejected-flows-surge` (Warning)**:
+   - **Trigger**: More than 100 records with `log.source = 'network-flow'` and `flow_action = 'REJECT'`. Renotifies every 2 hours.
+   - **Triage**: Open the **Security** (`fleet-security`) dashboard and read **VPC flow log rejections over time** and **Top rejected VPC destination ports**. Group the records by `flow_srcaddr`, `flow_dstaddr`, and `flow_dstport`.
+   - **Action**: For internal sources, check for a recent NetworkPolicy or security group change that blocks legitimate traffic. For public sources, confirm that no endpoint is exposed unintentionally.
+5. **`dns-potential-exfiltration` (Warning)**:
+   - **Trigger**: More than 200 records with `log.source = 'dns-query'` (internal names are already filtered out). Renotifies every 2 hours.
+   - **Triage**: Group by `dns.query_name` and look for long or high-entropy subdomains, rare top-level domains, or a steady query rate to one domain.
+   - **Action**: Find the source from the flow logs and ENI, isolate the workload with an egress-blocking NetworkPolicy, and review it with Parca and Falco.
 
 ---
 
@@ -947,7 +1112,7 @@ Silent hardware, kernel, storage, and runtime failures are detected early by [no
 
 - **`KernelDeadlock`**: Monitors kernel logs and system traces for D-state uninterruptible sleep hangs, blocked task backtraces, memory management deadlock loops, and kernel panic events.
 - **`ReadonlyFilesystem`**: Detects when underlying host or container storage filesystems are silently remounted read-only following uncorrectable block device I/O errors or NVMe subsystem faults.
-- **GPU Xid Errors**: Intercepts NVIDIA GPU driver error events to capture critical accelerator hardware anomalies—such as fatal page faults (Xid 31), driver/firmware assertion failures (Xid 43), PCIe bus disconnects (Xid 45/62/79), and uncorrectable double-bit ECC memory corruption.
+- **GPU Xid Errors**: Intercepts NVIDIA GPU driver error events to capture critical accelerator hardware anomalies, such as fatal page faults (Xid 31), driver/firmware assertion failures (Xid 43), PCIe bus disconnects (Xid 45/62/79), and uncorrectable double-bit ECC memory corruption.
 - **Mount Health**: Tracks local and network storage mount responsiveness, catching hung NFS/S3 CSI driver mounts and corrupted block device attachments.
 - **Systemd Restart Loops**: Monitors critical system daemons (`containerd`, `kubelet`, and `systemd-resolved`) to identify supervisor thrashing and crash-restart loops before the kubelet heartbeat completely fails.
 
@@ -998,7 +1163,7 @@ In addition to passive metrics and node condition monitoring, the fleet verifies
   - Validates 21+ comprehensive conformance suites spanning `access`, `storage`, `rclone-csi`, `networking`, `team-isolation`, `team-networking`, `team-pod-security`, `scheduling`, `identity`, `secrets`, `opencost`, `headlamp`, `headscale-workspace-isolation`, `ray-serve`, `security`, `security-reports`, `warning-regressions`, `workspace-secret-admission`, and Argo CD project boundaries.
   - Exercises full multi-cluster flows, cross-cell routing, gate admission, and Ray distributed training acceptance scripts in a zero-cost local environment.
 - **In-Cluster Continuous Probing via Kuberhealthy (15-Minute Cadence)**:
-  A focused, lightweight subset of non-destructive synthetic smoke and behavioral checks executes continuously in live clusters every 15 minutes as `KuberhealthyCheck` resources under the `kuberhealthy` namespace:[^kuberhealthy-chainsaw]
+  A focused, lightweight subset of non-destructive synthetic smoke and behavioral checks executes continuously in live clusters every 15 minutes as `HealthCheck` resources under the `kuberhealthy` namespace:[^kuberhealthy-chainsaw]
   - `chainsaw-smoke-cli`: Verifies CLI tool execution and cluster client binaries.
   - `chainsaw-smoke-dns`: Verifies core DNS lookups and split-horizon internal domain resolution.
   - `chainsaw-smoke-apiserver`: Tests Kubernetes API server latency, responsiveness, and basic object lifecycle operations.
@@ -1023,7 +1188,7 @@ Security follows a defense-in-depth model across supply chain, admission control
 
 - **Kyverno Policy Engine**: Enforces strict Pod Security Standards across all namespaces: rejects privileged containers, prohibits host path mounts, requires read-only root filesystems, and validates container image registry origins.
 - **Vulnerability Scanning**: [Trivy](https://github.com/aquasecurity/trivy) automatically scans container images during CI builds and periodically scans live container registries for known CVEs.
-- **Posture Audits**: [Kubescape](https://github.com/kubescape/kubescape) runs scheduled CIS Kubernetes benchmark tests against cluster configurations. [Prowler](https://github.com/prowler-cloud/prowler) conducts automated audits of cloud foundation IAM roles, KMS policies, and network exposure.
+- **Posture Audits**: [Trivy](https://github.com/aquasecurity/trivy) runs scheduled CIS Kubernetes benchmark tests against cluster configurations. [Prowler](https://github.com/prowler-cloud/prowler) conducts automated audits of cloud foundation IAM roles, KMS policies, and network exposure.
 
 ### 10.2 Runtime Threat Detection with Falco
 
@@ -1032,7 +1197,15 @@ Security follows a defense-in-depth model across supply chain, admission control
 - Detects unexpected runtime behavior: spawning shells inside production containers, modifying system binaries, unexpected outbound network connections, or attempts to read sensitive system files.
 - Threat alerts stream directly into the OpenTelemetry pipeline and alert channels for instant triage.
 
-### 10.3 Dynamic Secret Projection
+### 10.3 Workload Network Flow Telemetry with OBI
+
+[OpenTelemetry eBPF Instrumentation (OBI)](https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation) monitors Linux kernel network events and socket connections across all worker nodes:
+
+- Provides zero-code workload-to-workload network flow maps for every pod, tracking ingress and egress traffic volumes between Kubernetes owners and external endpoints.
+- Labels network flows with named network ranges for internal cluster, peering, and external destinations.
+- Streams telemetry over local OTLP pipelines directly into the central SigNoz and ClickHouse observability platform.
+
+### 10.4 Dynamic Secret Projection
 
 No secret values or private keys are ever stored in Git repositories:
 
@@ -1040,13 +1213,13 @@ No secret values or private keys are ever stored in Git repositories:
 - The [External Secrets Operator](https://github.com/external-secrets/external-secrets) synchronizes secret values dynamically into native, ephemeral Kubernetes `Secret` objects inside authorized namespaces.
 - Tokens rotate automatically when changed upstream in the cloud secret manager.
 
-### 10.4 Continuous Compliance & Audit Trail (SOC 2 & ISO 27001)
+### 10.5 Continuous Compliance & Audit Trail (SOC 2 & ISO 27001)
 
 Rather than relying on periodic manual screenshot collection, the fleet generates continuous, machine-verifiable evidence mapped directly to **SOC 2 Type II Trust Services Criteria** and **ISO/IEC 27001:2022 Annex A** controls:
 
 - **SDLC & Static Gates**: Hermetic Bazel builds, Opengrep security rules, and Trivy SPDX SBOM generation.
 - **Declarative Change Management**: Pull-request automation via Atlantis and Argo CD GitOps sync waves ensure zero direct infrastructure mutation.
-- **Automated Evidence Collection**: Prowler and Kubescape operators continuously write compliance scan reports into object storage buckets protected by KMS encryption and object versioning.
+- **Automated Evidence Collection**: Prowler and Trivy operators continuously write compliance scan reports into object storage buckets protected by KMS encryption and object versioning.
 
 ---
 
@@ -1074,7 +1247,18 @@ State preservation guarantees a strict Recovery Point Objective (RPO) and Recove
 | **Tier 3: Relational Transactions** | [Barman](https://github.com/EnterpriseDB/barman) / CloudNativePG | PostgreSQL databases (Argo CD, Coder, team state) | &le; 1 minute | Continuous WAL streaming to object storage. Point-in-time recovery (PITR) to any second. |
 | **Tier 4: Developer Workspaces** | [Kopia](https://github.com/kopia/kopia) | Developer persistent home directories | &le; 4 hours | Fast deduplicated, encrypted snapshot backups to object storage. |
 
-### 11.3 Cold-Cluster Disaster Recovery Runbook
+### 11.3 Brokerless Developer Workspace Snapshot Architecture
+
+Developer workspaces preserve user home directories and local depot state through point-in-time Kopia snapshots streamed directly to regional cloud object storage without an intermediate snapshot broker or central lease proxy:
+
+- **Root Key Generation & Projection**: OpenTofu provisions an AWS Secrets Manager secret `${ctrl_cluster}-workspace-snapshot-root` in the control plane containing JSON `{"root_key": <random 64 chars>}`. In the `coder` namespace on `ctrl`, an ExternalSecret synchronizes this value to Kubernetes Secret `workspace-snapshot-root` (key `root_key`). The Coder server pod mounts this secret read-only at `/etc/coder/workspace-snapshot-root/root_key` and references it via the environment variable `WORKSPACE_SNAPSHOT_ROOT_KEY_FILE=/etc/coder/workspace-snapshot-root/root_key`.
+- **Deterministic Password Derivation**: When a workspace provisions, Coder executes the template external data hook `hooks/snapshot-repository-password.sh`. The hook takes input `{"owner_id": ...}`, reads the root key from `$WORKSPACE_SNAPSHOT_ROOT_KEY_FILE`, and computes the deterministic owner password `base64url_nopad(HMAC-SHA256(root_key, "workspace-snapshot-repository-password\0" + owner_id))` truncated to 43 characters (`[A-Za-z0-9_-]{43}`). If the root key file is missing, the hook immediately fails with a clear error.
+- **Per-Workspace Secret Projection**: The workspace template (`storage.tf`) creates a Kubernetes Secret `coder-${workspace_id}-snapshot-repository` in the workspace namespace with data `{password = <derived password>}` and standard application labels.
+- **Workspace In-Pod Mounting & Environment**: The workspace pod mounts this Secret read-only at `/var/run/workspace/snapshot-repository/password` (volume `snapshot-repository`) and exports the environment variable `KOPIA_PASSWORD_FILE=/var/run/workspace/snapshot-repository/password`.
+- **Direct Snapshot Execution**: In-pod maintenance scripts (`workspace-snapshots.sh` and `kopia-sync.sh`) read `KOPIA_PASSWORD_FILE` to authenticate directly against the cell's backup S3 bucket. There are no snapshot broker HTTP endpoints, central lease clients, or fallback mechanisms. If the repository is not configured (no password file present), `kopia-sync.sh` exits 0 quietly; otherwise, any snapshot or repository failure fails loudly.
+- **Multi-Bucket Snapshot Portal**: The snapshot catalog portal (`coder_snapshot_portal`) serves the snapshot restoration web interface. It accepts a comma-separated list of buckets in the environment variable `S3_BUCKETS` (configured in Helm values via `s3.buckets`). The control plane reconciler dynamically computes `S3_BUCKETS` from the cluster registration annotations `registered-cells` (comma-separated cell names) and `bucket-suffix`, producing `<cell>-backups-<bucket-suffix>` for every registered cell. The portal IAM role holds `s3:ListBucket` and `s3:GetObject` permissions (along with KMS decryption via S3) scoped across all registered cell backup buckets (`arn:aws:s3:::cell-*-backups-${account_id}` and its objects).
+
+### 11.4 Cold-Cluster Disaster Recovery Runbook
 
 In the catastrophic event of a complete cloud region failure:
 
@@ -1094,7 +1278,7 @@ In the catastrophic event of a complete cloud region failure:
 
 5. **DNS Cutover**: Update [Tailscale](https://github.com/tailscale/tailscale) subnet routes and ExternalDNS records to route mesh traffic to the new regional ingress doors.
 
-### 11.4 AWS VPC CNI Mode Transition & Rolling Node Replacement Runbook
+### 11.5 AWS VPC CNI Mode Transition & Rolling Node Replacement Runbook
 
 When switching between standard AWS VPC CNI networking and custom networking with secondary pod subnets (`AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG=true`), all compute nodes across the cluster must undergo a coordinated rolling replacement.
 
@@ -1268,11 +1452,13 @@ Verify cluster-wide networking contracts and application connectivity:
    ```
 
 3. **Verify ClickHouse & Telemetry Ingestion**:
-   Execute a test query against the ClickHouse cluster and confirm SigNoz telemetry ingestion:
+   Execute a test query against the ClickHouse cluster and confirm SigNoz telemetry ingestion using the read-only query tool:
 
    ```bash
-   kubectl exec -n signoz chi-signoz-clickhouse-cluster-0-0-0 -c clickhouse -- clickhouse-client --query "SELECT 1"
+   mise run //src/infra:clickhouse-query -- "SELECT 1"
    ```
+
+   The tool authenticates with credentials from the Kubernetes secret (`signoz-clickhouse` in namespace `signoz`), establishes a port-forward to `svc/clickhouse-coordinator`, and enforces read-only mode server-side (`readonly=1`).
 
 4. **Verify Outbound Internet Egress (NAT Gateway)**:
    Verify pods in secondary pod subnets can successfully reach external destinations via VPC route tables and NAT Gateways.

@@ -81,21 +81,32 @@ certificate_authority=$(kubeconfig_value certificate-authority-data)
 client_certificate=$(sed -n 's/^[[:space:]]*"client-certificate-data": "\([^"]*\)"$/\1/p' "${context_kubeconfig}")
 client_key=$(sed -n 's/^[[:space:]]*"client-key-data": "\([^"]*\)"$/\1/p' "${context_kubeconfig}")
 exec_command=$(sed -n 's/^[[:space:]]*"command": "\([^"]*\)"$/\1/p' "${context_kubeconfig}")
-if [ -n "${client_certificate}${client_key}" ] && [ -n "${exec_command}" ]; then
+bearer_token=$(sed -n 's/^[[:space:]]*"token": "\([^"]*\)"$/\1/p' "${context_kubeconfig}")
+
+auth_methods=0
+if [ -n "${client_certificate}${client_key}" ]; then
+  auth_methods=$((auth_methods + 1))
+fi
+if [ -n "${exec_command}" ]; then
+  auth_methods=$((auth_methods + 1))
+fi
+if [ -n "${bearer_token}" ]; then
+  auth_methods=$((auth_methods + 1))
+fi
+
+if [ "${auth_methods}" -gt 1 ]; then
   printf '%s\n' 'Workspace writer inventory kubeconfig must use exactly one authentication method' >&2
   exit 1
 fi
-if [ -n "${client_certificate}${client_key}" ] && [ -z "${client_certificate}" ]; then
-  printf '%s\n' 'Workspace writer inventory client certificate authentication is incomplete' >&2
-  exit 1
-fi
-if [ -n "${client_certificate}${client_key}" ] && [ -z "${client_key}" ]; then
-  printf '%s\n' 'Workspace writer inventory client certificate authentication is incomplete' >&2
-  exit 1
-fi
-if [ -z "${client_certificate}${client_key}${exec_command}" ]; then
+if [ "${auth_methods}" -eq 0 ]; then
   printf '%s\n' 'Workspace writer inventory kubeconfig has no supported authentication method' >&2
   exit 1
+fi
+if [ -n "${client_certificate}${client_key}" ]; then
+  if [ -z "${client_certificate}" ] || [ -z "${client_key}" ]; then
+    printf '%s\n' 'Workspace writer inventory client certificate authentication is incomplete' >&2
+    exit 1
+  fi
 fi
 if [ -n "${exec_command}" ]; then
   case "${exec_command}" in
@@ -105,6 +116,13 @@ if [ -n "${exec_command}" ]; then
       exit 1
       ;;
   esac
+fi
+if [ -n "${bearer_token}" ]; then
+  bearer_token_lines=$(printf '%s\n' "${bearer_token}" | wc -l | tr -d ' ')
+  if [ "${bearer_token_lines}" -ne 1 ] || ! printf '%s\n' "${bearer_token}" | grep -Eq '^[A-Za-z0-9._~+/=-]+$'; then
+    printf '%s\n' 'Workspace writer inventory bearer token is invalid' >&2
+    exit 1
+  fi
 fi
 
 runtime=$(mktemp -d "${TMPDIR:-/tmp}/workspace-writer-inventory.XXXXXX")
@@ -160,6 +178,9 @@ if [ -n "${exec_command}" ]; then
     printf '%s\n' 'Workspace writer inventory exec authentication returned an invalid token' >&2
     exit 1
   fi
+elif [ -n "${bearer_token}" ]; then
+  printf 'header = "Authorization: Bearer %s"\n' "${bearer_token}" >"${runtime}/token.config"
+  chmod 0600 "${runtime}/token.config"
 else
   printf '%s' "${client_certificate}" | openssl base64 -d -A >"${runtime}/client.crt"
   printf '%s' "${client_key}" | openssl base64 -d -A >"${runtime}/client.key"
@@ -171,6 +192,8 @@ deployments=$(
     --cacert "${runtime}/ca.crt"
   if [ -n "${exec_command}" ]; then
     set -- "$@" --header "Authorization: Bearer ${token}"
+  elif [ -n "${bearer_token}" ]; then
+    set -- "$@" --config "${runtime}/token.config"
   else
     set -- "$@" --cert "${runtime}/client.crt" --key "${runtime}/client.key"
   fi
@@ -184,6 +207,8 @@ pods=$(
     --cacert "${runtime}/ca.crt"
   if [ -n "${exec_command}" ]; then
     set -- "$@" --header "Authorization: Bearer ${token}"
+  elif [ -n "${bearer_token}" ]; then
+    set -- "$@" --config "${runtime}/token.config"
   else
     set -- "$@" --cert "${runtime}/client.crt" --key "${runtime}/client.key"
   fi

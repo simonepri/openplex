@@ -1,23 +1,29 @@
 # Declares Kubernetes ConfigMaps, custom CA certificate mounts, and runtime configuration data for workspace pods.
 
-data "kubernetes_resources" "workspace_cell_ca" {
-  count          = (local.template_preview || var.ca_config_map_name == "") ? 0 : 1
-  api_version    = "v1"
-  kind           = "ConfigMap"
-  namespace      = local.workspace_namespace
-  field_selector = "metadata.name=${var.ca_config_map_name}"
+data "kubernetes_config_map_v1" "workspace_cell_ca" {
+  count = (local.template_preview || var.ca_config_map_name == "") ? 0 : 1
+
+  metadata {
+    name      = var.ca_config_map_name
+    namespace = local.workspace_namespace
+  }
 }
 
 locals {
-  workspace_cell_ca_objects = try(data.kubernetes_resources.workspace_cell_ca[0].objects, [])
-  workspace_cell_ca         = try(trimspace(one(local.workspace_cell_ca_objects).data["ca.crt"]), "")
+  workspace_cell_ca = try(trimspace(data.kubernetes_config_map_v1.workspace_cell_ca[0].data["ca.crt"]), "")
   workspace_control_plane_ca = trimspace(
     base64decode(var.control_plane_ca_base64),
   )
-  workspace_ca_bundle = join("\n", compact([
+  workspace_peer_cell_cas = [for ca in values(jsondecode(var.cell_ca_inventory)) : trimspace(base64decode(ca))]
+  workspace_ca_bundle = join("\n", distinct(compact(concat([
     local.workspace_cell_ca,
     local.workspace_control_plane_ca,
-  ]))
+  ], local.workspace_peer_cell_cas))))
+  # Every registered cell and the control plane, each reached through its own kube-oidc-proxy.
+  workspace_kube_clusters = sort(distinct(compact(concat(
+    [local.selected_cell, var.control_plane_name],
+    keys(jsondecode(var.cell_ca_inventory)),
+  ))))
 }
 
 resource "kubernetes_config_map_v1" "workspace_ca" {
@@ -38,13 +44,10 @@ resource "kubernetes_config_map_v1" "workspace_ca" {
       condition = (
         local.template_preview ||
         var.ca_config_map_name == "" ||
-        (
-          length(local.workspace_cell_ca_objects) == 1 &&
-          can(regex(
-            "^(?:-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\\r\\n]+-----END CERTIFICATE-----[\\r\\n]*)+$",
-            local.workspace_cell_ca,
-          ))
-        )
+        can(regex(
+          "^(?:-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\\r\\n]+-----END CERTIFICATE-----[\\r\\n]*)+$",
+          local.workspace_cell_ca,
+        ))
       )
       error_message = "The selected cell CA ConfigMap must contain valid PEM certificates in ca.crt."
     }
@@ -98,8 +101,8 @@ resource "kubernetes_config_map_v1" "access" {
   }
 }
 
-# This kubeconfig contains no bearer token. Kubernetes rotates the separately
-# projected token and kubectl reads it for each request through tokenFile.
+# Generates the in-pod kubeconfig with one context per cluster kube-oidc-proxy door; the selected cell is current.
+# The user's Dex identity is fetched on demand via Coder external-auth exec plugin.
 resource "kubernetes_config_map_v1" "workspace_kubeconfig" {
   metadata {
     name      = "coder-${data.coder_workspace.me.id}-kubeconfig"
@@ -108,29 +111,38 @@ resource "kubernetes_config_map_v1" "workspace_kubeconfig" {
   }
 
   data = {
-    config = yamlencode({
-      apiVersion = "v1"
-      kind       = "Config"
-      clusters = [{
-        name = local.selected_cell
+    kubeconfig = yamlencode({
+      apiVersion  = "v1"
+      kind        = "Config"
+      preferences = {}
+      clusters = [for cluster in local.workspace_kube_clusters : {
+        name = cluster
         cluster = {
-          server                  = "https://kubernetes.default.svc"
-          "certificate-authority" = "/var/run/workspace/kubernetes/ca.crt"
+          server                  = "https://kube-oidc-proxy.${cluster}.${var.access_alias_domain}"
+          "certificate-authority" = "/etc/workspace/ca/ca.crt"
         }
       }]
-      contexts = [{
-        name = local.selected_cell
+      contexts = [for cluster in local.workspace_kube_clusters : {
+        name = cluster
         context = {
-          cluster   = local.selected_cell
-          namespace = local.workspace_namespace
-          user      = "coder-workspace"
+          cluster = cluster
+          user    = local.owner_username
         }
       }]
       "current-context" = local.selected_cell
       users = [{
-        name = "coder-workspace"
+        name = local.owner_username
         user = {
-          tokenFile = "/var/run/workspace/kubernetes/token"
+          exec = {
+            apiVersion = "client.authentication.k8s.io/v1"
+            command    = "/bin/sh"
+            args = [
+              "-c",
+              "out=$(coder external-auth access-token dex --extra id_token 2>&1) || { printf '%s\\n' \"$out\" >&2; exit 1; }\n[ -n \"$out\" ] || { echo 'Missing ID token from Coder external auth dex' >&2; exit 1; }\nprintf '{\"apiVersion\":\"client.authentication.k8s.io/v1\",\"kind\":\"ExecCredential\",\"status\":{\"token\":\"%s\"}}\\n' \"$out\""
+            ]
+            interactiveMode    = "Never"
+            provideClusterInfo = false
+          }
         }
       }]
     })

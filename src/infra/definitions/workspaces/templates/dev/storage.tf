@@ -1,9 +1,9 @@
 # Provisions persistent volume claims, snapshot broker credentials, and storage lifecycle resources for workspaces.
 
 locals {
-  workspace_lineage_label = "${var.access_alias_domain}/workspace-lineage"
-  snapshot_broker_url     = "https://${local.active_ctrl_name}-runtime-services.tailnet.${var.access_alias_domain}:8444"
-  runtime_secret_name     = "coder-${data.coder_workspace.me.id}-runtime"
+  workspace_lineage_label         = "${var.access_alias_domain}/workspace-lineage"
+  snapshot_repository_secret_name = "coder-${data.coder_workspace.me.id}-snapshot-repository"
+  runtime_secret_name             = "coder-${data.coder_workspace.me.id}-runtime"
   backup_proxy_access_key = substr(upper(sha256(join("\u0000", [
     "workspace-backup-proxy-access-key",
     data.coder_workspace.me.id,
@@ -32,7 +32,6 @@ locals {
   is_new_restore              = module.coder_snapshots.is_new_restore
   is_cross_cell_restore       = local.restore_source_cell != "" && local.restore_source_cell != local.selected_cell
   restore_source_virtual_name = try(local.workspace_virtual_name_inventory[local.restore_source_cell], "")
-  workspace_parent_lineage    = ""
   workspace_parent_snapshot   = module.coder_snapshots.restore_selector
   workspace_is_root           = !module.coder_snapshots.restore_requested
 
@@ -101,24 +100,24 @@ locals {
 module "coder_snapshots" {
   source = "../../modules/coder_snapshots"
 
-  agent_id                    = coder_agent.main.id
-  app_labels                  = local.app_labels
-  home_disk_gib               = data.coder_parameter.home_disk_gib.value
-  kopia_repository_bucket     = "repository"
-  lineage_input               = can(regex("^[0-9]{10,}$", data.external.workspace_build_context.result.timestamp)) ? "${data.coder_workspace.me.id}-${data.external.workspace_build_context.result.timestamp}" : data.coder_workspace.me.name
-  max_bandwidth_mbps          = 0
-  owner_id                    = local.owner_id
-  owner_username              = local.owner_username
-  restore_selector            = data.coder_parameter.restore_selector.value
-  s3_endpoint                 = "http://127.0.0.1:19847"
-  single_writer_guard_enabled = true
-  snapshot_interval           = "0 */30 * * * *"
-  storage_class_name          = var.storage_class_name
-  target_dir                  = "/var/lib/workspace"
-  team                        = var.team
-  workspace_id                = data.coder_workspace.me.id
-  workspace_name              = data.coder_workspace.me.name
-  workspace_namespace         = local.workspace_namespace
+  agent_id                = coder_agent.main.id
+  app_labels              = local.app_labels
+  disk_iops               = local.disk_iops
+  disk_throughput_mbps    = local.disk_throughput_mbps
+  home_disk_gib           = data.coder_parameter.home_disk_gib.value
+  kopia_repository_bucket = "repository"
+  lineage_input           = can(regex("^[0-9]{10,}$", data.external.workspace_build_context.result.timestamp)) ? "${data.coder_workspace.me.id}-${data.external.workspace_build_context.result.timestamp}" : data.coder_workspace.me.name
+  max_bandwidth_mbps      = 0
+  owner_id                = local.owner_id
+  owner_username          = local.owner_username
+  restore_selector        = data.coder_parameter.restore_selector.value
+  s3_endpoint             = "http://127.0.0.1:19847"
+  snapshot_interval       = "0 */30 * * * *"
+  storage_class_name      = var.storage_class_name
+  target_dir              = "/var/lib/workspace"
+  workspace_id            = data.coder_workspace.me.id
+  workspace_name          = data.coder_workspace.me.name
+  workspace_namespace     = local.workspace_namespace
 }
 
 data "external" "workspace_writer_inventory" {
@@ -151,6 +150,20 @@ resource "kubernetes_secret_v1" "workspace_runtime" {
     coder_agent_token       = coder_agent.main.token
     coder_session_token     = data.coder_workspace_owner.me.session_token
     zasper_access_token     = local.zasper_access_token
+  }
+}
+
+resource "kubernetes_secret_v1" "snapshot_repository" {
+  count = local.workspace_start_count
+
+  metadata {
+    name      = local.snapshot_repository_secret_name
+    namespace = local.workspace_namespace
+    labels    = local.app_labels
+  }
+
+  data = {
+    password = data.external.snapshot_repository_password.result.password
   }
 }
 

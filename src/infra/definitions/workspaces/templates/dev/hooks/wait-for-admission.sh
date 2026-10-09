@@ -88,22 +88,32 @@ certificate_authority=$(kubeconfig_value certificate-authority-data)
 client_certificate=$(sed -n 's/^[[:space:]]*"client-certificate-data": "\([^"]*\)"$/\1/p' "${context_kubeconfig}")
 client_key=$(sed -n 's/^[[:space:]]*"client-key-data": "\([^"]*\)"$/\1/p' "${context_kubeconfig}")
 exec_command=$(sed -n 's/^[[:space:]]*"command": "\([^"]*\)"$/\1/p' "${context_kubeconfig}")
+bearer_token=$(sed -n 's/^[[:space:]]*"token": "\([^"]*\)"$/\1/p' "${context_kubeconfig}")
 
-if [ -n "${client_certificate}${client_key}" ] && [ -n "${exec_command}" ]; then
+auth_methods=0
+if [ -n "${client_certificate}${client_key}" ]; then
+  auth_methods=$((auth_methods + 1))
+fi
+if [ -n "${exec_command}" ]; then
+  auth_methods=$((auth_methods + 1))
+fi
+if [ -n "${bearer_token}" ]; then
+  auth_methods=$((auth_methods + 1))
+fi
+
+if [ "${auth_methods}" -gt 1 ]; then
   printf '%s\n' 'Workspace admission probe kubeconfig must use exactly one authentication method' >&2
   exit 1
 fi
-if [ -n "${client_certificate}${client_key}" ] && [ -z "${client_certificate}" ]; then
-  printf '%s\n' 'Workspace admission probe client certificate authentication is incomplete' >&2
-  exit 1
-fi
-if [ -n "${client_certificate}${client_key}" ] && [ -z "${client_key}" ]; then
-  printf '%s\n' 'Workspace admission probe client certificate authentication is incomplete' >&2
-  exit 1
-fi
-if [ -z "${client_certificate}${client_key}${exec_command}" ]; then
+if [ "${auth_methods}" -eq 0 ]; then
   printf '%s\n' 'Workspace admission probe kubeconfig has no supported authentication method' >&2
   exit 1
+fi
+if [ -n "${client_certificate}${client_key}" ]; then
+  if [ -z "${client_certificate}" ] || [ -z "${client_key}" ]; then
+    printf '%s\n' 'Workspace admission probe client certificate authentication is incomplete' >&2
+    exit 1
+  fi
 fi
 if [ -n "${exec_command}" ]; then
   case "${exec_command}" in
@@ -113,6 +123,13 @@ if [ -n "${exec_command}" ]; then
       exit 1
       ;;
   esac
+fi
+if [ -n "${bearer_token}" ]; then
+  bearer_token_lines=$(printf '%s\n' "${bearer_token}" | wc -l | tr -d ' ')
+  if [ "${bearer_token_lines}" -ne 1 ] || ! printf '%s\n' "${bearer_token}" | grep -Eq '^[A-Za-z0-9._~+/=-]+$'; then
+    printf '%s\n' 'Workspace admission probe bearer token is invalid' >&2
+    exit 1
+  fi
 fi
 
 runtime=$(mktemp -d "${TMPDIR:-/tmp}/workspace-admission-probe.XXXXXX")
@@ -168,16 +185,25 @@ if [ -n "${exec_command}" ]; then
     printf '%s\n' 'Workspace admission probe exec authentication returned an invalid token' >&2
     exit 1
   fi
+  printf 'header = "Authorization: Bearer %s"\n' "${token}" >"${runtime}/token.config"
+  chmod 0600 "${runtime}/token.config"
+elif [ -n "${bearer_token}" ]; then
+  printf 'header = "Authorization: Bearer %s"\n' "${bearer_token}" >"${runtime}/token.config"
+  chmod 0600 "${runtime}/token.config"
 else
   printf '%s' "${client_certificate}" | openssl base64 -d -A >"${runtime}/client.crt"
   printf '%s' "${client_key}" | openssl base64 -d -A >"${runtime}/client.key"
 fi
 
+# The API server pretty-prints JSON for curl's default user agent, and the
+# parsers below expect the compact form every other client receives.
 k8s_curl() {
   url=$1
-  set -- --silent --show-error --max-time 10 --cacert "${runtime}/ca.crt"
-  if [ -n "${exec_command}" ]; then
-    set -- "$@" --header "Authorization: Bearer ${token}"
+  shift
+  set -- "$@" --silent --show-error --max-time 10 --cacert "${runtime}/ca.crt" \
+    --user-agent workspace-admission-probe
+  if [ -n "${exec_command}" ] || [ -n "${bearer_token}" ]; then
+    set -- "$@" --config "${runtime}/token.config"
   else
     set -- "$@" --cert "${runtime}/client.crt" --key "${runtime}/client.key"
   fi
@@ -309,6 +335,28 @@ pod_blocker() {
   '
 }
 
+# A failed build leaves its Deployment behind, and the gated pod would keep its
+# place in the Kueue queue and take quota once admitted. Scaling to zero removes
+# the pod and its Workload; the next start build restores the replica count.
+release_workspace() {
+  status=$?
+  trap - EXIT
+  if [ "${status}" -ne 0 ]; then
+    if k8s_curl "${server}/apis/apps/v1/namespaces/${WORKSPACE_NAMESPACE}/deployments/coder-${CODER_WORKSPACE_ID}" \
+      --fail --request PATCH --header 'Content-Type: application/merge-patch+json' \
+      --data '{"spec":{"replicas":0}}' >/dev/null 2>&1; then
+      printf '%s\n' '[INFO] Scaled the workspace deployment to zero so it leaves the Kueue queue.' >&2
+    else
+      printf '%s\n' '[WARN] Could not scale the workspace deployment to zero; it may keep its Kueue queue position.' >&2
+    fi
+  fi
+  rm -rf "${runtime}"
+  exit "${status}"
+}
+trap release_workspace EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 deadline=$(($(date +%s) + TIMEOUT_SECONDS))
 started=$(date +%s)
 progress_interval_seconds=15
@@ -320,6 +368,12 @@ deployment_updated_replicas=0
 deployment_ready_replicas=0
 deployment_available_replicas=0
 workspace_container_running=false
+workload_found=false
+pod_uid=
+queue=
+requested=
+effective_reason=
+effective_message=
 
 while :; do
   pods_json=$(
@@ -343,22 +397,27 @@ while :; do
   fi
 
   if [ "${admission_confirmed}" = false ]; then
-    # Kueue stamps the Workload it created onto the pod, so the build reads its
-    # own Workload by name instead of guessing from a namespace-wide list.
-    workload_name=$(printf '%s\n' "${pods_compact}" \
-      | sed -n 's/.*"kueue.x-k8s.io\/workload":"\([^"]*\)".*/\1/p')
-    if ! printf '%s\n' "${workload_name}" | grep -Eq '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$'; then
-      workload_name=
+    # The pod names its Workload only after admission, too late to explain a
+    # wait, so the build finds the Workload that the pod owns from the start.
+    # The first UID in the pod list is the pod's own, ahead of its owners.
+    pod_uid=$(printf '%s\n' "${pods_compact}" \
+      | grep -o '"uid":"[^"]*"' | head -n 1 | sed 's/^"uid":"\(.*\)"$/\1/')
+    if ! printf '%s\n' "${pod_uid}" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+      pod_uid=
     fi
 
     workload_json=
-    if [ -n "${workload_name}" ]; then
+    if [ -n "${pod_uid}" ]; then
       workload_json=$(
-        k8s_curl "${server}/apis/kueue.x-k8s.io/v1beta2/namespaces/${WORKSPACE_NAMESPACE}/workloads/${workload_name}" 2>/dev/null || true
+        k8s_curl "${server}/apis/kueue.x-k8s.io/v1beta2/namespaces/${WORKSPACE_NAMESPACE}/workloads" 2>/dev/null \
+          | tr -d '\n' \
+          | awk '{ gsub(/[{]"apiVersion":"kueue[.]x-k8s[.]io\/v1beta2","kind":"Workload",/, "\n&"); print }' \
+          | grep -F "\"uid\":\"${pod_uid}\"" | head -n 1 || true
       )
     fi
 
     if [ -n "${workload_json}" ] && printf '%s\n' "${workload_json}" | grep -q '"kind":"Workload"'; then
+      workload_found=true
       parsed=$(printf '%s\n' "${workload_json}" | workload_status)
       admitted=$(printf '%s\n' "${parsed}" | sed -n 's/^admitted=//p')
       admitted_reason=$(printf '%s\n' "${parsed}" | sed -n 's/^admitted_reason=//p')
@@ -406,8 +465,13 @@ while :; do
       progress_now=$(date +%s)
       if [ "${progress_now}" -ge "${next_progress}" ]; then
         next_progress=$((progress_now + progress_interval_seconds))
-        printf '[INFO] Waiting for Kueue to create the workspace workload (%ss elapsed).\n' \
-          "$((progress_now - started))"
+        if [ -n "${pod_uid}" ]; then
+          printf '[INFO] Waiting for Kueue to create the workspace workload (%ss elapsed).\n' \
+            "$((progress_now - started))"
+        else
+          printf '[INFO] Waiting for the workspace pod to appear (%ss elapsed).\n' \
+            "$((progress_now - started))"
+        fi
       fi
     fi
   fi
@@ -473,6 +537,16 @@ while :; do
         "${deployment_available_replicas:-0}" >&2
     else
       printf '[ERROR] Workspace pod was not admitted within %ss.\n' "${TIMEOUT_SECONDS}" >&2
+      if [ "${workload_found}" = true ]; then
+        printf '[ERROR]   Queue %s, workspace pod requests %s.\n' \
+          "${queue:-unknown}" "${requested:-unknown}" >&2
+        printf '[ERROR]   Last Kueue status %s: %s\n' \
+          "${effective_reason:-Pending}" "${effective_message:-no detail reported}" >&2
+      elif [ -n "${pod_uid}" ]; then
+        printf '%s\n' '[ERROR]   Kueue never created a Workload for the workspace pod.' >&2
+      else
+        printf '%s\n' '[ERROR]   The workspace pod never appeared; check the Deployment events.' >&2
+      fi
     fi
     exit 1
   fi

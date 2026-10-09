@@ -30,7 +30,7 @@ spec:
                 aggregations:
                   - expression: "count()"
                 filter:
-                  expression: "body LIKE '%169.254.169.254%' AND (attributes_string['rule'] LIKE '%Metadata%' OR body LIKE '%Metadata%' OR body LIKE '%drop%' OR body LIKE '%denied%')"
+                  expression: "body LIKE '%169.254.169.254%' AND (rule LIKE '%Metadata%' OR body LIKE '%Metadata%' OR body LIKE '%drop%' OR body LIKE '%denied%') AND k8s.namespace.name != 'argocd'"
                 signal: logs
                 stepInterval: 1m
           queryType: builder

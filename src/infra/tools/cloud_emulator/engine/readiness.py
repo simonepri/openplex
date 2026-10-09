@@ -570,10 +570,6 @@ def _reconcile_public_ca(deployment: dict[str, Any], *, timeout: int) -> None:
         _dispatch("_publish_public_ca", _publish_public_ca)(
             cell, "control-cluster-ca", authorities[control]
         )
-    if cells:
-        _dispatch("_publish_public_ca", _publish_public_ca)(
-            control, "cell-cluster-ca", b"\n".join(authorities[cell] for cell in cells)
-        )
 
 
 def _publish_public_ca(context: str, name: str, authority: bytes) -> None:

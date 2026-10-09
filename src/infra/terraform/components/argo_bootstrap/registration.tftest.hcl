@@ -78,3 +78,22 @@ run "empty_registered_cells_wins_over_caller_annotations" {
     error_message = "Empty registered_cells must produce empty registered-cells annotation even if caller supplied one"
   }
 }
+
+run "verifies_atlantis_role_annotations" {
+  command = plan
+
+  variables {
+    atlantis_plan_role_arn  = "arn:aws:iam::123456789012:role/ctrl-aws-usw2-atlantis-plan"
+    atlantis_apply_role_arn = "arn:aws:iam::123456789012:role/ctrl-aws-usw2-atlantis-apply"
+  }
+
+  assert {
+    condition     = kubernetes_secret_v1.control_registration.metadata[0].annotations["atlantis-plan-role-arn"] == "arn:aws:iam::123456789012:role/ctrl-aws-usw2-atlantis-plan"
+    error_message = "atlantis-plan-role-arn annotation must match provided atlantis_plan_role_arn"
+  }
+
+  assert {
+    condition     = kubernetes_secret_v1.control_registration.metadata[0].annotations["atlantis-apply-role-arn"] == "arn:aws:iam::123456789012:role/ctrl-aws-usw2-atlantis-apply"
+    error_message = "atlantis-apply-role-arn annotation must match provided atlantis_apply_role_arn"
+  }
+}

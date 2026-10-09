@@ -1,0 +1,12 @@
+# Specifies required AWS provider versions and OpenTofu constraints for CloudTrail audit logging.
+
+terraform {
+  required_version = ">= 1.8.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "6.68.0"
+    }
+  }
+}

@@ -18,8 +18,8 @@ from infra.terraform.lifecycle.cluster_common import (
     run_tofu_init,
     tofu_environment,
 )
-from infra.tools.cloud_emulator import runtime
 from infra.tools.cloud_emulator.access import cluster_tailnet
+from infra.tools.cloud_emulator.engine import compose, docker, storage
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -67,11 +67,11 @@ def cluster_down(
             pass
 
         if not destroy:
-            runtime.stop(root, timeout=timeout)
+            compose.stop(root, timeout=timeout)
             return
 
-        runtime.ensure_docker_local(root)
-        runtime.start(root, timeout=timeout)
+        docker.ensure_docker_local(root)
+        compose.start(root, timeout=timeout)
 
     target_dir = ensure_deployment_dir(target, repo_root)
     run_tofu_init(target_dir)
@@ -79,11 +79,11 @@ def cluster_down(
     if target == "local":
         forget_floci_runtime(target_dir, timeout)
         # Floci retains cluster volumes on delete, so a recreated cluster would resume old state.
-        volumes = runtime.cluster_volumes(root)
+        volumes = storage.cluster_volumes(root)
     run_tofu_destroy(target_dir, timeout=float(timeout))
     if target == "local":
-        runtime.stop(root, timeout=timeout)
-        runtime.remove_volumes(volumes)
+        compose.stop(root, timeout=timeout)
+        storage.remove_volumes(volumes)
 
 
 def forget_floci_runtime(target_dir: Path, timeout: int) -> None:

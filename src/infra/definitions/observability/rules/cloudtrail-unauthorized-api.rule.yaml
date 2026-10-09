@@ -1,0 +1,53 @@
+# Defines the CloudTrail unauthorized API call alert reconciled into SigNoz. Alerts when CloudTrail reports unauthorized API calls (errorCode AccessDenied or UnauthorizedOperation).
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: cloudtrail-unauthorized-api
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: CloudTrail unauthorized API call detected
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: warning}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "log.source = 'cloud-audit' AND aws.error_code IN ('AccessDenied', 'AccessDeniedException', 'UnauthorizedOperation', 'Client.UnauthorizedOperation')"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: at_least_once
+              op: above
+              target: 0
+      description: AWS CloudTrail recorded unauthorized API calls with AccessDenied or UnauthorizedOperation error codes; verify IAM identity and permissions immediately.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 1h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

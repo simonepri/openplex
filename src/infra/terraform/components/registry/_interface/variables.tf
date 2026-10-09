@@ -1,12 +1,12 @@
 # Declares provider-neutral input variables for container repository names and image lifecycle rules.
 
-variable "installation_name" {
-  description = "Installation identifier used as the repository namespace."
+variable "cluster_name" {
+  description = "Cluster identifier used as the repository namespace."
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$", var.installation_name))
-    error_message = "installation_name must be a lowercase alphanumeric hyphen-separated string."
+    condition     = can(regex("^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$", var.cluster_name))
+    error_message = "cluster_name must be a lowercase alphanumeric hyphen-separated string."
   }
 }
 

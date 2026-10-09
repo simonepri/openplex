@@ -1,0 +1,53 @@
+# Defines the EKS suspicious exec alert reconciled into SigNoz. Alerts when Kubernetes audit logs record interactive exec or attach operations into sensitive system namespaces.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: eks-suspicious-exec
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: EKS suspicious container exec or attach detected
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: warning}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "log.source = 'kubernetes-audit' AND k8s.audit.subresource IN ('exec', 'attach') AND k8s.audit.namespace IN ('kube-system', 'signoz')"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: at_least_once
+              op: above
+              target: 0
+      description: Interactive container exec or attach operation detected in sensitive namespace (kube-system or signoz) from EKS audit logs; investigate the operator identity and session.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 2h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

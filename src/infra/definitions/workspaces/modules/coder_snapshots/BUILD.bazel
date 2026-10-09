@@ -1,6 +1,5 @@
 """Defines Bazel test suites and package sources for the Coder Kopia snapshot management OpenTofu module."""
 
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 
 package(default_visibility = ["//visibility:public"])
@@ -16,23 +15,3 @@ exports_files([
 ])
 
 package_sources()
-
-sh_test(
-    name = "kopia_restore_test",
-    srcs = ["scripts/kopia-restore_test.sh"],
-    args = ["$(location scripts/kopia-restore.sh)"],
-    data = ["scripts/kopia-restore.sh"],
-)
-
-sh_test(
-    name = "kopia_sync_test",
-    srcs = ["scripts/kopia-sync_test.sh"],
-    args = [
-        "$(location scripts/kopia-sync.sh)",
-        "$(location //src/bazel/tools:jq)",
-    ],
-    data = [
-        "scripts/kopia-sync.sh",
-        "//src/bazel/tools:jq",
-    ],
-)

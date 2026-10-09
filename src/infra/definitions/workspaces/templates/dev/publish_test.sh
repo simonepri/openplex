@@ -28,7 +28,9 @@ run_publish() {
     CODER_TEMPLATE_ARCH=arm64 \
     CODER_TEMPLATE_CA_CONFIG_MAP=cluster-local-ca \
     CODER_TEMPLATE_CELL=cell-eaws-lh1 \
+    CODER_TEMPLATE_CELL_CA_INVENTORY='{"cell-eaws-lh1":"Y2E="}' \
     CODER_TEMPLATE_CONTROL_PLANE_CA_BASE64="${CODER_TEMPLATE_CONTROL_PLANE_CA_BASE64-${control_plane_ca_base64}}" \
+    CODER_TEMPLATE_CONTROL_PLANE_NAME=ctrl-eaws-lh1 \
     CODER_TEMPLATE_DEPLOYMENT_DOMAIN="${CODER_TEMPLATE_DEPLOYMENT_DOMAIN-unit.test}" \
     CODER_TEMPLATE_IMAGE=registry.invalid/dev@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
     CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE="${CODER_TEMPLATE_WORKSPACE_BACKUP_PROXY_IMAGE-registry.invalid/cluster/workspace-backup-proxy@sha256:8a37fbafb559d495b7b07d38f0365d247e32d82bd34bcf1e907b5611ddf0b5c1}" \
@@ -36,7 +38,6 @@ run_publish() {
     CODER_TEMPLATE_REPOSITORY_URL="${CODER_TEMPLATE_REPOSITORY_URL-git://172.19.255.21:9418/cluster-config.git}" \
     CODER_TEMPLATE_SERVICE_ACCOUNT=coder-workspace \
     CODER_TEMPLATE_STORAGE_CLASS=workspace-expandable \
-    CODER_TEMPLATE_TEAM=examples \
     CODER_TEMPLATE_WORKLOAD_REGISTRY=origin-registry:5000/000000000000/us-east-1 \
     CODER_TEMPLATE_WORKLOAD_REGISTRY_INSECURE=false \
     CODER_TEMPLATE_WORKLOAD_ORIGIN_AUTH_MODE=floci \
@@ -46,11 +47,11 @@ run_publish() {
     CODER_TEMPLATE_WORKLOAD_ORIGIN_TOKEN_AUDIENCE= \
     CODER_TEMPLATE_WORKLOAD_ORIGIN_TOKEN_FILE= \
     CODER_TEMPLATE_WORKSPACE_INCARNATION_INVENTORY='{"cell-eaws-lh1":"abcdef123456"}' \
-    CODER_TEMPLATE_WORKSPACE_NAMESPACE=team-examples-workspaces \
     CODER_TEMPLATE_WORKSPACE_PLACEMENT_INVENTORY='{"cell-eaws-lh1":{"cpu":{"default":1,"max":3,"min":1},"gpu_offers":{},"memory_gib":{"default":2,"max":8,"min":1},"storage_gib":{"default":16,"max":32,"min":16}}}' \
     CODER_TEMPLATE_WORKSPACE_VIRTUAL_NAME_INVENTORY='{"cell-eaws-lh1":"eaws-lh1"}' \
     CODER_URL=http://coder.invalid \
     CODER_TEMPLATE_ACCESS_ALIAS_DOMAIN=c.example.invalid \
+    CODER_TEMPLATE_APP_DOMAIN=coder.ctrl-eaws-lh1.c.example.invalid \
     CODER_TEMPLATE_HEADSCALE_URL=https://headscale.ctrl-eaws-lh1.c.example.invalid \
     PATH="${test_root}/bin:${PATH}" \
     PUBLISH_TEST_ARGUMENTS="${test_root}/arguments" \
@@ -115,11 +116,12 @@ fi
 grep -Fxq 'access_alias_domain=c.example.invalid' "${test_root}/arguments"
 grep -Fxq 'deployment_domain=unit.test' "${test_root}/arguments"
 grep -Fxq "control_plane_ca_base64=${control_plane_ca_base64}" "${test_root}/arguments"
+grep -Fxq 'control_plane_name=ctrl-eaws-lh1' "${test_root}/arguments"
+grep -Fxq '"cell_ca_inventory={""cell-eaws-lh1"":""Y2E=""}"' "${test_root}/arguments"
 grep -Fxq 'repository_url=git://172.19.255.21:9418/cluster-config.git' "${test_root}/arguments"
 grep -Fxq 'workload_registry=origin-registry:5000/000000000000/us-east-1' "${test_root}/arguments"
 grep -Fxq 'workload_registry_insecure=false' "${test_root}/arguments"
 grep -Fxq 'workspace_backup_proxy_image=registry.invalid/cluster/workspace-backup-proxy@sha256:8a37fbafb559d495b7b07d38f0365d247e32d82bd34bcf1e907b5611ddf0b5c1' "${test_root}/arguments"
-grep -Fxq 'workspace_namespace=team-examples-workspaces' "${test_root}/arguments"
 grep -Fxq '"workspace_incarnation_inventory={""cell-eaws-lh1"":""abcdef123456""}"' "${test_root}/arguments"
 grep -Fxq '"workspace_placement_inventory={""cell-eaws-lh1"":{""cpu"":{""default"":1,""max"":3,""min"":1},""gpu_offers"":{},""memory_gib"":{""default"":2,""max"":8,""min"":1},""storage_gib"":{""default"":16,""max"":32,""min"":16}}}"' "${test_root}/arguments"
 grep -Fxq '"workspace_virtual_name_inventory={""cell-eaws-lh1"":""eaws-lh1""}"' "${test_root}/arguments"

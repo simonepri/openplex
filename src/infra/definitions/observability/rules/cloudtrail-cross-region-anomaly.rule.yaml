@@ -1,0 +1,53 @@
+# Defines the CloudTrail cross-region anomaly alert reconciled into SigNoz. Alerts when AWS CloudTrail records API operations in unexpected AWS regions outside the primary us-west-2 deployment.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: cloudtrail-cross-region-anomaly
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: CloudTrail cross-region activity anomaly detected
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: warning}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "log.source = 'cloud-audit' AND aws.read_only = false AND body LIKE '%\"awsRegion\":\"%' AND NOT body LIKE '%\"awsRegion\":\"us-west-2\"%' AND NOT body LIKE '%\"awsRegion\":\"us-east-1\"%'"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: at_least_once
+              op: above
+              target: 0
+      description: AWS CloudTrail recorded management API operations outside authorized operational regions; investigate potential credential compromise or out-of-region workload creation.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 1h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

@@ -1,0 +1,53 @@
+# Defines the Route 53 Resolver external DNS exfiltration alert reconciled into SigNoz. Alerts on an elevated volume of external DNS queries excluding internal cluster domains.
+
+apiVersion: resources.signoz.io/v1alpha1
+kind: Rule
+metadata:
+  name: dns-potential-exfiltration
+  namespace: signoz
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: alert-rule
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: signoz
+spec:
+  providerConfigRef:
+    name: signoz
+  reclaimPolicy: Delete
+  objectTemplate:
+    spec:
+      alert: Potential DNS data exfiltration detected
+      alertType: LOGS_BASED_ALERT
+      labels: {severity: warning}
+      condition:
+        compositeQuery:
+          panelType: graph
+          queries:
+            - type: builder_query
+              spec:
+                name: A
+                aggregations:
+                  - expression: "count()"
+                filter:
+                  expression: "log.source = 'dns-query'"
+                signal: logs
+                stepInterval: 1m
+          queryType: builder
+        selectedQueryName: A
+        thresholds:
+          kind: basic
+          spec:
+            - name: warning
+              matchType: at_least_once
+              op: above
+              target: 200
+      description: Unusually high volume of anomalous external DNS queries detected via Route 53 Resolver; investigate potential DNS tunneling, beaconing, or unauthorized data exfiltration.
+      evaluation:
+        kind: rolling
+        spec: {evalWindow: 5m, frequency: 1m}
+      notificationSettings:
+        usePolicy: true
+        renotify: {alertStates: [firing], enabled: true, interval: 2h}
+      ruleType: threshold_rule
+      schemaVersion: v2alpha1

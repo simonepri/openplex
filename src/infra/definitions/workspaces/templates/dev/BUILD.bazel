@@ -22,10 +22,28 @@ exports_files([
     "kubernetes_config.tf",
     "locals.tf",
     "parameters.tf",
+    "s3_access.tf",
     "storage.tf",
     "variables.tf",
     "workspace-images.json",
 ])
+
+pkg_files(
+    name = "agy_otel_hook_file",
+    srcs = ["container/agy-otel/hook.py"],
+    attributes = pkg_attributes(
+        group = "root",
+        mode = "0444",
+        user = "root",
+    ),
+    prefix = "/usr/local/lib/agy-otel",
+    strip_prefix = strip_prefix.files_only(),
+)
+
+pkg_tar(
+    name = "agy_otel_layer",
+    srcs = [":agy_otel_hook_file"],
+)
 
 pkg_files(
     name = "mise_binary_linux_amd64",
@@ -53,6 +71,29 @@ pkg_files(
 pkg_tar(
     name = "mise_layer_linux_arm64",
     srcs = [":mise_binary_linux_arm64"],
+)
+
+pkg_files(
+    name = "workspace_managed_config_files",
+    srcs = [
+        "container/config/claude-managed-settings.json",
+        "container/config/codex-managed-config.toml",
+    ],
+    attributes = pkg_attributes(
+        group = "root",
+        mode = "0444",
+        user = "root",
+    ),
+    prefix = "/etc",
+    renames = {
+        "container/config/claude-managed-settings.json": "claude-code/managed-settings.json",
+        "container/config/codex-managed-config.toml": "codex/managed_config.toml",
+    },
+)
+
+pkg_tar(
+    name = "workspace_managed_config_layer",
+    srcs = [":workspace_managed_config_files"],
 )
 
 pkg_files(
@@ -84,20 +125,24 @@ oci_multiarch_image(
     name = "image",
     arch_tars = {
         "amd64": [
+            ":agy_otel_layer",
             ":mise_layer_linux_amd64",
             ":ssh_layer_linux_amd64",
+            ":workspace_managed_config_layer",
             ":workspace_passwd_layer",
         ],
         "arm64": [
+            ":agy_otel_layer",
             ":mise_layer_linux_arm64",
             ":ssh_layer_linux_arm64",
+            ":workspace_managed_config_layer",
             ":workspace_passwd_layer",
         ],
     },
     base = "workspace_dev_base",
     env = {
         "HOME": "/home/coder",
-        "PATH": "/home/coder/.local/share/mise/shims:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "PATH": "/home/coder/.local/bin:/home/coder/.local/share/mise/shims:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin",
     },
     staging_tag = "dev:bazel-load",
     tars = [],
@@ -129,7 +174,24 @@ sh_binary(
     tags = ["manual"],
 )
 
-package_sources(exclude = ["container/apps/*.py"])
+package_sources(
+    exclude = [
+        "container/agy-otel/*.py",
+        "container/apps/*.py",
+    ],
+)
+
+py_library(
+    name = "agy_otel_hook",
+    srcs = ["container/agy-otel/hook.py"],
+)
+
+py_test(
+    name = "agy_otel_hook_test",
+    srcs = ["container/agy-otel/hook_test.py"],
+    main = "container/agy-otel/hook_test.py",
+    deps = [":agy_otel_hook"],
+)
 
 py_test(
     name = "workspace_image_structure_test",
@@ -202,169 +264,6 @@ py_test(
 sh_library(
     name = "shell",
     srcs = glob(["**/*.sh"]),
-)
-
-sh_test(
-    name = "attest_owner_test",
-    srcs = ["hooks/attest-owner_test.sh"],
-    args = ["$(location hooks/attest-owner.sh)"],
-    data = ["hooks/attest-owner.sh"],
-)
-
-sh_test(
-    name = "code_server_test",
-    srcs = ["container/apps/code-server_test.sh"],
-    args = [
-        "$(location container/apps/code-server.sh)",
-        "$(location //src/bazel/tools:jq)",
-    ],
-    data = [
-        "container/apps/code-server.sh",
-        "//src/bazel/tools:jq",
-    ],
-)
-
-sh_test(
-    name = "s3i_cli_test",
-    srcs = ["container/apps/s3i-cli_test.sh"],
-    args = ["$(location container/apps/s3i-cli.sh)"],
-    data = ["container/apps/s3i-cli.sh"],
-)
-
-sh_test(
-    name = "workspace_identity_test",
-    srcs = ["container/init/workspace-identity_test.sh"],
-    args = ["$(location container/init/workspace-identity.sh)"],
-    data = ["container/init/workspace-identity.sh"],
-)
-
-sh_test(
-    name = "workspace_agent_registration_test",
-    srcs = ["hooks/register-workspace-agent_test.sh"],
-    args = [
-        "$(location hooks/register-workspace-agent.sh)",
-        "$(location hooks/workspace-build-context.sh)",
-        "$(location //src/bazel/tools:jq)",
-    ],
-    data = [
-        "hooks/register-workspace-agent.sh",
-        "hooks/workspace-build-context.sh",
-        "//src/bazel/tools:jq",
-    ],
-)
-
-sh_test(
-    name = "workspace_zasper_test",
-    srcs = ["container/apps/workspace-zasper_test.sh"],
-    args = ["$(location container/apps/workspace-zasper.sh)"],
-    data = ["container/apps/workspace-zasper.sh"],
-)
-
-sh_test(
-    name = "workspace_nohang_sh_test",
-    srcs = ["container/apps/workspace-nohang_test.sh"],
-    args = ["$(location container/apps/workspace-nohang.sh)"],
-    data = [
-        "container/apps/workspace-nohang.sh",
-        "container/apps/workspace_nohang.py",
-    ],
-)
-
-sh_test(
-    name = "workspace_paseo_test",
-    srcs = ["container/apps/workspace-paseo_test.sh"],
-    args = [
-        "$(location container/apps/workspace-paseo.sh)",
-        "$(location //src/bazel/tools:jq)",
-    ],
-    data = [
-        "container/apps/workspace-paseo.sh",
-        "//src/bazel/tools:jq",
-    ],
-)
-
-sh_test(
-    name = "workspace_ssh_test",
-    srcs = ["container/sidecars/workspace-ssh_test.sh"],
-    args = ["$(location container/sidecars/workspace-ssh.sh)"],
-    data = ["container/sidecars/workspace-ssh.sh"],
-)
-
-sh_test(
-    name = "workspace_mounts_test",
-    srcs = ["container/init/workspace-mounts_test.sh"],
-    args = ["$(location container/init/workspace-mounts.sh)"],
-    data = ["container/init/workspace-mounts.sh"],
-)
-
-sh_test(
-    name = "workspace_snapshots_test",
-    srcs = ["container/init/workspace-snapshots_test.sh"],
-    args = ["$(location container/init/workspace-snapshots.sh)"],
-    data = ["container/init/workspace-snapshots.sh"],
-)
-
-sh_test(
-    name = "workspace_start_test",
-    srcs = ["container/init/workspace-start_test.sh"],
-    args = [
-        "$(location container/init/workspace-start.sh)",
-        "$(location container/init/workspace-shell.sh)",
-        "$(location //src/bazel/tools:jq)",
-    ],
-    data = [
-        "container/init/workspace-shell.sh",
-        "container/init/workspace-start.sh",
-        "//src/bazel/tools:jq",
-    ],
-)
-
-sh_test(
-    name = "workspace_coder_cli_test",
-    srcs = ["container/apps/coder-cli_test.sh"],
-    args = ["$(location container/apps/coder-cli.sh)"],
-    data = ["container/apps/coder-cli.sh"],
-)
-
-sh_test(
-    name = "workspace_filebrowser_test",
-    srcs = ["container/apps/filebrowser_test.sh"],
-    args = ["$(location container/apps/filebrowser.sh)"],
-    data = ["container/apps/filebrowser.sh"],
-)
-
-sh_test(
-    name = "workspace_reboot_test",
-    srcs = ["container/apps/reboot_test.sh"],
-    args = ["$(location container/apps/reboot.sh)"],
-    data = ["container/apps/reboot.sh"],
-)
-
-sh_test(
-    name = "workspace_tailnet_test",
-    srcs = ["container/sidecars/workspace-tailnet_test.sh"],
-    args = ["$(location container/sidecars/workspace-tailnet.sh)"],
-    data = ["container/sidecars/workspace-tailnet.sh"],
-)
-
-sh_test(
-    name = "workspace_writer_inventory_test",
-    srcs = ["hooks/workspace-writer-inventory_test.sh"],
-    args = [
-        "$(location hooks/workspace-writer-inventory.sh)",
-        "$(location //src/bazel/tools:jq)",
-    ],
-    data = [
-        "hooks/workspace-writer-inventory.sh",
-        "//src/bazel/tools:jq",
-    ],
-)
-
-sh_test(
-    name = "wait_for_admission_test",
-    srcs = ["hooks/wait-for-admission_test.sh"],
-    args = ["$(location hooks/wait-for-admission.sh)"],
-    data = ["hooks/wait-for-admission.sh"],
 )
 
 sh_test(

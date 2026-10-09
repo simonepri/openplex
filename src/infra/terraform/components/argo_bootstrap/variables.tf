@@ -209,4 +209,14 @@ variable "cluster_labels" {
   default     = {}
 }
 
+variable "atlantis_plan_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during plan operations."
+  type        = string
+  default     = ""
+}
 
+variable "atlantis_apply_role_arn" {
+  description = "IAM role ARN assumed by Atlantis during apply operations."
+  type        = string
+  default     = ""
+}

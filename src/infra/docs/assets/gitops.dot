@@ -156,9 +156,8 @@ digraph gitops {
         subgraph cluster_ctrl_w4 {
           label="Wave 4: Security & Profiling";
           style="filled,rounded"; fillcolor="#FDF2F0"; color="#A94442"; fontsize=9; fontcolor="#7A2826";
-          subgraph { rank=same; "c_w4_trivy"; "c_w4_kubescape"; "c_w4_parca"; }
+          subgraph { rank=same; "c_w4_trivy"; "c_w4_parca"; }
           "c_w4_trivy" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/trivy.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Trivy</B><BR/>Scanner</FONT></TD></TR></TABLE>>];
-          "c_w4_kubescape" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/kubescape.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Kubescape</B><BR/>Posture</FONT></TD></TR></TABLE>>];
           "c_w4_parca" [shape=none, margin=0, label=<<TABLE BORDER="1" COLOR="#A94442" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" BGCOLOR="#FFFFFF" STYLE="rounded"><TR><TD FIXEDSIZE="TRUE" WIDTH="26" HEIGHT="26"><IMG SRC="src/infra/docs/assets/icons/parca.svg" SCALE="TRUE"/></TD></TR><TR><TD><FONT POINT-SIZE="7"><B>Parca</B><BR/>Server</FONT></TD></TR></TABLE>>];
         }
 

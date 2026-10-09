@@ -14,7 +14,12 @@ resources:
   - rules/argocd-sync-failure.rule.yaml
   - rules/clickhouse-backup-stale.rule.yaml
   - rules/cloud-imds-exfiltration-attempt.rule.yaml
+  - rules/cloudtrail-cross-region-anomaly.rule.yaml
+  - rules/cloudtrail-heartbeat-absence.rule.yaml
+  - rules/cloudtrail-unauthorized-api.rule.yaml
   - rules/cnpg-backup-stale.rule.yaml
+  - rules/dns-potential-exfiltration.rule.yaml
+  - rules/eks-suspicious-exec.rule.yaml
   - rules/falco-runtime-threat.rule.yaml
   - rules/kargo-garbage-collector-stuck.rule.yaml
   - rules/kubernetes-container-not-ready.rule.yaml
@@ -27,9 +32,11 @@ resources:
   - rules/kubernetes-pod-cpu-saturation.rule.yaml
   - rules/kyverno-admission-denial.rule.yaml
   - rules/nvidia-gpu-health.rule.yaml
+  - rules/s3-backup-deletion.rule.yaml
   - rules/signoz-collector-export-failure.rule.yaml
   - rules/storage-inventory-stale.rule.yaml
   - rules/velero-backup-stale.rule.yaml
+  - rules/vpc-rejected-flows-surge.rule.yaml
   - rules/workspace-backup-stale.rule.yaml
   - rules/workspace-container-restart.rule.yaml
   - views/fleet-errors.view.yaml

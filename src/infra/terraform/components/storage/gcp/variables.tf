@@ -1,13 +1,14 @@
 # Declares input variables for GCP storage bucket names, locations, and lifecycle rules.
 
-variable "installation_name" {
-  description = "Installation identifier for resource naming."
+variable "cluster_name" {
+  description = "Name of the Kubernetes cluster."
   type        = string
 }
 
-variable "cell_name" {
-  description = "Cell identifier for resource naming."
+variable "account_id" {
+  description = "GCP project number or ID for globally unique bucket naming."
   type        = string
+  default     = ""
 }
 
 variable "storage_tiers" {
@@ -32,5 +33,17 @@ variable "location" {
   description = "GCP location for storage buckets and KMS key ring."
   type        = string
   default     = "US"
+}
+
+variable "teams" {
+  description = "Set of team slugs for per-team managed folders."
+  type        = set(string)
+  default     = []
+}
+
+variable "team_service_accounts" {
+  description = "Map of team slug to Google service account email for folder-scoped IAM bindings."
+  type        = map(string)
+  default     = {}
 }
 

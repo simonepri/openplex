@@ -5,14 +5,22 @@ data "google_client_config" "current" {}
 locals {
   project    = coalesce(data.google_client_config.current.project, "default")
   kms_key_id = var.kms_key_name != "" ? var.kms_key_name : try(google_kms_crypto_key.storage[0].id, "")
+
+  normalized_team_service_accounts = {
+    for k, v in var.team_service_accounts : trimprefix(k, "s3-gateway-") => v
+  }
+  managed_folder_teams = sort(toset(concat(
+    tolist(var.teams),
+    keys(local.normalized_team_service_accounts),
+  )))
 }
 
 module "interface" {
   source = "../_interface"
 
-  installation_name = var.installation_name
-  cell_name         = var.cell_name
-  storage_tiers     = var.storage_tiers
+  cluster_name  = var.cluster_name
+  account_id    = var.account_id != "" ? var.account_id : tostring(data.google_project.current.number)
+  storage_tiers = var.storage_tiers
   realized = {
     buckets = {
       for k, b in google_storage_bucket.this : k => {
@@ -25,7 +33,7 @@ module "interface" {
 
 resource "google_kms_key_ring" "storage" {
   count    = var.kms_key_name == "" ? 1 : 0
-  name     = "${var.cell_name}-storage"
+  name     = "${var.cluster_name}-storage"
   location = lower(var.location)
   project  = local.project != "default" ? local.project : null
 }
@@ -122,9 +130,12 @@ resource "google_storage_insights_report_config" "this" {
 
   object_metadata_report_options {
     metadata_fields = [
+      "project",
+      "bucket",
       "name",
       "size",
       "updated",
+      "storageClass",
     ]
 
     storage_filters {
@@ -133,7 +144,7 @@ resource "google_storage_insights_report_config" "this" {
 
     storage_destination_options {
       bucket           = google_storage_bucket.this["meta"].name
-      destination_path = "inventory/"
+      destination_path = "inventory/${google_storage_bucket.this[each.key].name}/"
     }
   }
 
@@ -175,4 +186,44 @@ resource "google_storage_bucket_iam_member" "insights_destination" {
   bucket = google_storage_bucket.this["meta"].name
   role   = "roles/storage.objectCreator"
   member = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-storageinsights.iam.gserviceaccount.com"
+}
+
+resource "google_storage_managed_folder" "home" {
+  for_each = contains(var.storage_tiers, "home") ? toset(local.managed_folder_teams) : toset([])
+
+  bucket        = google_storage_bucket.this["home"].name
+  name          = "home/${each.key}/"
+  force_destroy = true
+}
+
+resource "google_storage_managed_folder" "scratch" {
+  for_each = contains(var.storage_tiers, "scratch") ? toset(local.managed_folder_teams) : toset([])
+
+  bucket        = google_storage_bucket.this["scratch"].name
+  name          = "scratch/${each.key}/"
+  force_destroy = true
+}
+
+resource "google_storage_managed_folder_iam_binding" "home" {
+  for_each = contains(var.storage_tiers, "home") ? {
+    for team in local.managed_folder_teams : team => local.normalized_team_service_accounts[team]
+    if try(local.normalized_team_service_accounts[team], "") != ""
+  } : {}
+
+  bucket         = google_storage_bucket.this["home"].name
+  managed_folder = google_storage_managed_folder.home[each.key].name
+  role           = "roles/storage.objectUser"
+  members        = ["serviceAccount:${each.value}"]
+}
+
+resource "google_storage_managed_folder_iam_binding" "scratch" {
+  for_each = contains(var.storage_tiers, "scratch") ? {
+    for team in local.managed_folder_teams : team => local.normalized_team_service_accounts[team]
+    if try(local.normalized_team_service_accounts[team], "") != ""
+  } : {}
+
+  bucket         = google_storage_bucket.this["scratch"].name
+  managed_folder = google_storage_managed_folder.scratch[each.key].name
+  role           = "roles/storage.objectUser"
+  members        = ["serviceAccount:${each.value}"]
 }

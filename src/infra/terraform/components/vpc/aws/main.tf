@@ -16,10 +16,6 @@ module "interface" {
   }
 }
 
-locals {
-  effective_cluster_name = coalesce(var.cluster_name, trimsuffix(var.name, "-vpc"))
-}
-
 resource "aws_vpc" "this" {
   cidr_block           = var.cidr_block
   enable_dns_hostnames = true
@@ -39,7 +35,7 @@ resource "aws_subnet" "private" {
   tags = {
     Name                              = module.interface.names.subnets.private[count.index]
     Tier                              = "private"
-    "karpenter.sh/discovery"          = local.effective_cluster_name
+    "karpenter.sh/discovery"          = var.cluster_name
     "kubernetes.io/role/internal-elb" = "1"
   }
 }
@@ -209,6 +205,12 @@ resource "aws_kms_key" "flow_logs" {
   })
 }
 
+resource "aws_kms_alias" "flow_logs" {
+  count         = var.enable_flow_logs ? 1 : 0
+  name          = "alias/${var.kms_alias_prefix}${var.cluster_name}-flow-logs"
+  target_key_id = aws_kms_key.flow_logs[0].key_id
+}
+
 resource "aws_cloudwatch_log_group" "flow_logs" {
   count             = var.enable_flow_logs ? 1 : 0
   name              = "/aws/vpc/${module.interface.names.vpc}/flow-logs"
@@ -217,8 +219,9 @@ resource "aws_cloudwatch_log_group" "flow_logs" {
 }
 
 resource "aws_iam_role" "flow_logs" {
-  count = var.enable_flow_logs ? 1 : 0
-  name  = "${module.interface.names.vpc}-flow-logs"
+  count                = var.enable_flow_logs ? 1 : 0
+  name                 = "${var.iam_name_prefix}${module.interface.names.vpc}-flow-logs"
+  permissions_boundary = var.iam_permissions_boundary
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -232,11 +235,15 @@ resource "aws_iam_role" "flow_logs" {
       }
     ]
   })
+
+  tags = {
+    Name = "${var.iam_name_prefix}${module.interface.names.vpc}-flow-logs"
+  }
 }
 
 resource "aws_iam_role_policy" "flow_logs" {
   count = var.enable_flow_logs ? 1 : 0
-  name  = "${module.interface.names.vpc}-flow-logs"
+  name  = "${var.iam_name_prefix}${module.interface.names.vpc}-flow-logs"
   role  = aws_iam_role.flow_logs[0].id
 
   policy = jsonencode({
@@ -264,3 +271,28 @@ resource "aws_flow_log" "this" {
   traffic_type    = "ALL"
   vpc_id          = aws_vpc.this.id
 }
+
+resource "aws_cloudwatch_log_group" "resolver_queries" {
+  count = var.enable_resolver_query_logging ? 1 : 0
+
+  name              = "/aws/route53/resolver-queries/${var.name}"
+  retention_in_days = var.resolver_query_log_retention_days
+  kms_key_id        = var.kms_key_arn != null ? var.kms_key_arn : try(aws_kms_key.flow_logs[0].arn, null)
+  tags              = var.tags
+}
+
+resource "aws_route53_resolver_query_log_config" "this" {
+  count = var.enable_resolver_query_logging ? 1 : 0
+
+  name            = "${var.name}-resolver-queries"
+  destination_arn = aws_cloudwatch_log_group.resolver_queries[0].arn
+  tags            = var.tags
+}
+
+resource "aws_route53_resolver_query_log_config_association" "this" {
+  count = var.enable_resolver_query_logging ? 1 : 0
+
+  resolver_query_log_config_id = aws_route53_resolver_query_log_config.this[0].id
+  resource_id                  = aws_vpc.this.id
+}
+

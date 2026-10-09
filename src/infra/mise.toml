@@ -25,3 +25,7 @@ run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //src/infra/tools/
 [tasks.mint-coder-token]
 description = "Mint automation token via Coder API and write to local secret-records"
 run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //src/infra/tools/cloud_emulator/auth:coder_token -- "$@"'
+
+[tasks.clickhouse-query]
+description = "Execute read-only SQL query against ClickHouse without pods/exec"
+run = 'bazel --output_user_root={{env.BAZEL_OUTPUT_ROOT}} run //src/infra/tools/clickhouse_query -- "$@"'

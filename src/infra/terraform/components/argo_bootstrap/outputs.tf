@@ -12,3 +12,8 @@ output "record" {
     fleet_availability     = var.fleet_availability
   }
 }
+
+output "annotations" {
+  description = "Merged annotations applied to the control plane registration secret."
+  value       = kubernetes_secret_v1.control_registration.metadata[0].annotations
+}

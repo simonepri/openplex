@@ -17,6 +17,11 @@ resource "aws_kms_key" "secret" {
   enable_key_rotation     = true
 }
 
+resource "aws_kms_alias" "secret" {
+  name          = "alias/${var.kms_alias_prefix}${var.secret_name}"
+  target_key_id = aws_kms_key.secret.key_id
+}
+
 resource "aws_secretsmanager_secret" "secret" {
   name                    = module.interface.names.secret
   kms_key_id              = aws_kms_key.secret.arn

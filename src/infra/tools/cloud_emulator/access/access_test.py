@@ -112,11 +112,11 @@ class TestLocalKubeconfig(BaseAccessTestCase):
         ]
         self.enterContext(
             mock.patch.object(
-                kubeconfig.runtime, "configuration", return_value=mock.Mock(namespace="fleet")
+                kubeconfig.compose, "configuration", return_value=mock.Mock(namespace="fleet")
             )
         )
         self.enterContext(
-            mock.patch.object(kubeconfig.runtime, "owned_containers", return_value=self.containers)
+            mock.patch.object(kubeconfig.compose, "owned_containers", return_value=self.containers)
         )
         self.enterContext(mock.patch.dict(os.environ, {}, clear=False))
         self.commands: list[list[str]] = []

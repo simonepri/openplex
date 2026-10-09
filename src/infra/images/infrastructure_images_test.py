@@ -90,23 +90,55 @@ class InfrastructureImagesTest(unittest.TestCase):
                 f"Renovate custom manager must match repository {repo}",
             )
 
-    def test_dragonfly_client_versioning_rule(self) -> None:
+    def test_renovate_custom_manager_matches_every_generated_line_in_applicationsets(self) -> None:
+        appset_manager = next(
+            m
+            for m in self.renovate.get("customManagers", [])
+            if "ApplicationSet templates" in m.get("description", "")
+        )
+        match_strings = appset_manager["matchStrings"]
+        py_patterns = [
+            re.compile(re.sub(r"\(\?<([a-zA-Z0-9_]+)>", r"(?P<\1>", p)) for p in match_strings
+        ]
+
+        images = self.inventory.get("images", [])
+        expected_repos = {img["repository"] for img in images}
+
+        for rel_path in ["src/infra/argocd/apps/ctrl.yaml", "src/infra/argocd/apps/cells.yaml"]:
+            file_path = _resolve_data_path(rel_path)
+            content = file_path.read_text(encoding="utf-8")
+            matched_repos = set()
+            for p in py_patterns:
+                for match in p.finditer(content):
+                    repo = match.group("repository")
+                    matched_repos.add(repo)
+                    self.assertTrue(match.group("currentDigest").startswith("sha256:"))
+                    self.assertTrue(len(match.group("currentValue")) > 0)
+            self.assertEqual(
+                matched_repos,
+                expected_repos,
+                f"Renovate custom manager must match every repository in {rel_path}",
+            )
+
+    def test_dragonfly_client_republish_follows_base_pin(self) -> None:
         package_rules = self.renovate.get("packageRules", [])
         dragonfly_rules = [
             r
             for r in package_rules
-            if any("dragonflyoss/client" in name for name in r.get("matchPackageNames", []))
+            if "src/third_party/dragonflyoss/client" in r.get("matchPackageNames", [])
         ]
-        self.assertTrue(
-            len(dragonfly_rules) > 0,
-            "Renovate must declare a package rule for dragonflyoss/client",
+        self.assertEqual(
+            len(dragonfly_rules),
+            1,
+            "Renovate must declare one package rule for the Dragonfly client republish",
         )
-        rule = dragonfly_rules[0]
-        versioning = rule.get("versioning", "")
-        self.assertTrue(
-            versioning == "loose" or "mtls-r" in versioning,
-            f"Dragonfly client versioning must be loose or match mtls-r<N>: {versioning}",
+        self.assertIs(
+            dragonfly_rules[0].get("enabled"),
+            False,
+            "The Dragonfly client republish follows its MODULE.bazel base pin, not Renovate",
         )
+        entry = next(e for e in self.inventory["images"] if e["name"] == "dragonfly-client")
+        self.assertRegex(entry["tag"], r"^upstream-[0-9a-f]{7}$")
 
     def test_ci_tag_regex_versioning_sorts_timestamps(self) -> None:
         infra_manager = next(
@@ -130,15 +162,15 @@ class InfrastructureImagesTest(unittest.TestCase):
         assert m_earlier is not None
         assert m_later is not None
 
-        v_earlier = (int(m_earlier.group("major")), int(m_earlier.group("minor")))
-        v_later = (int(m_later.group("major")), int(m_later.group("minor")))
+        v_earlier = (int(m_earlier.group("minor")), int(m_earlier.group("patch")))
+        v_later = (int(m_later.group("minor")), int(m_later.group("patch")))
         self.assertLess(v_earlier, v_later, "Earlier tag must sort before later tag")
 
         tag_hash_high = "ci-20261004T104440Z_acb0d8160b4b"
         m_hash_high = py_pattern.match(tag_hash_high)
         self.assertIsNotNone(m_hash_high)
         assert m_hash_high is not None
-        v_hash_high = (int(m_hash_high.group("major")), int(m_hash_high.group("minor")))
+        v_hash_high = (int(m_hash_high.group("minor")), int(m_hash_high.group("patch")))
         self.assertLess(v_hash_high, v_later)
 
     def test_kyverno_policy_dragonfly_client_digest_matches_inventory(self) -> None:
@@ -149,7 +181,7 @@ class InfrastructureImagesTest(unittest.TestCase):
         self.assertTrue(expected_digest.startswith("sha256:"))
 
         matches = re.findall(
-            r"dragonfly-client@(sha256:[a-f0-9]{64})",
+            r"src/third_party/dragonflyoss/client@(sha256:[a-f0-9]{64})",
             self.kyverno_text,
         )
         self.assertGreater(

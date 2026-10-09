@@ -17,14 +17,13 @@ flowchart TD
 
     subgraph Entrypoints["Developer CLI Entrypoints"]
         E["<code>mise run fix</code>"]
-        F["<code>mise run check</code>"]
         G["<code>mise run test</code>"]
+        H["<code>mise run build</code>"]
     end
 
     E -->|Formats & syncs| A
-    F -->|Enforces| A
-    F -->|Executes| C
     G -->|Executes| B
+    G -->|Executes| C
 ```
 
 ---
@@ -304,14 +303,19 @@ Target-level tests (`py_test`, `sh_test`, `go_test`, `tf_module` validation) ver
 
 ### Tier 3: Repository Workspace Checks (`src/bazel/checks/`)
 
-Workspace static analyzers examine whole-tree invariants, multi-target relationships, or external scanner reports that require `BUILD_WORKSPACE_DIRECTORY`. They execute concurrently via `mise run check` through the root `check_all` rule (`//:check`), capped at 4 parallel worker threads (`MAX_JOBS=4`) to preserve host CPU headroom. The slowest gates that read only the source tree, `trivy_source` and `opengrep`, run beside the `bazel build //...` that `//:check` runs first; the other gates start after it:
+Workspace static analyzers examine whole-tree invariants, multi-target relationships, or external scanner reports that require `BUILD_WORKSPACE_DIRECTORY`. They execute concurrently as native Bazel test targets (`sh_test`, `py_test`) aggregated under `//src/bazel/checks:all_checks` and evaluated automatically via `mise run test` or direct Bazel invocations (`bazel test //src/bazel/checks/...`):
 
 - **Tree integrity & hygiene**: Verifies git graph completeness (`unclaimed_files`), synchronization contracts (`ifttt`), commit convention compliance (`commit_message`), and dotenv syntax and style with [dotenv-linter](https://github.com/dotenv-linter/dotenv-linter) (`dotenv`).
 - **Infrastructure & GitOps invariants**: Verifies non-overlapping subnet allocations and host port ranges (`cluster_network`), Argo CD Application component coverage and valid `$values/...` file paths (`argocd_links`), and [Kubernetes](https://github.com/kubernetes/kubernetes)-safe resource naming (`source_names`).
 - **Security & license governance**: Scans dependencies and container configurations for vulnerabilities via [Trivy](https://github.com/aquasecurity/trivy) (`trivy_source`), verifies Debian base image license compliance (`license_images`), validates third-party lockfiles against SPDX allowlists (`license_source`), and fences dev dependencies out of production images (`dev_tool_isolation`).
 - **Cross-language static rules**: Evaluates custom AST and syntax rules across all repository sources using [`opengrep`](https://github.com/opengrep/opengrep) via `src/bazel/checks/opengrep/rules.yaml`, and prevents agent guidance drift (`rulesync`).
 
-Fast subsets of these checks are wired to git pre-commit hooks (`git_hook` / `git_hooks` in root `BUILD.bazel`) filtered by staged git pathspecs, preventing defect introduction at authoring time while keeping commits instantaneous.
+### Execution Tier Invariants
+
+1. **Resolution vs Execution Separation**:
+   CLI helpers (such as `src/bazel/tools/diff/cli.py`) are pure target resolvers. They inspect git diffs or graph queries and write clean labels to `stdout` without executing Bazel or child runners.
+2. **Native Execution**:
+   Execution is always direct and top-level (`bazel build` or `bazel test`). No Bazel rule, run target, or runner script is permitted to invoke the Bazel client in a subshell, preventing fractured telemetry, broken action caching, and duplicate BuildBuddy invocations.
 
 ---
 
@@ -350,7 +354,6 @@ Target generation is managed natively and deterministically by [Gazelle](https:/
 
 The repository's build files and manifests are synchronized across these declared file types:
 
-<!-- LINT.IfChange(gazelle_extensions) -->
 <!-- keep-sorted start -->
 - **Build & Module Definitions**: `BUILD.bazel`, `MODULE.bazel`, `*.bzl`.
 - **Go Source & Modules**: `*.go`, `go.mod`, `go.sum` (managed by Gazelle).
@@ -358,7 +361,6 @@ The repository's build files and manifests are synchronized across these declare
 - **Python Source & Locks**: `*.py`, `pyproject.toml`, `requirements_lock.txt`, `requirements_dev_lock.txt` (managed by Gazelle).
 - **Web & Styles**: `*.ts`, `*.tsx`, `*.js`, `*.jsx`, `*.mjs`, `*.css`, `package.json`, `tsconfig.json`.
 <!-- keep-sorted end -->
-<!-- LINT.ThenChange(//src/bazel/rules/constants.bzl:gazelle_extensions) -->
 
 ### Drift Detection
 

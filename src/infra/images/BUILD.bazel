@@ -1,7 +1,7 @@
 """Packages and seeds platform and workload container images."""
 
 load("@rules_multirun//:defs.bzl", "command", "multirun")
-load("@rules_python//python:defs.bzl", "py_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 load("//src/bazel/rules/build_graph_coverage:defs.bzl", "package_sources")
 
 exports_files([
@@ -29,6 +29,7 @@ multirun(
         "//src/third_party/openebs/rawfile-localpv:publish",
         "//src/infra/tools/s3_resolver/server:publish",
         "//src/infra/tools/workspace_backup_proxy:publish",
+        "//src/infra/tools/workspace_healer:publish",
         "//src/examples/batch_cron:publish",
         "//src/examples/ray_data:publish",
         "//src/examples/ray_serve:publish",
@@ -38,7 +39,32 @@ multirun(
     jobs = 0,
 )
 
-package_sources()
+py_binary(
+    name = "generate",
+    srcs = ["generate.py"],
+    data = [
+        ":infrastructure-images.json",
+        "//src/infra/argocd/apps:cells.yaml",
+        "//src/infra/argocd/apps:ctrl.yaml",
+    ],
+)
+
+py_test(
+    name = "generate_test",
+    srcs = ["generate.py"],
+    args = [
+        "--check",
+        "--inventory=$(location :infrastructure-images.json)",
+        "--ctrl=$(location //src/infra/argocd/apps:ctrl.yaml)",
+        "--cells=$(location //src/infra/argocd/apps:cells.yaml)",
+    ],
+    data = [
+        ":infrastructure-images.json",
+        "//src/infra/argocd/apps:cells.yaml",
+        "//src/infra/argocd/apps:ctrl.yaml",
+    ],
+    main = "generate.py",
+)
 
 py_test(
     name = "infrastructure_images_test",
@@ -46,6 +72,10 @@ py_test(
     data = [
         ":infrastructure-images.json",
         "//.github:renovate.json",
+        "//src/infra/argocd/apps:cells.yaml",
+        "//src/infra/argocd/apps:ctrl.yaml",
         "//src/infra/argocd/components/kyverno:kustomize/policies.yaml",
     ],
 )
+
+package_sources()

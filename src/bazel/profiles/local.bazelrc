@@ -1,0 +1,3 @@
+# Select local Bazel execution for commands using this rc file.
+
+common --config=bb-local

@@ -15,3 +15,4 @@
 ## Decisions
 
 - **Provision local fleet before running chainsaw tests**: chainsaw suites need `mise run //src/infra:up` (or `mise run up` within `src/infra`) first; `mise run //src/infra:chainsaw` runs them against the local fleet.
+- **Query ClickHouse telemetry via read-only tooling**: never use `kubectl exec` into ClickHouse pods (`chi-signoz-clickhouse-...`) to inspect tables or validate queries; execute queries using `mise run //src/infra:clickhouse-query` which enforces read-only mode server-side via `readonly=1`.

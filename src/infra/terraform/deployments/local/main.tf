@@ -6,7 +6,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "6.66.0"
+      version = "6.68.0"
     }
     helm = {
       source  = "hashicorp/helm"
@@ -14,7 +14,7 @@ terraform {
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "3.2.1"
+      version = "3.3.0"
     }
     tls = {
       source  = "hashicorp/tls"
@@ -40,7 +40,7 @@ locals {
         intranet_domain = "corp.local.internal"
         cluster_domain  = "c.corp.local.internal"
         git = {
-          url             = "https://github.com/corp/fleet.git"
+          url             = "git://172.19.255.21:9418/openplex.git"
           target_revision = "main"
         }
       }
@@ -53,8 +53,10 @@ locals {
     }
   )
   ctrl_cluster             = local.deployment.clusters["ctrl-eaws-lh1"]
+  ctrl_cluster_name        = "${var.name_prefix}${try(local.ctrl_cluster.name, "ctrl-eaws-lh1")}"
   ctrl_gateway_ipv4        = cidrhost(local.ctrl_cluster.network.service_cidr, 11)
   cell_cluster             = local.deployment.clusters["cell-eaws-lh1"]
+  cell_cluster_name        = "${var.name_prefix}${try(local.cell_cluster.name, "cell-eaws-lh1")}"
   public_domain            = local.deployment.installation.public_domain
   intranet_domain          = try(local.deployment.installation.intranet_domain, "corp.${local.public_domain}")
   cluster_domain           = try(local.deployment.installation.cluster_domain, "c.${local.intranet_domain}")
@@ -65,7 +67,14 @@ locals {
     "--endpoint-url", var.floci_endpoint,
     "--region", "us-west-2",
   ]
+  team_definition_files = fileset("${path.module}/../../../definitions/teams", "*.yaml")
+  teams = toset([
+    for f in local.team_definition_files :
+    yamldecode(file("${path.module}/../../../definitions/teams/${f}")).slug
+  ])
 }
+
+data "aws_caller_identity" "current" {}
 
 provider "aws" {
   region                      = "us-west-2"
@@ -76,11 +85,7 @@ provider "aws" {
   skip_requesting_account_id  = true
 
   default_tags {
-    tags = {
-      cost-center = "shared-infrastructure"
-      environment = "local"
-      managed-by  = "opentofu"
-    }
+    tags = var.tags
   }
 
   endpoints {
@@ -265,10 +270,26 @@ resource "kubernetes_secret_v1" "coder_cell_kubeconfig" {
   }
 }
 
+data "kubernetes_config_map_v1" "ctrl_published_ca" {
+  metadata {
+    name      = "cluster-published-ca"
+    namespace = "cert-manager-system"
+  }
+}
+
+data "kubernetes_config_map_v1" "cell_published_ca" {
+  provider = kubernetes.cell
+
+  metadata {
+    name      = "cluster-published-ca"
+    namespace = "cert-manager-system"
+  }
+}
+
 module "control_plane" {
   source = "../../topologies/ctrl/aws"
 
-  cluster_name                  = local.ctrl_cluster.name
+  cluster_name                  = local.ctrl_cluster_name
   vpc_cidr                      = local.ctrl_cluster.vpc_cidr
   availability_zones            = local.ctrl_cluster.availability_zones
   tier_subnets                  = local.ctrl_cluster.tier_subnets
@@ -294,15 +315,19 @@ module "control_plane" {
   public_access_cidrs           = []
   service_ipv4_cidr             = local.ctrl_cluster.network.service_cidr
   annotations = {
-    "control-gateway-ipv4" = local.ctrl_gateway_ipv4
-    "git-repo-url"         = var.git_identity_url
-    "intranet-domain"      = local.intranet_domain
-    "public-domain"        = local.public_domain
-    "resource-prefix"      = "corp"
-    "s3-endpoint"          = "http://172.19.0.2:4566"
-    "storage-endpoint"     = "http://172.19.0.2:4566"
-    "secret-store"         = "local-secret-records"
-    "service-cidr"         = local.ctrl_cluster.network.service_cidr
+    # keep-sorted start
+    "${module.cell.cluster_name}-cluster-ca" = data.kubernetes_config_map_v1.cell_published_ca.data["ca.crt"]
+    "bucket-suffix"                          = data.aws_caller_identity.current.account_id
+    "control-gateway-ipv4"                   = local.ctrl_gateway_ipv4
+    "git-repo-url"                           = var.git_identity_url
+    "intranet-domain"                        = local.intranet_domain
+    "public-domain"                          = local.public_domain
+    "resource-tags"                          = jsonencode(var.tags)
+    "s3-endpoint"                            = "http://172.19.0.2:4566"
+    "secret-store"                           = "local-secret-records"
+    "service-cidr"                           = local.ctrl_cluster.network.service_cidr
+    "storage-endpoint"                       = "http://172.19.0.2:4566"
+    # keep-sorted end
   }
 
   registered_cells = [
@@ -315,22 +340,37 @@ module "control_plane" {
       labels         = local.cell_cluster.labels
       token          = kubernetes_token_request_v1.argocd_manager.token
       annotations = {
-        "backups-bucket"       = module.cell.record.backups_bucket
-        "control-gateway-ipv4" = local.ctrl_gateway_ipv4
-        "resource-prefix"      = "corp"
-        "s3-endpoint"          = "http://172.19.0.2:4566"
-        "storage-endpoint"     = "http://172.19.0.2:4566"
-        "secret-store"         = "local-secret-records"
-        "service-cidr"         = local.cell_cluster.network.service_cidr
+        # keep-sorted start
+        "aws-account-id"               = data.aws_caller_identity.current.account_id
+        "backups-bucket"               = module.cell.record.backups_bucket
+        "bucket-suffix"                = data.aws_caller_identity.current.account_id
+        "control-cluster-ca"           = data.kubernetes_config_map_v1.ctrl_published_ca.data["ca.crt"]
+        "control-gateway-ipv4"         = local.ctrl_gateway_ipv4
+        "global-storage-bucket-prefix" = "${local.ctrl_cluster_name}-global"
+        "global-storage-bucket-suffix" = data.aws_caller_identity.current.account_id
+        "global-storage-endpoint"      = "http://172.19.0.2:4566"
+        "global-storage-provider"      = "Other"
+        "global-storage-teams"         = join(",", sort(local.teams))
+        "resource-tags"                = jsonencode(var.tags)
+        "s3-endpoint"                  = "http://172.19.0.2:4566"
+        "secret-store"                 = "local-secret-records"
+        "service-cidr"                 = local.cell_cluster.network.service_cidr
+        "storage-endpoint"             = "http://172.19.0.2:4566"
+        # keep-sorted end
       }
     }
   ]
+
+  iam_name_prefix          = var.iam_name_prefix
+  kms_alias_prefix         = var.kms_alias_prefix
+  iam_permissions_boundary = var.iam_permissions_boundary
+  tags                     = var.tags
 }
 
 module "cell" {
   source = "../../topologies/cell/aws"
 
-  cluster_name                  = local.cell_cluster.name
+  cluster_name                  = local.cell_cluster_name
   vpc_cidr                      = local.cell_cluster.vpc_cidr
   availability_zones            = local.cell_cluster.availability_zones
   tier_subnets                  = local.cell_cluster.tier_subnets
@@ -347,4 +387,15 @@ module "cell" {
   fleet_availability            = "standalone"
   public_access_cidrs           = []
   service_ipv4_cidr             = local.cell_cluster.network.service_cidr
+
+  iam_name_prefix          = var.iam_name_prefix
+  kms_alias_prefix         = var.kms_alias_prefix
+  iam_permissions_boundary = var.iam_permissions_boundary
+  tags                     = var.tags
+}
+
+resource "aws_s3_bucket" "global" {
+  for_each = local.teams
+
+  bucket = "${local.ctrl_cluster_name}-global-${each.value}-${data.aws_caller_identity.current.account_id}"
 }

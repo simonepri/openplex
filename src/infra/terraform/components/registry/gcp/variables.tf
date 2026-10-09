@@ -1,7 +1,7 @@
 # Declares input variables for GCP Artifact Registry repository names, formats, and encryption keys.
 
-variable "installation_name" {
-  description = "Installation identifier used as the repository namespace."
+variable "cluster_name" {
+  description = "Name of the Kubernetes cluster used as the repository namespace."
   type        = string
 }
 

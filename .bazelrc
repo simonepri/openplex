@@ -36,6 +36,7 @@ build --remote_download_outputs=toplevel
 # Tools come from multitool because this strict environment has no PATH to them.
 build --aspects=//src/bazel/aspects:cross_lang/defs.bzl%cross_lang_aspect
 build --aspects=//src/bazel/aspects:gha/defs.bzl%gha_aspect
+build --aspects=//src/bazel/aspects:go/defs.bzl%go_aspect
 build --aspects=//src/bazel/aspects:markdown/defs.bzl%markdown_aspect
 build --aspects=//src/bazel/aspects:python/defs.bzl%python_aspect
 build --aspects=//src/bazel/aspects:shell/defs.bzl%shell_aspect
@@ -47,23 +48,15 @@ build --keep_going
 # Interactive targets have one requested outcome; stop their dependency work
 # as soon as analysis or execution makes that outcome impossible.
 run --nokeep_going
-# Providers and renders can build concurrently, but validators have high
-# per-process memory use and share the host with the local fleet.
-build --jobs=4
-# --jobs caps concurrent actions, not the CPU each one uses, and analysis
-# threads default to every core. Both are capped here so a build leaves the
-# machine usable; a second Bazel server gets its own budget, so this is 20%
-# of the host per server, leaving headroom for the local fleet.
-common --local_resources=cpu=HOST_CPUS*.2
-common --local_resources=memory=HOST_RAM*.5
+# Concurrency and local resource allocations
+common --local_resources=cpu=HOST_CPUS*.8
+common --local_resources=memory=HOST_RAM*.8
 common --loading_phase_threads=auto
-# Test runner actions run standalone to prevent macOS sandbox crashes in
-# Bazel test-setup and XML generation under high concurrency.
-test --strategy=TestRunner=standalone
 test --test_output=errors
 # Manifest validators and test utilities resolve from the host/mise toolchain.
 test --test_env=PATH
 test --test_env=NO_COLOR=1
+test --test_env=NO_IFTTT
 # rules_kustomize render actions cannot see their runfiles tree under the
 # macOS sandbox; run them locally until that is fixed upstream.
 build --strategy=KustomizeBuild=local
@@ -72,9 +65,10 @@ build --strategy=KustomizeBuild=local
 # //src/bazel/profiles.
 import %workspace%/src/bazel/profiles/profiles.bazelrc
 
-# Default selection for this repository; openplex omits this line and selects
-# no BuildBuddy flavor by default.
-# 
+# Default BuildBuddy cache and BES streaming selection for this repository;
+# RBE profiles (bb-rbe-cloud, bb-rbe-sh) can be enabled explicitly via --config.
+common --config=bb-cloud
+
 # Coder writes the target-scoped BuildBuddy configuration from its runtime
 # Secret projection, adding to the selection above. Developer hosts without
 # that file remain valid.

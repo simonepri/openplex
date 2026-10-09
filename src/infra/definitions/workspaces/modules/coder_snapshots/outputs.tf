@@ -28,6 +28,11 @@ output "is_new_restore" {
   value       = local.is_new_restore
 }
 
+output "home_volume_claim_annotations" {
+  description = "Annotations applied to the Kubernetes PersistentVolumeClaim created for the home volume."
+  value       = kubernetes_persistent_volume_claim_v1.home.metadata[0].annotations
+}
+
 output "home_volume_claim_name" {
   description = "Name of the Kubernetes PersistentVolumeClaim created for the home volume."
   value       = kubernetes_persistent_volume_claim_v1.home.metadata[0].name

@@ -3,5 +3,5 @@
 version = 1
 
 # LINT.IfChange(floci-k3s-version)
-tag = "v1.36.1-runtime7"
+tag = "v1.36.5-runtime1"
 # LINT.ThenChange(//MODULE.bazel:floci-k3s-version,//src/third_party/k3s-io/k3s/BUILD.bazel:floci-k3s-runtime-tag,//src/infra/tools/cloud_emulator/stack/compose.yaml:floci-k3s-version)

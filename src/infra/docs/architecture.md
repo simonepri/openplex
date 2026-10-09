@@ -101,10 +101,7 @@ flowchart LR
    transactional databases and in-memory caches colocated with compute using virtual S3 object
    storage, [ClickHouse](https://github.com/ClickHouse/ClickHouse),
    [PostgreSQL](https://github.com/postgres/postgres), and [Valkey](https://github.com/valkey-io/valkey).
-5. **Full-Stack Telemetry & Cost Transparency**: Trace requests across services, profile CPU
-   and memory bottlenecks down to individual lines of code, and monitor real-time cloud
-   spend attributed to specific teams and projects via [SigNoz](https://github.com/signoz/signoz),
-   [Parca](https://github.com/parca-dev/parca), and [OpenCost](https://github.com/opencost/opencost).
+5. **Full-Stack Telemetry & Cost Transparency**: Trace requests across services, map workload-to-workload network flows with kernel eBPF probes, profile CPU and memory bottlenecks down to individual lines of code, and monitor real-time cloud spend attributed to specific teams and projects via [SigNoz](https://github.com/signoz/signoz), [OpenTelemetry eBPF Instrumentation (OBI)](https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation), [Parca](https://github.com/parca-dev/parca), and [OpenCost](https://github.com/opencost/opencost).
 
 ### The Operator Journey
 
@@ -139,13 +136,7 @@ flowchart LR
    [NVIDIA GPU Operator](https://github.com/NVIDIA/gpu-operator), [KEDA](https://github.com/kedacore/keda),
    the [Vertical Pod Autoscaler (VPA)](https://github.com/kubernetes/autoscaler), and
    [Dragonfly](https://github.com/dragonflyoss/dragonfly).
-4. **Defense-in-Depth Security & Governance**: Enforce strict admission policies fleet-wide,
-   project cloud secrets dynamically into pods without storing credentials in Git, isolate
-   traffic with portable network policies, and detect runtime threats directly in the kernel
-   using [Kyverno](https://github.com/kyverno/kyverno),
-   [External Secrets Operator](https://github.com/external-secrets/external-secrets), portable
-   Kubernetes `NetworkPolicy`, [Trivy](https://github.com/aquasecurity/trivy),
-   [Kubescape](https://github.com/kubescape/kubescape), and [Falco](https://github.com/falcosecurity/falco).
+4. **Defense-in-Depth Security & Governance**: Enforce strict admission policies fleet-wide, project cloud secrets dynamically into pods without storing credentials in Git, isolate traffic with portable network policies, and detect runtime threats and network flows directly in the kernel using [Kyverno](https://github.com/kyverno/kyverno), [External Secrets Operator](https://github.com/external-secrets/external-secrets), portable Kubernetes `NetworkPolicy`, [Trivy](https://github.com/aquasecurity/trivy), [Falco](https://github.com/falcosecurity/falco), and [OBI](https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation).
 5. **Continuous State Preservation & Disaster Recovery**: Protect platform state against
    regional or cluster failures with continuous database streaming, point-in-time developer
    workspace snapshots, scheduled cluster backups, and automated recovery drills orchestrated
